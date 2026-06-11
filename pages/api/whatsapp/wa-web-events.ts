@@ -1,0 +1,171 @@
+import { NextApiRequest, NextApiResponse } from 'next'
+import { supabaseAdmin } from '@/lib/supabase'
+import { sendWAWebMessage } from '@/lib/wa-web'
+import { processChatbotMessage } from '@/lib/chatbot-engine'
+import { processAIReply } from '@/lib/ai-engine'
+import { executeAutomationFlow } from '@/lib/automation-engine'
+import { notifyNewMessage, notifyInstanceConnected, notifyInstanceDisconnected } from '@/lib/notifications'
+import { v4 as uuidv4 } from 'uuid'
+
+export const config = { api: { bodyParser: true } }
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  const secret = req.headers['x-secret'] || req.headers['x-wa-secret']
+  if (secret !== process.env.WA_WEB_SERVER_SECRET && process.env.WA_WEB_SERVER_SECRET) {
+    return res.status(403).json({ error: 'Forbidden' })
+  }
+
+  const db = supabaseAdmin()
+  const { event, instanceId, data } = req.body
+
+  try {
+    switch (event) {
+      case 'qr_updated': {
+        await db.from('whatsapp_instances').update({ qr_code: data.qrCode, status: 'qr_pending' }).eq('id', instanceId)
+        break
+      }
+
+      case 'connected': {
+        await db.from('whatsapp_instances').update({
+          status: 'connected',
+          phone_number: data.phoneNumber || 'unknown',
+          display_name: data.displayName || data.pushName || null,
+          qr_code: null,
+          last_seen_at: new Date().toISOString(),
+        }).eq('id', instanceId)
+
+        // Notify owner
+        const { data: inst } = await db.from('whatsapp_instances').select('user_id, phone_number').eq('id', instanceId).maybeSingle()
+        if (inst) await notifyInstanceConnected(inst.user_id, data.phoneNumber || inst.phone_number)
+        break
+      }
+
+      case 'disconnected': {
+        const { data: inst } = await db.from('whatsapp_instances').select('user_id, phone_number').eq('id', instanceId).maybeSingle()
+        await db.from('whatsapp_instances').update({ status: 'disconnected', qr_code: null }).eq('id', instanceId)
+        if (inst) await notifyInstanceDisconnected(inst.user_id, inst.phone_number)
+        break
+      }
+
+      case 'message_received': {
+        console.log(`[WEBHOOK] message_received instanceId=${instanceId}`)
+
+        // Filter newsletter/broadcast
+        if (data.from && (
+          data.from.includes('@newsletter') ||
+          data.from.includes('@broadcast') ||
+          data.from.includes('status@') ||
+          data.from === 'status@broadcast'
+        )) {
+          console.log(`[WEBHOOK] skip newsletter/broadcast from=${data.from}`)
+          break
+        }
+
+        const { data: instance, error: instErr } = await db.from('whatsapp_instances').select('*').eq('id', instanceId).maybeSingle()
+        if (!instance) {
+          console.log(`[WEBHOOK] instance not found instanceId=${instanceId} error=${instErr?.message}`)
+          break
+        }
+        console.log(`[WEBHOOK] instance found userId=${instance.user_id} type=${instance.instance_type}`)
+
+        // Find or create contact
+        let contactId: string | null = null
+        const { data: contacts } = await db.from('contacts').select('id').eq('user_id', instance.user_id).eq('phone', data.from).limit(1)
+        if (contacts?.[0]) {
+          contactId = contacts[0].id
+        } else {
+          const { data: newContact } = await db.from('contacts').insert({
+            id: uuidv4(), user_id: instance.user_id, phone: data.from, name: data.pushName || null, tags: [],
+          }).select().maybeSingle()
+          contactId = newContact?.id || null
+        }
+
+        const content = data.text || data.caption || `[${data.type}]`
+
+        // Save message
+        await db.from('messages').insert({
+          id: uuidv4(), user_id: instance.user_id, instance_id: instanceId, contact_id: contactId,
+          wa_message_id: data.messageId, direction: 'inbound',
+          type: data.type || 'text', content,
+          media_url: data.mediaUrl || null, status: 'delivered',
+        })
+
+        // Notification
+        await notifyNewMessage(instance.user_id, data.pushName || data.from, content)
+
+        // Auto-create inbox conversation
+        try {
+          await db.from('conversation_assignments').upsert({
+            owner_id: instance.user_id,
+            contact_id: contactId,
+            status: 'open',
+            priority: 'normal',
+            last_message_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'owner_id,contact_id', ignoreDuplicates: false })
+        } catch {}
+
+        // Run automation flows
+        if (content) {
+          await executeAutomationFlow({
+            userId: instance.user_id,
+            instanceId,
+            from: data.from,
+            message: content,
+          })
+        }
+        // Try chatbot flow
+        const chatbotHandled = await processChatbotMessage({
+          userId: instance.user_id,
+          instanceId: instanceId,
+          instance: instance,
+          from: data.from,
+          message: content,
+          contactName: data.pushName,
+        })
+        console.log(`[WEBHOOK] chatbot done, handled=${chatbotHandled}`)
+        if (chatbotHandled) break
+
+        // AI fallback — only if chatbot didn't handle it
+        console.log(`[WEBHOOK] chatbotHandled=${chatbotHandled}, calling AI...`)
+        await processAIReply({
+          userId: instance.user_id,
+          instanceId: instanceId,
+          instance: instance,
+          from: data.from,
+          message: content,
+          contactName: data.pushName,
+          contactId: contactId,
+        })
+        break
+      }
+
+      case 'message_status': {
+        // Update main messages table
+        const { data: updated, error: updErr } = await db
+          .from('messages')
+          .update({ status: data.status })
+          .eq('wa_message_id', data.messageId)
+          .select('id')
+        
+        console.log(`[message_status] id=${data.messageId} status=${data.status} updated=${updated?.length || 0}`)
+        
+        // Also update support_messages if this messageId belongs to a support reply
+        try {
+          await db
+            .from('support_messages')
+            .update({ wa_message_id: data.messageId })
+            .eq('wa_message_id', data.messageId)
+        } catch {}
+
+        break
+      }
+    }
+  } catch (err) {
+    console.error('WA Web event error:', err)
+  }
+
+  res.status(200).json({ ok: true })
+}

@@ -1,0 +1,26 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+  cache = [".next/cache"]
+
+[build.environment]
+  NODE_VERSION = "20"
+  SECRETS_SCAN_SMART_DETECTION_OMIT_VALUES = "true"
+  NPM_FLAGS = "--ignore-optional --fetch-retries=5 --fetch-retry-factor=2 --fetch-timeout=120000"
+
+[functions]
+  node_bundler = "nft"
+
+# Extended timeout for campaign sending (Netlify Pro: up to 26s, Background: 15min)
+[functions."api/campaigns/*"]
+  timeout = 26
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

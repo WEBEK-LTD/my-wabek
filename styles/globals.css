@@ -1,0 +1,270 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design Tokens ────────────────────────────── */
+:root {
+  --font-sans:  'Inter', system-ui, sans-serif;
+  --font-mono:  'Fira Code', monospace;
+
+  /* Brand */
+  --brand-500:  #2563EB;
+  --brand-600:  #1D4ED8;
+  --brand-700:  #1E40AF;
+  --brand-800:  #1E3A8A;
+
+  /* Sidebar */
+  --sidebar-bg:        #0F172A;
+  --sidebar-text:      #CBD5E1;
+  --sidebar-hover-bg:  rgba(59,130,246,0.12);
+  --sidebar-active-bg: #2563EB;
+  --sidebar-active-text: #FFFFFF;
+
+  /* Page & surfaces */
+  --page-bg:    #F8FAFC;
+  --card-bg:    #FFFFFF;
+  --surface:    #F8FAFC;
+  --card-hover: #F1F5F9;
+
+  /* Text */
+  --text-primary:   #0F172A;
+  --text-secondary: #475569;
+  --text-muted:     #64748B;
+
+  /* Borders */
+  --border:       #E2E8F0;
+  --border-input: #CBD5E1;
+
+  /* Navbar */
+  --navbar-bg:     #FFFFFF;
+  --navbar-border: #E2E8F0;
+  --navbar-height: 64px;
+
+  /* Status */
+  --success: #16A34A;
+  --warning: #F59E0B;
+  --danger:  #DC2626;
+
+  /* Wabek CSS vars (used by tailwind classes) */
+  --wabek-dark:    #F8FAFC;
+  --wabek-card:    #FFFFFF;
+  --wabek-border:  #E2E8F0;
+  --wabek-muted:   #F1F5F9;
+  --wabek-text:    #64748B;
+  --wabek-surface: #F8FAFC;
+}
+
+/* ── Base ─────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background-color: var(--page-bg);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a { color: var(--brand-500); text-decoration: none; }
+a:hover { color: var(--brand-600); }
+
+/* ── Scrollbar ────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+/* ── Selection ────────────────────────────────── */
+::selection { background: rgba(37,99,235,0.12); color: var(--text-primary); }
+
+/* ── Focus ────────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Components ───────────────────────────────── */
+@layer components {
+
+  /* Buttons */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white rounded-lg transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+    background-color: var(--brand-500);
+  }
+  .btn-primary:hover { background-color: var(--brand-600); }
+  .btn-primary:active { background-color: var(--brand-700); }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-150 disabled:opacity-50;
+    background-color: var(--card-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-input);
+  }
+  .btn-secondary:hover { background-color: var(--surface); }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white rounded-lg transition-all duration-150;
+    background-color: var(--danger);
+  }
+  .btn-danger:hover { background-color: #B91C1C; }
+
+  /* Cards */
+  .card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: 0 4px 12px rgba(15,23,42,0.06);
+    padding: 24px;
+  }
+  .card:hover { box-shadow: 0 8px 24px rgba(15,23,42,0.10); }
+
+  /* Stat card */
+  .stat-card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: 0 4px 12px rgba(15,23,42,0.06);
+    padding: 20px;
+    transition: box-shadow 0.15s;
+  }
+  .stat-card:hover { box-shadow: 0 8px 24px rgba(15,23,42,0.10); }
+
+  /* Form inputs */
+  .input {
+    @apply w-full text-sm rounded-lg px-3.5 py-2.5 outline-none transition-all duration-150;
+    background-color: var(--card-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-input);
+  }
+  .input::placeholder { color: var(--text-muted); }
+  .input:focus {
+    border-color: var(--brand-500);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+  }
+
+  .label {
+    @apply block text-sm font-medium mb-1.5;
+    color: var(--text-secondary);
+  }
+
+  /* Badges */
+  .badge-green {
+    @apply inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full;
+    background-color: #DCFCE7;
+    color: #15803D;
+    border: 1px solid #BBF7D0;
+  }
+  .badge-yellow {
+    @apply inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full;
+    background-color: #FEF3C7;
+    color: #B45309;
+    border: 1px solid #FDE68A;
+  }
+  .badge-red {
+    @apply inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full;
+    background-color: #FEE2E2;
+    color: #B91C1C;
+    border: 1px solid #FECACA;
+  }
+  .badge-blue {
+    @apply inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full;
+    background-color: #DBEAFE;
+    color: #1D4ED8;
+    border: 1px solid #BFDBFE;
+  }
+  .badge-gray {
+    @apply inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full;
+    background-color: #F1F5F9;
+    color: #475569;
+    border: 1px solid #E2E8F0;
+  }
+
+  /* Nav links — used inside sidebar */
+  .nav-link {
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150;
+    color: var(--sidebar-text);
+  }
+  .nav-link:hover { background-color: var(--sidebar-hover-bg); color: #FFFFFF; }
+
+  .nav-link-active {
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium;
+    background-color: var(--sidebar-active-bg);
+    color: var(--sidebar-active-text);
+  }
+
+  /* Tables */
+  .table-head { @apply px-4 py-3 text-xs font-semibold uppercase tracking-wider text-left; color: var(--text-muted); background-color: var(--surface); border-bottom: 1px solid var(--border); }
+  .table-cell { @apply px-4 py-3 text-sm; color: var(--text-secondary); }
+  .table-row  { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+  .table-row:hover { background-color: var(--surface); }
+
+  /* Modals */
+  .modal-backdrop {
+    @apply fixed inset-0 z-50 flex items-center justify-center p-4;
+    background-color: rgba(15,23,42,0.5);
+    backdrop-filter: blur(4px);
+  }
+  .modal-panel {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    box-shadow: 0 24px 64px rgba(15,23,42,0.18);
+    width: 100%;
+    max-width: 520px;
+  }
+
+  /* Typography */
+  .section-title    { @apply text-xl font-semibold; color: var(--text-primary); }
+  .section-subtitle { @apply text-sm mt-0.5;        color: var(--text-muted); }
+}
+
+/* ── Skeleton ─────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%);
+  background-size: 200% 100%;
+  animation: skeleton 1.4s ease-in-out infinite;
+  border-radius: 6px;
+}
+@keyframes skeleton {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── WhatsApp bubbles ─────────────────────────── */
+.msg-out {
+  background: linear-gradient(135deg, #2563EB, #1D4ED8);
+  border-radius: 16px 16px 4px 16px;
+  color: #FFFFFF;
+}
+.msg-in {
+  background: #F1F5F9;
+  border-radius: 16px 16px 16px 4px;
+  color: var(--text-primary);
+}
+
+/* ── Status dot ───────────────────────────────── */
+.status-online {
+  width: 8px; height: 8px;
+  background: var(--success);
+  border-radius: 50%;
+  animation: pulse-status 2s infinite;
+}
+@keyframes pulse-status {
+  0%,100% { box-shadow: 0 0 0 0 rgba(22,163,74,0.4); }
+  50%      { box-shadow: 0 0 0 5px rgba(22,163,74,0); }
+}
+
+/* ── Chart tooltip ────────────────────────────── */
+.chartjs-tooltip {
+  background: #FFFFFF !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  color: var(--text-primary) !important;
+  box-shadow: 0 8px 24px rgba(15,23,42,0.10) !important;
+}

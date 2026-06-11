@@ -1,0 +1,42 @@
+import { NextApiRequest, NextApiResponse } from 'next'
+import { requireAuth } from '@/lib/auth'
+import { supabaseAdmin } from '@/lib/supabase'
+import { v4 as uuidv4 } from 'uuid'
+import crypto from 'crypto'
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const user = await requireAuth(req, res)
+  if (!user) return
+  const db = supabaseAdmin()
+
+  if (req.method === 'GET') {
+    const { data } = await db.from('team_members').select('*').eq('owner_id', user.userId).order('created_at')
+    return res.status(200).json({ members: data || [] })
+  }
+
+  if (req.method === 'POST') {
+    const { email, name, role = 'agent' } = req.body
+    if (!email || !name) return res.status(400).json({ error: 'email and name required' })
+
+    const inviteToken = crypto.randomBytes(32).toString('hex')
+
+    const { data, error } = await db.from('team_members').insert({
+      id: uuidv4(),
+      owner_id: user.userId,
+      email: email.toLowerCase(),
+      name,
+      role,
+      invite_token: inviteToken,
+      status: 'pending',
+    }).select().single()
+
+    if (error) return res.status(500).json({ error: error.message })
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+    const inviteUrl = `${appUrl}/auth/team-invite?token=${inviteToken}`
+
+    return res.status(201).json({ member: data, inviteUrl })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
