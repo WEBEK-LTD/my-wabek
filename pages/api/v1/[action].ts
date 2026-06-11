@@ -8,15 +8,21 @@ import { v4 as uuidv4 } from 'uuid'
 import crypto from 'crypto'
 
 async function authenticateApiKey(req: NextApiRequest): Promise<{ userId: string } | null> {
-  // Support JWT auth (from dashboard) 
   const authHeader = req.headers.authorization
+  let bearerToken: string | null = null
+
+  // Support JWT auth (from dashboard)
   if (authHeader?.startsWith('Bearer ')) {
+    bearerToken = authHeader.slice(7).trim()
     const { verifyToken } = await import('@/lib/auth')
-    const payload = await verifyToken(authHeader.slice(7))
+    const payload = await verifyToken(bearerToken)
     if (payload) return { userId: payload.userId }
   }
 
-  const apiKey = req.headers['x-api-key'] as string || req.query.api_key as string
+  // External integrations (e.g. WHMCS) commonly send `Authorization: Bearer <api_key>`
+  // instead of `x-api-key`. If the Bearer token wasn't a valid JWT, also try it
+  // as a raw API key below.
+  const apiKey = (req.headers['x-api-key'] as string) || (req.query.api_key as string) || bearerToken
   if (!apiKey) return null
 
   const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex')
@@ -45,6 +51,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const { action } = req.query
   const db = supabaseAdmin()
+
+  // ── Robust body parsing ─────────────────────────────────────────────
+  // Some HTTP clients (e.g. PHP cURL with the wrong Content-Type, or
+  // form-encoded posts) result in `req.body` being a raw string, or the
+  // values being nested under `fields` / sent with different casing.
+  // Normalize everything into a single plain object so handlers below
+  // can rely on `req.body.<field>` always working.
+  let body: Record<string, any> = req.body
+  if (typeof body === 'string') {
+    try { body = JSON.parse(body) } catch { body = {} }
+  }
+  if (!body || typeof body !== 'object') body = {}
+  // Also fall back to query-string params (?phone=..., ?to=..., etc.)
+  body = { ...req.query, ...body }
+  req.body = body
+
+  // Accept "phone" and "to" interchangeably across all actions in this file
+  if (!body.phone && body.to) body.phone = body.to
+  if (!body.to && body.phone) body.to = body.phone
 
   // POST /api/v1/send - Send a message
   if (req.method === 'POST' && action === 'send') {
