@@ -109,14 +109,46 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // text), so we reject with clear guidance instead.
         const inWindow = await isInWindow((instance as any)?.user_id || (instance as any)?.userId || '', to, (instance as any)?.id || '')
         if (!inWindow) {
-          return res.status(422).json({
-            error: 'Recipient is outside the 24-hour messaging window',
-            detail: 'Plain text messages can only be sent if the recipient messaged you within the last 24 hours. ' +
-              'For OTP/verification codes, use POST /api/v1/otp instead — it sends via an approved Authentication template. ' +
-              'For other notifications outside the window, use a template-based send.',
-          })
+          // OTP/verification messages are designed to bypass the 24h window
+          // entirely via an Authentication template. If the message text
+          // contains a numeric code, send it through the OTP template
+          // automatically instead of rejecting or sending an unrelated
+          // broadcast template.
+          const codeMatch = message.match(/\b(\d{4,8})\b/)
+          if (codeMatch) {
+            const { sendOtpTemplate } = await import('@/lib/otp-template')
+            const { getSetting } = await import('@/lib/settings')
+            const otpTemplateName = await getSetting('otp_template_name', 'wabek_otp') as string
+
+            const otpResult = await sendOtpTemplate({
+              phoneNumberId: instance.phone_number_id,
+              accessToken:   instance.access_token,
+              to,
+              templateName:  otpTemplateName,
+              code:          codeMatch[1],
+            })
+
+            if (otpResult.sent) {
+              result = { messageId: otpResult.messageId }
+            } else {
+              const lastAttempt = otpResult.attempts[otpResult.attempts.length - 1]
+              return res.status(422).json({
+                error: 'Failed to deliver message outside the 24h window',
+                detail: `Detected a verification code (${codeMatch[1]}) and tried sending via Authentication template(s), but all attempts failed. Last error: ${lastAttempt?.error || 'Unknown error'}. Configure "OTP Template Name" in Settings → Security & OTP to match an Approved Authentication template in Meta Business Manager.`,
+                attempts: otpResult.attempts,
+              })
+            }
+          } else {
+            return res.status(422).json({
+              error: 'Recipient is outside the 24-hour messaging window',
+              detail: 'Plain text messages can only be sent if the recipient messaged you within the last 24 hours, ' +
+                'unless the message contains a verification code (which is sent via an Authentication template automatically). ' +
+                'For other notifications outside the window, use a template-based send.',
+            })
+          }
+        } else {
+          result = await smartSend({ userId: (instance as any)?.user_id || (instance as any)?.userId || '', instanceId: (instance as any)?.id || '', phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: to, text: message, source: 'api' as any })
         }
-        result = await smartSend({ userId: (instance as any)?.user_id || (instance as any)?.userId || '', instanceId: (instance as any)?.id || '', phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: to, text: message, source: 'api' as any })
       }
       await db.from('messages').insert({ id: uuidv4(), user_id: auth.userId, instance_id: instance.id, direction: 'outbound', type: 'text', content: message, wa_message_id: result?.messageId, status: 'sent' })
       return res.status(200).json({ success: true, message_id: result?.messageId })
