@@ -4,7 +4,7 @@
   cache = [".next/cache"]
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "22"
   SECRETS_SCAN_SMART_DETECTION_OMIT_VALUES = "true"
   NPM_FLAGS = "--ignore-optional --fetch-retries=5 --fetch-retry-factor=2 --fetch-timeout=120000"
 
