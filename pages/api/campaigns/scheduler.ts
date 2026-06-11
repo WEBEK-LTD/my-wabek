@@ -27,28 +27,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   let processed = 0
+  const results: any[] = []
 
   for (const campaign of campaigns) {
     try {
       // Mark as running
       await db.from('campaigns').update({ status: 'running' }).eq('id', campaign.id)
 
-      // Trigger campaign execution
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://waabek.com'
-      fetch(`${appUrl}/api/campaigns/${campaign.id}`, {
+      // Trigger campaign execution and AWAIT it. A fire-and-forget fetch
+      // here gets killed when this function returns (serverless), leaving
+      // the campaign stuck at status='running' with no progress.
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.URL || 'https://waabek.com'
+      const r = await fetch(`${appUrl}/api/campaigns/${campaign.id}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${process.env.JWT_SECRET}`,
         },
         body: JSON.stringify({ action: 'start' }),
-      }).catch(console.error)
+      })
+      const data = await r.json().catch(() => ({}))
+      results.push({ id: campaign.id, status: r.status, ...data })
 
       processed++
-    } catch (e) {
+    } catch (e: any) {
       console.error(`Scheduler error for campaign ${campaign.id}:`, e)
+      results.push({ id: campaign.id, error: e?.message })
     }
   }
 
-  return res.status(200).json({ message: `Processed ${processed} campaigns`, processed })
+  return res.status(200).json({ message: `Processed ${processed} campaigns`, processed, results })
 }
