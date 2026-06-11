@@ -115,7 +115,7 @@ export async function isInWindow(userId: string, phone: string, instanceId?: str
 }
 
 /** Get template config from system_settings or use default */
-async function getTemplateName(templateKey: TemplateKey): Promise<string> {
+export async function getTemplateName(templateKey: TemplateKey): Promise<string> {
   const db = supabaseAdmin()
   const { data } = await db
     .from('system_settings')

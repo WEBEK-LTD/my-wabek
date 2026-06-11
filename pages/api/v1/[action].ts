@@ -139,12 +139,75 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               })
             }
           } else {
-            return res.status(422).json({
-              error: 'Recipient is outside the 24-hour messaging window',
-              detail: 'Plain text messages can only be sent if the recipient messaged you within the last 24 hours, ' +
-                'unless the message contains a verification code (which is sent via an Authentication template automatically). ' +
-                'For other notifications outside the window, use a template-based send.',
-            })
+            // Not an OTP code. Outside the window we still need an approved
+            // TEMPLATE to deliver anything. Use either:
+            //  - an explicit `template` + `template_params` provided by the caller, or
+            //  - the configured "Marketing" template (e.g. marketing_offer) with a
+            //    `customer_name` parameter, as a sensible default for campaigns.
+            const { sendTemplateMessage } = await import('@/lib/whatsapp')
+            const { getTemplateName } = await import('@/lib/wa-smart-send')
+
+            const explicitTemplate: string | undefined = body.template
+            const customerName: string = body.template_params?.customer_name || body.customer_name || 'Customer'
+
+            const templateName = explicitTemplate || await getTemplateName('MARKETING')
+
+            // Build component variants to try -- different Marketing templates may
+            // use a NAMED parameter (e.g. {{customer_name}}) or a POSITIONAL one
+            // ({{1}}). Also try "en" and "en_US" since approved language can vary.
+            let variantList: { label: string; components: any[] }[]
+            if (explicitTemplate && body.template_params) {
+              const params = Object.entries(body.template_params).map(([k, v]) => ({
+                type: 'text', parameter_name: k, text: String(v),
+              }))
+              variantList = [
+                { label: 'named params (explicit)', components: [{ type: 'body', parameters: params }] },
+              ]
+            } else {
+              variantList = [
+                { label: 'named param: customer_name', components: [{ type: 'body', parameters: [{ type: 'text', parameter_name: 'customer_name', text: customerName }] }] },
+                { label: 'positional {{1}}',           components: [{ type: 'body', parameters: [{ type: 'text', text: customerName }] }] },
+              ]
+            }
+
+            const tmplLanguages = ['en', 'en_US']
+            const tmplAttempts: { language: string; components: string; ok: boolean; status?: number; error?: string }[] = []
+            let sent = false
+
+            for (const language of tmplLanguages) {
+              for (const variant of variantList) {
+                try {
+                  const tmplResult: any = await sendTemplateMessage({
+                    phoneNumberId: instance.phone_number_id,
+                    accessToken:   instance.access_token,
+                    to,
+                    templateName,
+                    languageCode: language,
+                    components: variant.components,
+                  })
+                  result = { messageId: tmplResult?.messages?.[0]?.id }
+                  tmplAttempts.push({ language, components: variant.label, ok: true })
+                  sent = true
+                  break
+                } catch (tmplErr: any) {
+                  const status = tmplErr?.response?.status
+                  const errMsg = tmplErr?.response?.data?.error?.message || tmplErr?.message || 'Unknown error'
+                  tmplAttempts.push({ language, components: variant.label, ok: false, status, error: errMsg })
+                }
+              }
+              if (sent) break
+            }
+
+            if (!sent) {
+              const lastAttempt = tmplAttempts[tmplAttempts.length - 1]
+              return res.status(422).json({
+                error: 'Recipient is outside the 24-hour messaging window',
+                detail: `Plain text cannot be delivered outside the 24h window. Tried sending via the "${templateName}" template (customer_name="${customerName}"), but all attempts failed. Last error: ${lastAttempt?.error || 'Unknown error'}. ` +
+                  'Make sure this template is Approved on Meta Business Manager and its body has either a {{customer_name}} named parameter or a single {{1}} positional parameter. ' +
+                  'Alternatively, pass a "template" + "template_params" in the request to use a specific Approved template.',
+                attempts: tmplAttempts,
+              })
+            }
           }
         } else {
           result = await smartSend({ userId: (instance as any)?.user_id || (instance as any)?.userId || '', instanceId: (instance as any)?.id || '', phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: to, text: message, source: 'api' as any })
