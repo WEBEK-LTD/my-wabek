@@ -93,8 +93,8 @@ export const TEMPLATE_MAP = {
   },
   MARKETING: {
     name: 'marketing_offer',
-    // Body: "Hello {{customer_name}}, We have a special offer..."
-    paramNames: ['customer_name'],
+    // Body (updated Jun 12 2026): "Hello {{customer_name}}, {{offer_details}} Thank you, Wabek Team"
+    paramNames: ['customer_name', 'offer_details'],
     paramStyle: 'named' as const,
   },
   BROADCAST: {

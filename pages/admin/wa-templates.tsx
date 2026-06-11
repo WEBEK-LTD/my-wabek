@@ -11,7 +11,7 @@ const BUILT_IN_TEMPLATES = [
   { key:'WELCOME_V1',             name:'welcome_message',       params:[],                 use:'Welcome (legacy, no variables)' },
   { key:'SUPPORT_TICKET_OPEN',    name:'support_ticket_update', params:['customer_name'],  use:'Service update notification' },
   { key:'SUPPORT_REPLY',          name:'support_reply',         params:['message'],        use:'Support team reply' },
-  { key:'MARKETING',              name:'marketing_offer',       params:['customer_name'],  use:'Marketing campaigns' },
+  { key:'MARKETING',              name:'marketing_offer',       params:['customer_name','offer_details'],  use:'Marketing campaigns' },
   { key:'BROADCAST',              name:'broadcast_notification',params:['customer_name'],  use:'Bulk announcements' },
   { key:'INVOICE_CREATED',        name:'invoice_created',       params:['customer_name'],  use:'New invoice' },
   { key:'INVOICE_OVERDUE',        name:'invoice_overdue',       params:['customer_name'],  use:'Overdue invoice' },

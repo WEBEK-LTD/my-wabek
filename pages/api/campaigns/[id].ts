@@ -213,14 +213,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             // Campaigns ALWAYS use templates — never text, no 24h window check
             const campaignTemplate = campaign.template_name || 'marketing_offer'
 
-            // Build template body parameters:
-            // 1. Use campaign-defined resolvedVars if present
-            // 2. Otherwise use contact name (required by most templates like marketing_offer)
+            // Build template body parameters.
+            // marketing_offer's current approved body is:
+            //   "Hello {{customer_name}}, {{offer_details}} Thank you, Wabek Team"
+            // -> 2 named params: customer_name (the recipient) and
+            //    offer_details (the campaign's custom message text, "msg").
             const contactName = contact.name || 'Customer'
-            // Named parameters required for templates using {{variable_name}} syntax
-            const bodyParams = resolvedVars.length > 0
-              ? resolvedVars.map((v: string) => ({ type: 'text', parameter_name: 'customer_name', text: v }))
-              : [{ type: 'text', parameter_name: 'customer_name', text: contactName }]
+            // Meta template parameters cannot contain newlines, tabs, or
+            // 4+ consecutive spaces, and have a practical length limit.
+            const offerDetails = (msg || 'We have a special offer for you.')
+              .replace(/[\r\n\t]+/g, ' ')
+              .replace(/ {2,}/g, ' ')
+              .trim()
+              .slice(0, 1024)
+
+            let bodyParams: any[]
+            if (resolvedVars.length > 0) {
+              // Explicit template_variables configured on the campaign — use as-is.
+              bodyParams = resolvedVars.map((v: string) => ({ type: 'text', parameter_name: 'customer_name', text: v }))
+            } else if (campaignTemplate === 'marketing_offer') {
+              bodyParams = [
+                { type: 'text', parameter_name: 'customer_name', text: contactName },
+                { type: 'text', parameter_name: 'offer_details', text: offerDetails },
+              ]
+            } else {
+              bodyParams = [{ type: 'text', parameter_name: 'customer_name', text: contactName }]
+            }
 
             const templateComponents = [{
               type: 'body',

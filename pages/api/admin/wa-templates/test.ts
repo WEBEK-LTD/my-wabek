@@ -22,6 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       : name === 'due_date' ? new Date(Date.now()+7*86400000).toLocaleDateString()
       : name === 'reset_link' ? 'https://waabek.com/auth/reset'
       : name === 'message' ? 'This is a test notification from WABEK admin.'
+      : name === 'offer_details' ? 'Get 20% off your next purchase, valid until end of month!'
       : 'Test Value'
   }
 

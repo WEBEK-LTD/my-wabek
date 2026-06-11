@@ -149,6 +149,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             const explicitTemplate: string | undefined = body.template
             const customerName: string = body.template_params?.customer_name || body.customer_name || 'Customer'
+            // Sanitize for use as a Meta template parameter (no newlines/tabs/4+ spaces)
+            const offerDetails: string = (message || 'We have a special offer for you.')
+              .replace(/[\r\n\t]+/g, ' ').replace(/ {2,}/g, ' ').trim().slice(0, 1024)
 
             const templateName = explicitTemplate || await getTemplateName('MARKETING')
 
@@ -165,6 +168,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               ]
             } else {
               variantList = [
+                { label: '2 named params: customer_name + offer_details', components: [{ type: 'body', parameters: [
+                  { type: 'text', parameter_name: 'customer_name', text: customerName },
+                  { type: 'text', parameter_name: 'offer_details', text: offerDetails },
+                ] }] },
                 { label: 'named param: customer_name', components: [{ type: 'body', parameters: [{ type: 'text', parameter_name: 'customer_name', text: customerName }] }] },
                 { label: 'positional {{1}}',           components: [{ type: 'body', parameters: [{ type: 'text', text: customerName }] }] },
               ]
