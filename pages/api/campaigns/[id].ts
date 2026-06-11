@@ -142,6 +142,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const batchStartedAt = Date.now()
       let processedInBatch = 0
       let timedOut = false
+      let externalStatus: string | null = null
 
       try { for (const contact of contacts2) {
         if (Date.now() - batchStartedAt > BATCH_TIME_BUDGET_MS) {
@@ -151,7 +152,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
 
         const { data: current } = await db.from('campaigns').select('status').eq('id', id as string).maybeSingle()
-        if (current?.status !== 'running') break
+        if (current?.status !== 'running') {
+          externalStatus = current?.status || null
+          break
+        }
 
         // Skip invalid recipients
         const rawPhone = contact.phone || ''
@@ -312,8 +316,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           console.log(`[Campaign] COMPLETE sent=${sent} failed=${failed} reengagement_blocked=${reengagementBlocked}`)
           await notifyCampaignComplete(user.userId, campaign.name, sent, failed)
           return res.status(200).json({ success: true, sent, failed, done: true, message: `Campaign completed — sent to ${sent} contacts` })
+        } else if (externalStatus === 'paused' || externalStatus === 'failed') {
+          // User explicitly paused/cancelled mid-batch. Save progress (offset)
+          // but DO NOT override their chosen status with 'scheduled' — that
+          // would silently resume a paused campaign via the next scheduler tick.
+          await db.from('campaigns').update({
+            sent_count: sent, failed_count: failed,
+            meta: { reengagement_blocked: reengagementBlocked, offset: newOffset },
+          }).eq('id', id as string)
+          console.log(`[Campaign] STOPPED externally (status=${externalStatus}) processed=${processedInBatch} offset=${newOffset}/${allContacts.length} — progress saved, not rescheduled`)
+          return res.status(200).json({
+            success: true, sent, failed, done: false, status: externalStatus,
+            offset: newOffset, total: allContacts.length,
+            message: `Campaign ${externalStatus} — progress saved at ${newOffset}/${allContacts.length}. Resume with "start" to continue from here.`,
+          })
         } else {
-          // Batch time limit reached (or paused) with contacts remaining.
+          // Batch time limit reached with contacts remaining.
           // Reschedule for immediate pickup by the scheduler cron (runs every
           // minute) so the next batch continues automatically.
           await db.from('campaigns').update({
@@ -329,6 +347,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             message: `Batch sent ${processedInBatch} (offset ${newOffset}/${allContacts.length}) — campaign rescheduled to continue`,
           })
         }
+
       } catch (loopErr: any) {
         console.error(`[Campaign] LOOP ERROR: ${loopErr?.message}`)
         await db.from('campaigns').update({
