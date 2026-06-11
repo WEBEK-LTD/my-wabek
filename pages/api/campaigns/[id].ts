@@ -16,13 +16,31 @@ export const config = {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
-  if (!user) return
   const db = supabaseAdmin()
   const { id } = req.query
 
-  const { data: campaign } = await db.from('campaigns').select('*').eq('id', id as string).eq('user_id', user.userId).single()
-  if (!campaign) return res.status(404).json({ error: 'Campaign not found' })
+  // Internal scheduler calls authenticate with `Authorization: Bearer <JWT_SECRET>`
+  // (a shared secret, not a signed user JWT). Allow this to act as the
+  // campaign owner so the scheduler can resume batched campaigns.
+  const authHeader = req.headers.authorization
+  const systemSecret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET
+  const isSystemCall = !!systemSecret && authHeader === `Bearer ${systemSecret}`
+
+  let user: { userId: string; email?: string; role?: string } | null = null
+  let campaign: any = null
+
+  if (isSystemCall) {
+    const { data } = await db.from('campaigns').select('*').eq('id', id as string).single()
+    campaign = data
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' })
+    user = { userId: campaign.user_id, role: 'admin' }
+  } else {
+    user = await requireAuth(req, res)
+    if (!user) return
+    const { data } = await db.from('campaigns').select('*').eq('id', id as string).eq('user_id', user.userId).single()
+    campaign = data
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' })
+  }
 
   if (req.method === 'GET') return res.status(200).json({ campaign })
 
@@ -64,6 +82,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(200).json({ success: true, message: 'No contacts found' })
       }
 
+      // ── Batch resume support ──────────────────────────────────────────
+      // A single serverless invocation has a hard ~26s limit, which isn't
+      // enough to send to large contact lists (each send + delay can take
+      // several seconds). On a fresh start (status === 'draft') we begin
+      // from scratch; on resume (status === 'scheduled'/'paused' due to a
+      // previous batch hitting the time limit) we continue from where we
+      // left off using `campaign.meta.offset`.
+      const isFreshStart = campaign.status === 'draft'
+      const meta = (campaign.meta as Record<string, any>) || {}
+      const startOffset = isFreshStart ? 0 : (meta.offset || 0)
+      let sent = isFreshStart ? 0 : (campaign.sent_count || 0)
+      let failed = isFreshStart ? 0 : (campaign.failed_count || 0)
+      let reengagementBlocked = isFreshStart ? 0 : (meta.reengagement_blocked || 0)
+
+      const allContacts = contacts
+      const contacts2 = allContacts.slice(startOffset)
+      console.log(`[Campaign] resume offset=${startOffset}/${allContacts.length} (fresh=${isFreshStart})`)
+
       const { data: instance } = await db.from('whatsapp_instances').select('*').eq('id', campaign.instance_id).maybeSingle()
       if (!instance) return res.status(400).json({ error: 'Instance not found' })
       const CONNECTED_STATUSES = ['connected', 'active', 'open', 'ready']
@@ -91,17 +127,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       await db.from('campaigns').update({
         status: 'running',
-        started_at: new Date().toISOString(),
-        total_contacts: contacts.length,
-        sent_count: 0, failed_count: 0,
+        started_at: campaign.started_at || new Date().toISOString(),
+        total_contacts: allContacts.length,
+        ...(isFreshStart ? { sent_count: 0, failed_count: 0 } : {}),
       }).eq('id', id as string)
 
       // NOTE: We respond AFTER the loop so Netlify keeps the function alive
-      let sent = 0, failed = 0, reengagementBlocked = 0
       const delayMs = (campaign.delay_seconds || 3) * 1000
-      console.log(`[Campaign] START loop contacts=${contacts.length} delayMs=${delayMs} template=${campaign.template_name}`)
+      console.log(`[Campaign] START batch contacts=${contacts2.length}/${allContacts.length} (offset=${startOffset}) delayMs=${delayMs} template=${campaign.template_name}`)
 
-      try { for (const contact of contacts) {
+      // Hard time budget per invocation — must stay under Netlify's 26s
+      // function limit. Leave a safety margin for the final DB write + response.
+      const BATCH_TIME_BUDGET_MS = 20000
+      const batchStartedAt = Date.now()
+      let processedInBatch = 0
+      let timedOut = false
+
+      try { for (const contact of contacts2) {
+        if (Date.now() - batchStartedAt > BATCH_TIME_BUDGET_MS) {
+          console.log(`[Campaign] BATCH TIME LIMIT reached at processed=${processedInBatch}/${contacts2.length}`)
+          timedOut = true
+          break
+        }
+
         const { data: current } = await db.from('campaigns').select('status').eq('id', id as string).maybeSingle()
         if (current?.status !== 'running') break
 
@@ -217,12 +265,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             failed_count: failed,
             accepted_count: sent,
             // Mark completed if this is the last contact
-            ...(sent + failed >= contacts.length ? {
-              status: 'completed',
-              completed_at: new Date().toISOString(),
-            } : {}),
           }).eq('id', id as string)
-          console.log(`[Campaign] Progress: sent=${sent} failed=${failed} total=${contacts.length}`)
+          console.log(`[Campaign] Progress: sent=${sent} failed=${failed} total=${allContacts.length}`)
 
         } catch (e: any) {
           const metaBody = e?.response?.data
@@ -249,27 +293,51 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           await db.from('campaigns').update({ sent_count: sent, failed_count: failed }).eq('id', id as string)
         }
 
-        if (delayMs > 0 && contacts.indexOf(contact) < contacts.length - 1) {
+        processedInBatch++
+        const isLastOverall = (startOffset + processedInBatch) >= allContacts.length
+        if (delayMs > 0 && !isLastOverall) {
           await new Promise(r => setTimeout(r, delayMs))
         }
       }
 
-        await db.from('campaigns').update({
-          status: 'completed', completed_at: new Date().toISOString(),
-          sent_count: sent, failed_count: failed,
-          meta: { reengagement_blocked: reengagementBlocked },
-        }).eq('id', id as string)
-        console.log(`[Campaign] COMPLETE sent=${sent} failed=${failed} reengagement_blocked=${reengagementBlocked}`)
-        await notifyCampaignComplete(user.userId, campaign.name, sent, failed)
+        const newOffset = startOffset + processedInBatch
+        const isDone = newOffset >= allContacts.length
+
+        if (isDone) {
+          await db.from('campaigns').update({
+            status: 'completed', completed_at: new Date().toISOString(),
+            sent_count: sent, failed_count: failed,
+            meta: { reengagement_blocked: reengagementBlocked, offset: newOffset },
+          }).eq('id', id as string)
+          console.log(`[Campaign] COMPLETE sent=${sent} failed=${failed} reengagement_blocked=${reengagementBlocked}`)
+          await notifyCampaignComplete(user.userId, campaign.name, sent, failed)
+          return res.status(200).json({ success: true, sent, failed, done: true, message: `Campaign completed — sent to ${sent} contacts` })
+        } else {
+          // Batch time limit reached (or paused) with contacts remaining.
+          // Reschedule for immediate pickup by the scheduler cron (runs every
+          // minute) so the next batch continues automatically.
+          await db.from('campaigns').update({
+            status: 'scheduled',
+            scheduled_at: new Date().toISOString(),
+            sent_count: sent, failed_count: failed,
+            meta: { reengagement_blocked: reengagementBlocked, offset: newOffset },
+          }).eq('id', id as string)
+          console.log(`[Campaign] BATCH DONE processed=${processedInBatch} offset=${newOffset}/${allContacts.length} timedOut=${timedOut} — rescheduled for next run`)
+          return res.status(200).json({
+            success: true, sent, failed, done: false,
+            offset: newOffset, total: allContacts.length,
+            message: `Batch sent ${processedInBatch} (offset ${newOffset}/${allContacts.length}) — campaign rescheduled to continue`,
+          })
+        }
       } catch (loopErr: any) {
         console.error(`[Campaign] LOOP ERROR: ${loopErr?.message}`)
         await db.from('campaigns').update({
           status: 'failed', completed_at: new Date().toISOString(),
           sent_count: sent, failed_count: failed,
-          meta: { error: loopErr?.message },
+          meta: { error: loopErr?.message, offset: startOffset + processedInBatch },
         }).eq('id', id as string)
+        return res.status(200).json({ success: false, sent, failed, error: loopErr?.message })
       }
-      return res.status(200).json({ success: true, sent, failed, message: `Campaign completed — sent to ${sent} contacts` })
     }
 
     if (action === 'pause') { await db.from('campaigns').update({ status: 'paused' }).eq('id', id as string); return res.status(200).json({ success: true }) }
