@@ -293,6 +293,12 @@ export default function CampaignsPage() {
   const { data: segData } = useQuery('segments', () => axios.get('/api/segments').then(r => r.data))
   const segments = segData?.segments || []
   const { data: iData } = useQuery('instances', () => axios.get('/api/whatsapp/instances').then(r => r.data))
+  const { data: tplData, isLoading: tplLoading, error: tplError } = useQuery(
+    ['wa-templates', form.instance_id],
+    () => axios.get(`/api/whatsapp/templates?instance_id=${form.instance_id}`).then(r => r.data),
+    { enabled: !!form.instance_id }
+  )
+  const approvedTemplates = (tplData?.templates || []).filter((t: any) => t.status === 'APPROVED')
   const campaigns = cData?.campaigns || []
   const instances = (iData?.instances || []).filter(i => i.status === 'connected')
   const message = buildMessage(blocks)
@@ -508,19 +514,45 @@ export default function CampaignsPage() {
               <input value={form.tags} onChange={e => setForm(d => ({...d, tags: e.target.value, segment_id: ''}))} placeholder="Or filter by tags (comma-separated)" className="input text-sm" />
             </div>
             <div>
-              <label className="label">Approved Template Name</label>
-              <input
+              <label className="label">Approved Template</label>
+              {!form.instance_id ? (
+                <p className="text-xs text-slate-500">Select a WhatsApp instance above first.</p>
+              ) : tplLoading ? (
+                <p className="text-xs text-slate-500">Loading templates from Meta…</p>
+              ) : tplError ? (
+                <p className="text-xs text-red-500">Failed to load templates. You can still type a name manually below.</p>
+              ) : approvedTemplates.length === 0 ? (
+                <p className="text-xs text-amber-600">
+                  No Approved templates found on this WhatsApp Business Account. Create one in
+                  Meta Business Manager → WhatsApp Manager → Message Templates, then refresh this page.
+                </p>
+              ) : null}
+
+              <select
                 value={form.template_name}
                 onChange={e => setForm(d => ({...d, template_name: e.target.value}))}
-                placeholder="e.g. appointment_reminder"
                 className="input font-mono text-sm"
-              />
+                disabled={!form.instance_id}
+              >
+                <option value="">— Select an approved template —</option>
+                {approvedTemplates.map((t: any) => (
+                  <option key={`${t.name}_${t.language}`} value={t.name}>
+                    {t.name} ({t.language}, {t.category}, {t.variableCount} variable{t.variableCount === 1 ? '' : 's'})
+                  </option>
+                ))}
+              </select>
+
+              {form.template_name && approvedTemplates.find((t: any) => t.name === form.template_name) && (
+                <div className="mt-2 p-2 bg-slate-50 rounded text-xs text-slate-600 whitespace-pre-wrap">
+                  {approvedTemplates.find((t: any) => t.name === form.template_name)?.body}
+                </div>
+              )}
+
               <p className="text-xs text-slate-500 mt-1">
-                Required for recipients outside the 24h window (most campaigns). Enter the exact
-                name of an <strong>Approved</strong> template from Meta Business Manager whose
-                body matches your message above. Leave empty to use the default
-                Marketing template (<code className="bg-slate-100 px-1 rounded">marketing_offer</code>) —
-                its content will NOT match your custom message.
+                Required for recipients outside the 24h window (most campaigns). The selected
+                template's <strong>approved body text</strong> (shown above) — not your message
+                above — is what recipients outside the 24h window will actually see. Leave empty
+                to fall back to <code className="bg-slate-100 px-1 rounded">marketing_offer</code>.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
