@@ -259,7 +259,15 @@ export default function AdminSettingsPage() {
                         <p>{otpTestResult.note}</p>
                       ) : (
                         <>
-                          <p>Template: <strong>{otpTestResult.templateName}</strong></p>
+                          <p>Configured template: <strong>{otpTestResult.templateName}</strong></p>
+                          {otpTestResult.usedTemplateName && otpTestResult.usedTemplateName !== otpTestResult.templateName && (
+                            <p className="text-amber-700">
+                              ⚠ Configured template wasn't found — sent using fallback template
+                              {' '}<strong>{otpTestResult.usedTemplateName}</strong> instead.
+                              Consider updating OTP Template Name to match.
+                            </p>
+                          )}
+                          <p>Template used: <strong>{otpTestResult.usedTemplateName}</strong></p>
                           <p>Language used: <strong>{otpTestResult.usedLanguage}</strong></p>
                           <p>Components used: <strong>{otpTestResult.usedComponents}</strong></p>
                           <p>Message ID: {otpTestResult.messageId}</p>
@@ -271,11 +279,11 @@ export default function AdminSettingsPage() {
                       <p className="text-red-700 font-semibold">❌ Failed</p>
                       {otpTestResult.error && <p>{otpTestResult.error}</p>}
                       {Array.isArray(otpTestResult.attempts) && (
-                        <div className="mt-2 space-y-1">
-                          <p className="text-slate-600">Attempts:</p>
+                        <div className="mt-2 space-y-1 max-h-64 overflow-y-auto">
+                          <p className="text-slate-600">Attempts ({otpTestResult.attempts.length}):</p>
                           {otpTestResult.attempts.map((a: any, i: number) => (
                             <p key={i} className="text-slate-600">
-                              • lang=<strong>{a.language}</strong> components=<strong>{a.components}</strong>
+                              • template=<strong>{a.templateName}</strong> lang=<strong>{a.language}</strong> components=<strong>{a.components}</strong>
                               {' '}→ {a.ok ? '✅' : `❌ (${a.status || ''} ${a.error || ''})`}
                             </p>
                           ))}

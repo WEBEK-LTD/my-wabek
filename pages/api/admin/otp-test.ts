@@ -60,6 +60,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     provider: 'cloud_api',
     templateName: otpTemplateName,
     testCode,
+    usedTemplateName: result.usedTemplateName,
     usedLanguage: result.usedLanguage,
     usedComponents: result.usedComponents,
     messageId: result.messageId,

@@ -88,8 +88,9 @@ export async function sendOTP(params: {
         // the OTP code is worse than failing outright. Surface a clear error instead.
         const lastAttempt = result.attempts[result.attempts.length - 1]
         const errMsg = lastAttempt?.error || 'Unknown error'
+        const triedNames = Array.from(new Set(result.attempts.map(a => a.templateName)))
         console.error('[otp] all template attempts failed:', JSON.stringify(result.attempts))
-        throw new Error(`Failed to send OTP via template "${otpTemplateName}": ${errMsg}. Check Settings → Security & OTP → OTP Template Name matches an Approved Authentication template in Meta Business Manager.`)
+        throw new Error(`Failed to send OTP. Tried templates: ${triedNames.join(', ')}. Last error: ${errMsg}. Go to Settings → Security & OTP and set "OTP Template Name" to an Approved Authentication template that exists in your Meta Business Manager.`)
       }
     } else {
       // No OTP template configured — only safe to send if within the 24h window
