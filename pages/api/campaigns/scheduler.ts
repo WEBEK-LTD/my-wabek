@@ -31,8 +31,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   for (const campaign of campaigns) {
     try {
-      // Mark as running
-      await db.from('campaigns').update({ status: 'running' }).eq('id', campaign.id)
+      // NOTE: do NOT set status='running' here — [id].ts's 'start' action
+      // only allows transitioning from draft/scheduled/paused, and will
+      // itself mark the campaign as 'running' once it begins the batch.
 
       // Trigger campaign execution and AWAIT it. A fire-and-forget fetch
       // here gets killed when this function returns (serverless), leaving
