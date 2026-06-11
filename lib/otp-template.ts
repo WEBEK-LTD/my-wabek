@@ -43,6 +43,13 @@ export async function sendOtpTemplate(params: {
       ],
     },
     {
+      label: 'body (named param: otp_code) + url button',
+      components: [
+        { type: 'body', parameters: [{ type: 'text', parameter_name: 'otp_code', text: code }] },
+        { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: code }] },
+      ],
+    },
+    {
       label: 'body only',
       components: [
         { type: 'body', parameters: [{ type: 'text', text: code }] },

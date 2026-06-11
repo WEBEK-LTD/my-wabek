@@ -23,6 +23,13 @@ export const TEMPLATE_MAP = {
   OTP: {
     name: 'wabek_otp',
     paramNames: ['otp_code'],
+    // This template's approved design includes a URL button whose dynamic
+    // suffix is the OTP code itself (e.g. https://waabek.com/verify?code={{1}}).
+    // Meta requires this button parameter even though the body uses a
+    // named parameter (otp_code).
+    buttons: [
+      { type: 'url' as const, index: 0, paramFrom: 'otp_code' },
+    ],
   },
   PASSWORD_RESET: {
     name: 'password_reset',
@@ -108,9 +115,34 @@ export async function sendNotification(p: NotifyParams): Promise<{ success: bool
     text: p.params[name] || '',
   }))
 
-  const components = parameters.length > 0
+  const components: any[] = parameters.length > 0
     ? [{ type: 'body', parameters }]
     : []
+
+  // Add button components if this template has buttons requiring dynamic params
+  const buttonsConfig = (tmpl as any).buttons as
+    { type: 'url' | 'copy_code'; index: number; paramFrom: string }[] | undefined
+
+  if (buttonsConfig) {
+    for (const btn of buttonsConfig) {
+      const value = p.params[btn.paramFrom] || ''
+      if (btn.type === 'copy_code') {
+        components.push({
+          type: 'button',
+          sub_type: 'copy_code',
+          index: String(btn.index),
+          parameters: [{ type: 'coupon_code', coupon_code: value }],
+        })
+      } else {
+        components.push({
+          type: 'button',
+          sub_type: 'url',
+          index: String(btn.index),
+          parameters: [{ type: 'text', text: value }],
+        })
+      }
+    }
+  }
 
   console.log(`[notify] ${p.templateKey} → template=${tmpl.name} phone=${cleanPhone} params=${JSON.stringify(p.params)} components=${JSON.stringify(components)}`)
 
