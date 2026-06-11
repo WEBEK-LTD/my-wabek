@@ -6,18 +6,17 @@ import toast from 'react-hot-toast'
 import Head from 'next/head'
 
 const BUILT_IN_TEMPLATES = [
-  { key:'wabek_otp',             name:'wabek_otp',             params:['otp_code'],                         use:'OTP / Verification codes' },
-  { key:'welcome_message_v2',    name:'welcome_message_v2',    params:['customer_name'],                     use:'New customer welcome' },
-  { key:'support_ticket_update', name:'support_ticket_update', params:[],                                    use:'Support reply notification' },
-  { key:'marketing_offer',       name:'marketing_offer',       params:['customer_name'],                     use:'Marketing campaigns' },
-  { key:'broadcast_notification',name:'broadcast_notification',params:['customer_name'],                     use:'Bulk announcements' },
-  { key:'invoice_created',       name:'invoice_created',       params:['customer_name','invoice_id','amount','due_date'], use:'New invoice' },
-  { key:'invoice_overdue',       name:'invoice_overdue',       params:['customer_name','invoice_id','amount'],use:'Overdue invoice' },
-  { key:'payment_reminder',      name:'payment_reminder',      params:['customer_name','amount','due_date'], use:'Payment reminder' },
-  { key:'service_notification',  name:'service_notification',  params:['customer_name','message'],           use:'General service update' },
-  { key:'password_reset',        name:'password_reset',        params:['customer_name','reset_link'],        use:'Password reset link' },
-  { key:'ai_assistant_followup', name:'ai_assistant_followup', params:[],                                    use:'AI re-engagement' },
-  { key:'SUPPORT_REPLY',         name:'support_ticket_update', params:[],                                    use:'Live Chat support replies (outside 24h window)' },
+  { key:'OTP',                   name:'wabek_otp',             params:['otp_code'],                         use:'OTP / Verification codes' },
+  { key:'WELCOME',                name:'welcome_message_v2',    params:['customer_name'],                     use:'New customer welcome' },
+  { key:'SUPPORT_TICKET_OPEN',    name:'support_ticket_update', params:[],                                    use:'Support reply notification' },
+  { key:'MARKETING',              name:'marketing_offer',       params:['customer_name'],                     use:'Marketing campaigns' },
+  { key:'BROADCAST',              name:'broadcast_notification',params:['customer_name'],                     use:'Bulk announcements' },
+  { key:'INVOICE_CREATED',        name:'invoice_created',       params:['customer_name','invoice_id','amount','due_date'], use:'New invoice' },
+  { key:'INVOICE_OVERDUE',        name:'invoice_overdue',       params:['customer_name','invoice_id','amount'],use:'Overdue invoice' },
+  { key:'PAYMENT_REMINDER',       name:'payment_reminder',      params:['customer_name','amount','due_date'], use:'Payment reminder' },
+  { key:'SERVICE_NOTIFICATION',   name:'service_notification',  params:['customer_name','message'],           use:'General service update' },
+  { key:'PASSWORD_RESET',         name:'password_reset',        params:['customer_name','reset_link'],        use:'Password reset link' },
+  { key:'SUPPORT_REPLY',          name:'support_ticket_update', params:[],                                    use:'Live Chat support replies (outside 24h window)' },
 ]
 
 export default function WATemplatesPage() {
@@ -27,13 +26,13 @@ export default function WATemplatesPage() {
   const [testPhone, setTestPhone] = useState('')
 
   useEffect(() => {
-    axios.get('/api/admin/wa-templates').then(r => setConfig(r.data.config || {})).catch(()=>{})
+    axios.get('/api/admin/wa-templates').then(r => setConfig(r.data.templates || r.data.defaults || {})).catch(()=>{})
   }, [])
 
   const save = async () => {
     setSaving(true)
     try {
-      await axios.post('/api/admin/wa-templates', { config })
+      await axios.post('/api/admin/wa-templates', { templates: config })
       toast.success('Templates saved ✅')
     } catch { toast.error('Failed to save') }
     setSaving(false)
@@ -125,8 +124,8 @@ export default function WATemplatesPage() {
                   <div className="mt-3 flex items-center gap-2">
                     <span className="text-xs text-slate-500 flex-shrink-0">Override Meta template name:</span>
                     <input
-                      value={config[tmpl.key]?.customName || ''}
-                      onChange={e => setConfig(cfg => ({...cfg, [tmpl.key]: {...cfg[tmpl.key], customName: e.target.value}}))}
+                      value={config[tmpl.key] || ''}
+                      onChange={e => setConfig(cfg => ({...cfg, [tmpl.key]: e.target.value}))}
                       placeholder={tmpl.name}
                       className="input text-xs py-1 flex-1 max-w-xs"
                     />
