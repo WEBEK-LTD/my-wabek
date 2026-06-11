@@ -240,6 +240,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               text: msg,
               contactId: contact.id,
               templateKey: 'MARKETING',
+              templateNameOverride: campaignTemplate,
               templateLanguage: templateLang,
               templateComponents,
               forceTemplate: true,

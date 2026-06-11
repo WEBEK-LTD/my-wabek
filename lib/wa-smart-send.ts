@@ -42,6 +42,10 @@ interface SmartSendParams {
   text: string
   contactId?: string | null
   templateKey?: TemplateKey
+  // Explicit Meta template name to use, bypassing TEMPLATES/wa_templates
+  // override lookup entirely. Use this when the caller (e.g. a campaign)
+  // already knows the exact approved template name to send.
+  templateNameOverride?: string
   templateComponents?: unknown[]
   templateLanguage?: string
   forceTemplate?: boolean
@@ -132,7 +136,7 @@ export async function smartSend(params: SmartSendParams): Promise<SmartSendResul
   const db = supabaseAdmin()
   const {
     userId, instanceId, phoneNumberId, accessToken, to, text,
-    contactId, templateKey, templateComponents: templateComponentsInput = [], templateLanguage = 'en',
+    contactId, templateKey, templateNameOverride, templateComponents: templateComponentsInput = [], templateLanguage = 'en',
     forceTemplate = false, messageType = 'text'
   } = params
   let templateComponents: unknown[] = templateComponentsInput
@@ -173,7 +177,7 @@ export async function smartSend(params: SmartSendParams): Promise<SmartSendResul
   const windowDecision = forceTemplate ? 'FORCE_TEMPLATE' : inWindow ? 'IN_WINDOW' : 'OUTSIDE_WINDOW'
 
   const decidedMethod = (inWindow && !forceTemplate) ? 'text' : 'template'
-  const templateName = templateKey ? await getTemplateName(templateKey as TemplateKey) : 'none'
+  const templateName = templateNameOverride || (templateKey ? await getTemplateName(templateKey as TemplateKey) : 'none')
   console.log(`[SEND] source=${source} instance_id=${instanceId} provider=CLOUD_API phone=${cleanPhone} method=${decidedMethod} inWindow=${inWindow} window=${windowDecision} hours_since=${hoursSinceInbound ?? 'n/a'} template=${templateName} campaign_id=${campaignId || 'none'} ticket_id=${ticketId || 'none'}`)
 
   let messageId: string | null = null
@@ -199,7 +203,7 @@ export async function smartSend(params: SmartSendParams): Promise<SmartSendResul
       // Outside 24h window — use template
       // Use provided templateKey OR fallback to broadcast_notification (safe default - only needs customer_name)
       const fallbackKey = (templateKey || 'BROADCAST') as TemplateKey
-      templateUsed = await getTemplateName(fallbackKey) || 'broadcast_notification'
+      templateUsed = templateNameOverride || await getTemplateName(fallbackKey) || 'broadcast_notification'
 
       // If using fallback template and no components provided, add customer_name
       if (!templateKey && (!templateComponents || (templateComponents as any[]).length === 0)) {
