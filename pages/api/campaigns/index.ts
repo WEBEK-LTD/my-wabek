@@ -14,6 +14,8 @@ const createSchema = z.object({
   contact_filter: z.object({ tags: z.array(z.string()).optional(), all: z.boolean().optional() }).default({ all: true }),
   scheduled_at: z.string().datetime().optional(),
   delay_seconds: z.number().min(1).max(60).default(3),
+  template_name: z.string().min(1).optional(),
+  template_language: z.string().min(2).default('en'),
 })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

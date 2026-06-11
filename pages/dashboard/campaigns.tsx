@@ -281,7 +281,7 @@ export default function CampaignsPage() {
   ])
   const [showTemplates, setShowTemplates] = useState(false)
   const [previewContact, setPreviewContact] = useState('John')
-  const [form, setForm] = useState({ name: '', instance_id: '', tags: '', delay_seconds: '3', scheduled_at: '' })
+  const [form, setForm] = useState({ name: '', instance_id: '', tags: '', delay_seconds: '3', scheduled_at: '', template_name: '' })
 
   const { data: cData } = useQuery('campaigns', () => axios.get('/api/campaigns').then(r => r.data), {
     refetchInterval: (data: any) => {
@@ -328,6 +328,8 @@ export default function CampaignsPage() {
       name: form.name,
       instance_id: form.instance_id,
       message,
+      template_name: form.template_name || undefined,
+      template_language: 'en',
       contact_filter: form.tags ? { tags: form.tags.split(',').map(t => t.trim()) } : { all: true },
       delay_seconds: parseInt(form.delay_seconds) || 3,
       scheduled_at: form.scheduled_at || undefined,
@@ -504,6 +506,22 @@ export default function CampaignsPage() {
                 {segments.map(s => <option key={s.id} value={s.id}>{s.name} ({s.contact_count} contacts)</option>)}
               </select>
               <input value={form.tags} onChange={e => setForm(d => ({...d, tags: e.target.value, segment_id: ''}))} placeholder="Or filter by tags (comma-separated)" className="input text-sm" />
+            </div>
+            <div>
+              <label className="label">Approved Template Name</label>
+              <input
+                value={form.template_name}
+                onChange={e => setForm(d => ({...d, template_name: e.target.value}))}
+                placeholder="e.g. appointment_reminder"
+                className="input font-mono text-sm"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Required for recipients outside the 24h window (most campaigns). Enter the exact
+                name of an <strong>Approved</strong> template from Meta Business Manager whose
+                body matches your message above. Leave empty to use the default
+                Marketing template (<code className="bg-slate-100 px-1 rounded">marketing_offer</code>) —
+                its content will NOT match your custom message.
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
