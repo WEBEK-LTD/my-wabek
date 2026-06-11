@@ -1,4 +1,4 @@
-import { smartSend, smartSendWAWeb, resolveProvider } from '@/lib/wa-smart-send'
+import { smartSend, smartSendWAWeb, resolveProvider, isInWindow } from '@/lib/wa-smart-send'
 import { sendWAWebMessage } from '@/lib/wa-web'
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -77,6 +77,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const webResult = await sendWAWebMessage({ instanceId: instance.id, to, text: message })
         result = { messages: [{ id: webResult.messageId }] }
       } else {
+        // Outside the 24h customer-service window, WhatsApp requires an
+        // approved TEMPLATE message — plain text cannot be delivered.
+        // Sending a generic "broadcast_notification" template here would
+        // deliver the WRONG message to the recipient (not the intended
+        // text), so we reject with clear guidance instead.
+        const inWindow = await isInWindow((instance as any)?.user_id || (instance as any)?.userId || '', to, (instance as any)?.id || '')
+        if (!inWindow) {
+          return res.status(422).json({
+            error: 'Recipient is outside the 24-hour messaging window',
+            detail: 'Plain text messages can only be sent if the recipient messaged you within the last 24 hours. ' +
+              'For OTP/verification codes, use POST /api/v1/otp instead — it sends via an approved Authentication template. ' +
+              'For other notifications outside the window, use a template-based send.',
+          })
+        }
         result = await smartSend({ userId: (instance as any)?.user_id || (instance as any)?.userId || '', instanceId: (instance as any)?.id || '', phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: to, text: message, source: 'api' as any })
       }
       await db.from('messages').insert({ id: uuidv4(), user_id: auth.userId, instance_id: instance.id, direction: 'outbound', type: 'text', content: message, wa_message_id: result?.messageId, status: 'sent' })
