@@ -9,7 +9,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Auth check
   const secret = req.query.secret || req.headers['x-secret']
-  const validSecret = process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET
+  const validSecret = process.env.CRON_SECRET || process.env.JWT_SECRET || process.env.SUPABASE_JWT_SECRET
   if (secret !== validSecret) return res.status(403).json({ error: 'Forbidden' })
 
   const db = supabaseAdmin()

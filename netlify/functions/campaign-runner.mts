@@ -1,6 +1,6 @@
 import type { Config } from "@netlify/functions"
 
-// Runs every 5 minutes to process scheduled campaigns
+// Runs every minute to process scheduled/batched campaigns
 export default async () => {
   const baseUrl = process.env.URL || process.env.NEXT_PUBLIC_APP_URL || 'https://waabek.com'
   const secret  = process.env.CRON_SECRET || process.env.JWT_SECRET || ''
@@ -15,5 +15,5 @@ export default async () => {
 }
 
 export const config: Config = {
-  schedule: "*/5 * * * *"
+  schedule: "* * * * *"
 }
