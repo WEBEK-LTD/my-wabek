@@ -20,56 +20,88 @@ interface NotifyParams {
 
 // Map template keys to Meta template names + their parameter names in order
 export const TEMPLATE_MAP = {
+  // NOTE: This map is kept in sync with the templates Approved on Meta
+  // (Business Manager > WhatsApp Manager > Message Templates). Each entry's
+  // paramNames/paramStyle MUST match the template's actual body exactly --
+  // a mismatch causes Meta error 132000/131008 and (previously) silent
+  // fallback to the wrong template.
   OTP: {
     name: 'wabek_otp',
+    // Body: "*{{1}}* is your verification code." -- POSITIONAL, 1 param.
     paramNames: ['otp_code'],
-    // This template's approved design includes a URL button whose dynamic
-    // suffix is the OTP code itself (e.g. https://waabek.com/verify?code={{1}}).
-    // Meta requires this button parameter even though the body uses a
-    // named parameter (otp_code).
-    buttons: [
-      { type: 'url' as const, index: 0, paramFrom: 'otp_code' },
-    ],
+    paramStyle: 'positional' as const,
   },
   PASSWORD_RESET: {
     name: 'password_reset',
-    paramNames: ['customer_name', 'reset_link'],
+    // Body: "Hello {{customer_name}}, A password reset request was received..."
+    paramNames: ['customer_name'],
+    paramStyle: 'named' as const,
   },
   WELCOME: {
     name: 'welcome_message_v2',
-    paramNames: ['customer_name'],
+    // Body: "Hello, Welcome to Wabek..." -- no variables.
+    paramNames: [],
+    paramStyle: 'named' as const,
+  },
+  WELCOME_V1: {
+    name: 'welcome_message',
+    // Body: "Hello, Thank you for contacting Wabek..." -- no variables.
+    paramNames: [],
+    paramStyle: 'named' as const,
   },
   SUPPORT_TICKET_OPEN: {
     name: 'support_ticket_update',
-    paramNames: [],  // no params
+    // Body: "Hello {{customer_name}}, We have an important update regarding your service..."
+    paramNames: ['customer_name'],
+    paramStyle: 'named' as const,
   },
   SUPPORT_REPLY: {
-    name: 'support_ticket_update',
-    paramNames: [],  // no params
+    name: 'support_reply',
+    // Body: "You have received a new reply... Message: {{message}} ..."
+    paramNames: ['message'],
+    paramStyle: 'named' as const,
   },
   PAYMENT_REMINDER: {
     name: 'payment_reminder',
-    paramNames: ['customer_name', 'amount', 'due_date'],
+    // Body: "Hello {{customer_name}}, This is a reminder that you have an unpaid invoice..."
+    paramNames: ['customer_name'],
+    paramStyle: 'named' as const,
   },
   INVOICE_CREATED: {
     name: 'invoice_created',
-    paramNames: ['customer_name', 'invoice_id', 'amount', 'due_date'],
+    // Body: "Hello {{customer_name}}, A new invoice has been generated..."
+    paramNames: ['customer_name'],
+    paramStyle: 'named' as const,
   },
   INVOICE_OVERDUE: {
     name: 'invoice_overdue',
-    paramNames: ['customer_name', 'invoice_id', 'amount'],
+    // Body: "Hello {{customer_name}}, Your invoice is overdue..."
+    paramNames: ['customer_name'],
+    paramStyle: 'named' as const,
   },
   SERVICE_NOTIFICATION: {
     name: 'service_notification',
-    paramNames: ['customer_name', 'message'],
+    // Body: "Hello {{customer_name}}, We have an important update regarding your service..."
+    paramNames: ['customer_name'],
+    paramStyle: 'named' as const,
+  },
+  AI_FOLLOWUP: {
+    name: 'ai_assistant_followup',
+    // Body: "Hello {{customer_name}}, Our AI assistant has prepared a response..."
+    paramNames: ['customer_name'],
+    paramStyle: 'named' as const,
   },
   MARKETING: {
     name: 'marketing_offer',
+    // Body: "Hello {{customer_name}}, We have a special offer..."
     paramNames: ['customer_name'],
+    paramStyle: 'named' as const,
   },
   BROADCAST: {
     name: 'broadcast_notification',
+    // Body: "Hello {{customer_name}}, We have an important announcement..."
     paramNames: ['customer_name'],
+    paramStyle: 'named' as const,
   },
 } as const
 
@@ -108,12 +140,16 @@ export async function sendNotification(p: NotifyParams): Promise<{ success: bool
   // provider resolved above
   const tmpl = TEMPLATE_MAP[p.templateKey]
 
-  // Build named parameters in correct order
-  const parameters = tmpl.paramNames.map(name => ({
-    type: 'text' as const,
-    parameter_name: name,
-    text: p.params[name] || '',
-  }))
+  // Build body parameters in correct order, matching the template's
+  // approved style: "named" uses {{customer_name}}-style variables and
+  // requires `parameter_name`; "positional" uses {{1}}, {{2}}... and must
+  // NOT include `parameter_name`.
+  const paramStyle = (tmpl as any).paramStyle === 'positional' ? 'positional' : 'named'
+  const parameters = tmpl.paramNames.map(name => (
+    paramStyle === 'positional'
+      ? { type: 'text' as const, text: p.params[name] || '' }
+      : { type: 'text' as const, parameter_name: name, text: p.params[name] || '' }
+  ))
 
   const components: any[] = parameters.length > 0
     ? [{ type: 'body', parameters }]

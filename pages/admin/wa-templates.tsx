@@ -6,17 +6,19 @@ import toast from 'react-hot-toast'
 import Head from 'next/head'
 
 const BUILT_IN_TEMPLATES = [
-  { key:'OTP',                   name:'wabek_otp',             params:['otp_code'],                         use:'OTP / Verification codes' },
-  { key:'WELCOME',                name:'welcome_message_v2',    params:['customer_name'],                     use:'New customer welcome' },
-  { key:'SUPPORT_TICKET_OPEN',    name:'support_ticket_update', params:[],                                    use:'Support reply notification' },
-  { key:'MARKETING',              name:'marketing_offer',       params:['customer_name'],                     use:'Marketing campaigns' },
-  { key:'BROADCAST',              name:'broadcast_notification',params:['customer_name'],                     use:'Bulk announcements' },
-  { key:'INVOICE_CREATED',        name:'invoice_created',       params:['customer_name','invoice_id','amount','due_date'], use:'New invoice' },
-  { key:'INVOICE_OVERDUE',        name:'invoice_overdue',       params:['customer_name','invoice_id','amount'],use:'Overdue invoice' },
-  { key:'PAYMENT_REMINDER',       name:'payment_reminder',      params:['customer_name','amount','due_date'], use:'Payment reminder' },
-  { key:'SERVICE_NOTIFICATION',   name:'service_notification',  params:['customer_name','message'],           use:'General service update' },
-  { key:'PASSWORD_RESET',         name:'password_reset',        params:['customer_name','reset_link'],        use:'Password reset link' },
-  { key:'SUPPORT_REPLY',          name:'support_ticket_update', params:[],                                    use:'Live Chat support replies (outside 24h window)' },
+  { key:'OTP',                   name:'wabek_otp',             params:['otp_code'],       use:'OTP / Verification codes (positional {{1}})' },
+  { key:'WELCOME',                name:'welcome_message_v2',    params:[],                 use:'New customer welcome (no variables)' },
+  { key:'WELCOME_V1',             name:'welcome_message',       params:[],                 use:'Welcome (legacy, no variables)' },
+  { key:'SUPPORT_TICKET_OPEN',    name:'support_ticket_update', params:['customer_name'],  use:'Service update notification' },
+  { key:'SUPPORT_REPLY',          name:'support_reply',         params:['message'],        use:'Support team reply' },
+  { key:'MARKETING',              name:'marketing_offer',       params:['customer_name'],  use:'Marketing campaigns' },
+  { key:'BROADCAST',              name:'broadcast_notification',params:['customer_name'],  use:'Bulk announcements' },
+  { key:'INVOICE_CREATED',        name:'invoice_created',       params:['customer_name'],  use:'New invoice' },
+  { key:'INVOICE_OVERDUE',        name:'invoice_overdue',       params:['customer_name'],  use:'Overdue invoice' },
+  { key:'PAYMENT_REMINDER',       name:'payment_reminder',      params:['customer_name'],  use:'Payment reminder' },
+  { key:'SERVICE_NOTIFICATION',   name:'service_notification',  params:['customer_name'],  use:'General service update' },
+  { key:'AI_FOLLOWUP',            name:'ai_assistant_followup', params:['customer_name'],  use:'AI assistant follow-up' },
+  { key:'PASSWORD_RESET',         name:'password_reset',        params:['customer_name'],  use:'Password reset notification' },
 ]
 
 export default function WATemplatesPage() {
