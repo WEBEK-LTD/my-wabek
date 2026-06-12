@@ -230,6 +230,10 @@ async function continueFlow(
     }
   }
 
+  // No further node to go to — the flow has ended. Deactivate this session
+  // so the NEXT incoming message starts fresh via flow matching (step 2-6),
+  // instead of being silently swallowed here forever.
+  await db.from('chatbot_sessions').update({ is_active: false }).eq('id', sessionData.id)
   return false
 }
 
