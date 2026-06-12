@@ -185,13 +185,12 @@ export default function ChatbotPage() {
     setTestMessages(m => [...m, { role: 'user', text: userMsg }])
     setTestLoading(true)
     try {
-      const useLive = editingFlow?.id === testFlow.id
       const { data } = await axios.post('/api/chatbot/test', {
         flow_id: testFlow.id,
         message: userMsg,
-        nodes: useLive ? nodes : testFlow.nodes,
-        edges: useLive ? edges : testFlow.edges,
-        trigger_keywords: useLive ? (testFlow.trigger_keywords) : testFlow.trigger_keywords,
+        nodes: testFlow.nodes,
+        edges: testFlow.edges,
+        trigger_keywords: testFlow.trigger_keywords,
       })
       setTestMessages(m => [...m, { role: 'bot', text: data.response || '(no response)', nodes: data.triggered_nodes }])
     } catch {
@@ -308,7 +307,6 @@ export default function ChatbotPage() {
               )}
               <div className="flex gap-2">
                 <button onClick={() => openBuilder(flow)} className="btn-secondary text-xs py-1.5 flex-1 justify-center"><PencilIcon className="w-3 h-3" /> Edit</button>
-                <button onClick={() => { setTestFlow(flow); setTestMessages([]) }} className="btn-secondary text-xs py-1.5 px-2" title="Test flow">🧪</button>
                 <button onClick={() => { if (confirm('Delete?')) deleteMut.mutate(flow.id) }} className="p-1.5 text-slate-500 hover:text-red-400"><TrashIcon className="w-4 h-4" /></button>
               </div>
             </div>
@@ -333,6 +331,14 @@ export default function ChatbotPage() {
           <option value="">All instances</option>
           {instances.map(i => <option key={i.id} value={i.id}>{i.display_name || i.phone_number}</option>)}
         </select>
+        <button
+          onClick={() => {
+            setTestFlow({ id: editingFlow?.id || 'draft', name: flowName || 'Untitled', nodes, edges, trigger_keywords: flowKeywords.split(',').map(k => k.trim()).filter(Boolean) })
+            setTestMessages([])
+          }}
+          className="btn-secondary text-sm py-1.5"
+          title="Test flow"
+        >🧪 Test</button>
         <button onClick={saveFlow} disabled={saving} className="btn-primary ml-auto text-sm py-1.5">
           {saving ? <><ArrowPathIcon className="w-4 h-4 animate-spin" /> Saving...</> : '💾 Save'}
         </button>
