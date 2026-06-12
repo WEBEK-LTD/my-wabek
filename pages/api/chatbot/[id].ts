@@ -14,6 +14,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === 'GET') return res.status(200).json({ flow })
 
   if (req.method === 'PUT') {
+    if (req.body?.is_active === true) {
+      const allowed = await (await import('@/lib/middleware')).checkPlanFeature(user.userId, 'allow_chatbot')
+      if (!allowed) {
+        return res.status(403).json({
+          error: 'Upgrade required',
+          detail: 'The Chatbot Builder is available on Pro and Business plans. Please upgrade to activate chatbot flows.',
+          upgrade_required: true,
+        })
+      }
+    }
+
     const { data, error } = await db.from('chatbot_flows').update({
       ...req.body,
       updated_at: new Date().toISOString(),

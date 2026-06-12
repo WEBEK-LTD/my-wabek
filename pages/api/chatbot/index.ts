@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuth } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { v4 as uuidv4 } from 'uuid'
+import { checkPlanFeature, getUserPlan } from '@/lib/middleware'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await requireAuth(req, res)
@@ -14,8 +15,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    // Check plan limit
-    // Plan limit check removed (was incorrectly checking 'campaigns' limit for this resource)
+    // Premium feature gate (Wix review requirement): Chatbot Builder is a
+    // Pro+ feature. Free/Starter plans (or no plan assigned) must not be
+    // able to create chatbot flows.
+    const allowed = await checkPlanFeature(user.userId, 'allow_chatbot')
+    if (!allowed) {
+      return res.status(403).json({
+        error: 'Upgrade required',
+        detail: 'The Chatbot Builder is available on Pro and Business plans. Please upgrade to create chatbot flows.',
+        upgrade_required: true,
+      })
+    }
+
+    // Max flows limit
+    const plan = await getUserPlan(user.userId)
+    const maxFlows = parseInt(String((plan as any)?.max_chatbot_flows ?? '-1'), 10)
+    if (maxFlows >= 0) {
+      const { count } = await db.from('chatbot_flows').select('id', { count: 'exact', head: true }).eq('user_id', user.userId)
+      if ((count ?? 0) >= maxFlows) {
+        return res.status(403).json({
+          error: 'Plan limit reached',
+          detail: `You've reached your plan's chatbot flow limit (${maxFlows}). Please upgrade to create more.`,
+          upgrade_required: true,
+        })
+      }
+    }
 
     const { name, description, trigger_type, trigger_keywords, instance_id, nodes, edges } = req.body
     if (!name) return res.status(400).json({ error: 'name required' })

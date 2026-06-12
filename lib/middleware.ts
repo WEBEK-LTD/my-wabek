@@ -91,20 +91,29 @@ export async function checkPlanLimit(
     // No user found → allow (don't block)
     if (!user) return ALLOW()
 
-    // No plan → allow
-    if (!user.plan_id) return ALLOW()
+    let planId = user.plan_id
 
-    // Plan expired → block
-    if (user.plan_expires_at && new Date(user.plan_expires_at) < new Date()) return BLOCK()
+    // Plan expired / trial expired → fall back to Free plan's limits
+    // (not a hard block — Free plan limits apply instead)
+    const expired =
+      (user.plan_expires_at && new Date(user.plan_expires_at) < new Date()) ||
+      (user.trial_ends_at && new Date(user.trial_ends_at) < new Date())
 
-    // Trial expired → block
-    if (user.trial_ends_at && new Date(user.trial_ends_at) < new Date()) return BLOCK()
+    // No plan assigned, or expired → use Free plan's limits.
+    // IMPORTANT: previously this returned ALLOW() (unlimited) — meaning Wix
+    // users with no plan_id (e.g. before any purchase webhook) had NO
+    // campaign limit at all.
+    if (!planId || expired) {
+      const { data: freePlan } = await db.from('plans').select('id').ilike('name', 'free').maybeSingle()
+      if (!freePlan) return ALLOW() // no Free plan configured → don't block
+      planId = freePlan.id
+    }
 
     // 2. Get plan
     const { data: plan } = await db
       .from('plans')
       .select('max_messages_month, max_contacts, max_instances, max_campaigns')
-      .eq('id', user.plan_id)
+      .eq('id', planId)
       .maybeSingle()
 
     // Plan not found → allow
@@ -174,16 +183,32 @@ export async function checkPlanLimit(
 }
 
 // ── Plan Feature Check ────────────────────────────────────────────────────────
+// IMPORTANT: Users with no plan_id (e.g. Wix installs before any purchase
+// webhook has fired) are treated as being on the FREE plan's feature set —
+// NOT "allow everything". Previously `!user.plan_id` short-circuited to
+// `return true`, which let Wix free-tier users access every premium feature
+// (Chatbot Builder, Automations, AI Agents, Campaigns) with no plan assigned.
 export async function checkPlanFeature(
   userId: string,
-  feature: 'allow_api_access' | 'allow_chatbot' | 'allow_automation' | 'allow_analytics' |
+  feature: 'allow_api_access' | 'allow_chatbot' | 'allow_automation' | 'allow_ai' | 'allow_analytics' |
            'allow_white_label' | 'allow_sub_accounts' | 'allow_reseller' | 'allow_gift_invites'
 ): Promise<boolean> {
   try {
     const db = supabaseAdmin()
-    const { data: user } = await db.from('users').select('plan_id').eq('id', userId).maybeSingle()
-    if (!user?.plan_id) return true // no plan = allow all features
-    const { data: plan } = await db.from('plans').select(feature).eq('id', user.plan_id).maybeSingle()
+    const { data: user } = await db.from('users').select('plan_id, plan_expires_at').eq('id', userId).maybeSingle()
+
+    let planId = user?.plan_id
+
+    // Plan expired → fall back to Free plan's restrictions
+    const expired = user?.plan_expires_at && new Date(user.plan_expires_at) < new Date()
+
+    if (!planId || expired) {
+      const { data: freePlan } = await db.from('plans').select('id').ilike('name', 'free').maybeSingle()
+      if (!freePlan) return true // no Free plan configured → don't block (fail open)
+      planId = freePlan.id
+    }
+
+    const { data: plan } = await db.from('plans').select(feature).eq('id', planId).maybeSingle()
     if (!plan) return true
     return (plan as Record<string, unknown>)[feature] !== false
   } catch {

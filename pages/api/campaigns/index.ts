@@ -30,7 +30,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    // Plan limit check removed
+    const { allowed, limit } = await checkPlanLimit(user.userId, 'campaigns')
+    if (!allowed) {
+      return res.status(403).json({
+        error: 'Plan limit reached',
+        detail: limit === 0
+          ? 'Campaigns are not available on your current plan. Please upgrade to create campaigns.'
+          : `You've reached your monthly campaign limit (${limit}). Please upgrade your plan to create more.`,
+        upgrade_required: true,
+      })
+    }
 
     try {
       const body = createSchema.parse(req.body)

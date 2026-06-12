@@ -435,7 +435,7 @@ export default function WixSetupPage() {
             <div style={{ marginTop: 16 }}>
               <button
                 className="btn btn-g"
-                onClick={() => window.open('https://www.wix.com/app-market/add-app?appId=48cfce94-1e3d-4d09-a34d-e5f41e5b0469', '_blank')}
+                onClick={() => window.open(`https://www.wix.com/apps/upgrade/48cfce94-1e3d-4d09-a34d-e5f41e5b0469?appInstanceId=${instanceId}`, '_blank')}
               >
                 💳 Upgrade Plan on Wix →
               </button>

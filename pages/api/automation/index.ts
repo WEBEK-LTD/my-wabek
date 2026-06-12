@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireAuth } from '@/lib/auth'
 import { v4 as uuidv4 } from 'uuid'
+import { checkPlanFeature } from '@/lib/middleware'
 
 const nodeSchema = z.object({
   id: z.string(),
@@ -33,7 +34,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    // Plan limit check removed (was incorrectly checking 'campaigns' limit for this resource)
+    // Premium feature gate (Wix review requirement): Automation Builder is
+    // a Starter+ feature. Free plan (or no plan assigned) must not be able
+    // to create automation flows.
+    const allowed = await checkPlanFeature(user.userId, 'allow_automation')
+    if (!allowed) {
+      return res.status(403).json({
+        error: 'Upgrade required',
+        detail: 'Automation Flows are available on Starter, Pro, and Business plans. Please upgrade to create automation flows.',
+        upgrade_required: true,
+      })
+    }
 
     try {
       const body = createSchema.parse(req.body)

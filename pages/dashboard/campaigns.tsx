@@ -480,7 +480,7 @@ export default function CampaignsPage() {
               <WhatsAppPreview message={message} contactName={previewContact} />
               <div className="mt-3 p-2 bg-[#F8FAFC] rounded-lg">
                 <p className="text-xs text-slate-500 mb-1">{message.length} characters</p>
-                <pre className="text-xs text-slate-400 whitespace-pre-wrap break-words max-h-24 overflow-y-auto">{message || 'Add blocks to see preview...'}</pre>
+                <pre className="text-xs text-slate-700 whitespace-pre-wrap break-words max-h-24 overflow-y-auto">{message || 'Add blocks to see preview...'}</pre>
               </div>
               <button onClick={() => setStep(2)} disabled={!message.trim()} className="btn-primary w-full justify-center mt-3">
                 Next: Settings →

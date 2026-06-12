@@ -30,6 +30,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!instance_id) return res.status(400).json({ error: 'instance_id required' })
 
+    // Premium feature gate (Wix review requirement): AI Agents are a Pro+
+    // feature. Free/Starter plans (or no plan assigned) cannot ENABLE the
+    // AI assistant. (Disabling, or saving other settings while disabled,
+    // is still allowed so users can configure ahead of upgrading.)
+    if (is_enabled) {
+      const allowed = await (await import('@/lib/middleware')).checkPlanFeature(user.userId, 'allow_ai')
+      if (!allowed) {
+        return res.status(403).json({
+          error: 'Upgrade required',
+          detail: 'AI Agents are available on Pro and Business plans. Please upgrade to enable the AI assistant.',
+          upgrade_required: true,
+        })
+      }
+    }
+
     // Verify instance belongs to user
     const { data: inst } = await db.from('whatsapp_instances')
       .select('id').eq('id', instance_id).eq('user_id', user.userId).single()
