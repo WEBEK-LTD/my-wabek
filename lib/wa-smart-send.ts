@@ -265,7 +265,7 @@ export async function smartSend(params: SmartSendParams): Promise<SmartSendResul
         content: text,
         status: 'sent',
         campaign_id: campaignId || null,
-        meta: templateUsed ? { template: templateUsed, method } : { method },
+        meta: { method, source, ...(templateUsed ? { template: templateUsed } : {}) },
       })
       if (insertErr) {
         console.error(`[smart-send] DB insert error: ${insertErr.message}`)
@@ -285,10 +285,11 @@ export async function smartSendWAWeb(params: {
   to: string
   text: string
   contactId?: string | null
+  source?: string
 }): Promise<SmartSendResult> {
   // WA Web — no templates, no 24h window restriction
   const db = supabaseAdmin()
-  const { userId, instanceId, to, text, contactId } = params
+  const { userId, instanceId, to, text, contactId, source = 'api' } = params
   const cleanPhone = to.replace(/[^0-9]/g, '')
 
   console.log(`[smart-send] START instance_id=${instanceId} instance_type=wa_web provider=WA_WEB phone=${cleanPhone} method=text`)
@@ -309,6 +310,7 @@ export async function smartSendWAWeb(params: {
           type: 'text',
           content: text,
           status: 'sent',
+          meta: { method: 'text', source },
         })
       }
     }

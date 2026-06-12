@@ -153,10 +153,10 @@ export async function processAIReply(params: {
 
   // 7. Save message
   const msgType = 'ai_reply'
-  const { error: insErr } = await db.from('messages').insert({ id: uuidv4(), user_id: userId, instance_id: instanceId, contact_id: contactId || null, wa_message_id: waMessageId, direction: 'outbound', type: msgType, content: aiReply, status: 'sent' })
+  const { error: insErr } = await db.from('messages').insert({ id: uuidv4(), user_id: userId, instance_id: instanceId, contact_id: contactId || null, wa_message_id: waMessageId, direction: 'outbound', type: msgType, content: aiReply, status: 'sent', meta: { method: 'text', source: 'ai_assistant' } })
   if (insErr) {
     console.error(`[AI] message insert err: ${insErr.message} — trying text type`)
-    const { error: fallbackErr } = await db.from('messages').insert({ id: uuidv4(), user_id: userId, instance_id: instanceId, contact_id: contactId || null, wa_message_id: waMessageId, direction: 'outbound', type: 'text', content: `🤖 ${aiReply}`, status: 'sent' })
+    const { error: fallbackErr } = await db.from('messages').insert({ id: uuidv4(), user_id: userId, instance_id: instanceId, contact_id: contactId || null, wa_message_id: waMessageId, direction: 'outbound', type: 'text', content: `🤖 ${aiReply}`, status: 'sent', meta: { method: 'text', source: 'ai_assistant' } })
     if (fallbackErr) console.error(`[AI] fallback insert err: ${fallbackErr.message}`)
   }
 

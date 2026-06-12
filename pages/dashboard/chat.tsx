@@ -69,7 +69,12 @@ function MessageBubble({ msg, showAvatar }) {
           )}
           <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
           <div className={clsx('flex items-center gap-1 mt-1', isOut ? 'justify-end' : 'justify-start')}>
-            {msg.type === 'ai_reply' && <span className="text-[9px] text-purple-400 bg-purple-900/30 px-1.5 py-0.5 rounded-full">🧠 AI</span>}
+            {(msg.type === 'ai_reply' || msg.meta?.source === 'ai_assistant') && (
+              <span className="text-[9px] text-purple-400 bg-purple-900/30 px-1.5 py-0.5 rounded-full">🧠 AI</span>
+            )}
+            {msg.meta?.source === 'chatbot' && (
+              <span className="text-[9px] text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded-full">🤖 Bot</span>
+            )}
             <span className="text-[10px] opacity-60">{formatTime(msg.created_at)}</span>
             {isOut && <span className="opacity-70">{msg._windowWarning ? statusIcon.window : (statusIcon[msg.status] || statusIcon.sent)}</span>}
           </div>

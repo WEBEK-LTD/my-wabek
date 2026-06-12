@@ -401,21 +401,27 @@ async function sendMsg(node: ChatbotNode, session: Session, instance: Record<str
     if (instType === 'wa_web' || instType === 'baileys') {
       const r = await sendWAWebMessage({ instanceId: instance.id as string, to: session.contact_phone, text })
       waMessageId = r?.messageId || ''
+
+      // smartSend (cloud_api path below) already inserts a `messages` row
+      // with meta.source — for wa_web we insert it ourselves here.
+      await db.from('messages').insert({
+        id: uuidv4(),
+        user_id: session.user_id,
+        instance_id: instance.id,
+        direction: 'outbound',
+        type: 'text',
+        content: text,
+        wa_message_id: waMessageId,
+        status: 'sent',
+        meta: { method: 'text', source: 'chatbot' },
+      })
     } else {
       const r: SmartSendResult = await smartSend({ userId: (instance as any)?.user_id || (instance as any)?.userId || '', instanceId: (instance as any)?.id || '', phoneNumberId: instance.phone_number_id as string, accessToken: instance.access_token as string, to: session.contact_phone, text: text, source: 'chatbot' as any })
       waMessageId = r.messageId || ''
+      // NOTE: smartSend already inserts the outbound `messages` row
+      // (with wa_message_id dedup + meta.source='chatbot') — do not
+      // insert again here, that previously caused duplicate rows.
     }
-
-    await db.from('messages').insert({
-      id: uuidv4(),
-      user_id: session.user_id,
-      instance_id: instance.id,
-      direction: 'outbound',
-      type: 'text',
-      content: text,
-      wa_message_id: waMessageId,
-      status: 'sent',
-    })
 
     return true
   } catch (err) {
