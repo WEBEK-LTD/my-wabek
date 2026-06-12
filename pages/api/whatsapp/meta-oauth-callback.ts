@@ -133,6 +133,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     console.log(`[META] final: wabaId=${wabaId} phoneNumberId=${phoneNumberId} phoneNumber=${phoneNumber}`)
 
+    // 5b. Subscribe our App to this WABA's webhooks. Without this, Meta will
+    // NOT send inbound message/status webhooks for this account at all —
+    // the webhook URL/verify-token config in the App Dashboard is separate
+    // from this per-WABA subscription, and Embedded Signup does not do it
+    // automatically.
+    if (wabaId) {
+      try {
+        const subRes  = await fetch(`https://graph.facebook.com/v19.0/${wabaId}/subscribed_apps`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${finalToken}` },
+        })
+        const subData = await subRes.json()
+        console.log(`[META] subscribed_apps:`, JSON.stringify(subData).slice(0, 200))
+      } catch (e: any) {
+        console.error(`[META] subscribed_apps FAILED:`, e?.message)
+      }
+    }
+
     // 6. Save instance
     console.log(`[META] step 6: saving instance userId=${userId}`)
     const { error: dbErr } = await db.from('whatsapp_instances').insert({

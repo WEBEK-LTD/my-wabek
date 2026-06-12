@@ -219,6 +219,14 @@ export default function InstancesPage() {
 
   const copyWebhook = (url) => { navigator.clipboard.writeText(url); toast.success('Copied!') }
 
+  const subscribeWebhookMut = useMutation(
+    (instanceId: string) => axios.post('/api/whatsapp/subscribe-webhook', { instance_id: instanceId }),
+    {
+      onSuccess: (res) => toast.success(res.data?.message || 'Webhook subscription fixed'),
+      onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to fix webhook subscription'),
+    }
+  )
+
   const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://your-site.netlify.app'
 
   return (
@@ -334,6 +342,16 @@ export default function InstancesPage() {
                       </button>
                     </div>
                   </div>
+                  <button
+                    onClick={() => subscribeWebhookMut.mutate(inst.id)}
+                    disabled={subscribeWebhookMut.isLoading}
+                    className="btn-secondary text-xs w-full justify-center mt-3"
+                  >
+                    {subscribeWebhookMut.isLoading ? 'Subscribing…' : '🔄 Fix Webhook Subscription'}
+                  </button>
+                  <p className="text-xs text-slate-400 mt-1 text-center">
+                    Not receiving incoming messages? Click this to (re)subscribe your app to this account's webhooks.
+                  </p>
                 </div>
               ))}
             </div>
