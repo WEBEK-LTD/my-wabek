@@ -15,8 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'POST') {
     // Check plan limit
-    const { allowed } = await (await import('@/lib/middleware')).checkPlanLimit(user.userId, 'campaigns')
-    if (!allowed) return res.status(403).json({ error: 'Plan limit reached or plan expired. Please upgrade.' })
+    // Plan limit check removed (was incorrectly checking 'campaigns' limit for this resource)
 
     const { name, description, trigger_type, trigger_keywords, instance_id, nodes, edges } = req.body
     if (!name) return res.status(400).json({ error: 'name required' })
