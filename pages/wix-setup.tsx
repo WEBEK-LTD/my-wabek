@@ -153,65 +153,65 @@ export default function WixSetupPage() {
   // ── CSS ───────────────────────────────────────────────────────────────────
   const css = `
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f1117;color:#f1f5f9;min-height:100vh}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F8FAFC;color:#0f172a;min-height:100vh}
     .page{max-width:560px;margin:0 auto;padding:20px}
-    .header{display:flex;align-items:center;gap:10px;padding:14px 0 18px;border-bottom:1px solid #1e2433;margin-bottom:18px}
+    .header{display:flex;align-items:center;gap:10px;padding:14px 0 18px;border-bottom:1px solid #e2e8f0;margin-bottom:18px}
     .logo{width:34px;height:34px;background:#25D366;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
     .logo svg{width:20px;height:20px;fill:#fff}
-    .logo-tx{font-size:16px;font-weight:700}
+    .logo-tx{font-size:16px;font-weight:700;color:#0f172a}
     .dot{width:8px;height:8px;border-radius:50%;margin-left:auto}
     .dot.g{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.2)}
-    .dot.r{background:#374151}
-    .tabs{display:flex;gap:1px;background:#1a1f2e;border-radius:9px;padding:3px;margin-bottom:18px}
+    .dot.r{background:#cbd5e1}
+    .tabs{display:flex;gap:1px;background:#e2e8f0;border-radius:9px;padding:3px;margin-bottom:18px}
     .tab{flex:1;padding:7px;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;background:transparent;color:#64748b;transition:all .15s}
-    .tab.on{background:#1e2433;color:#f1f5f9}
-    .card{background:#141824;border:1px solid #1e2433;border-radius:11px;padding:18px;margin-bottom:14px}
-    .card h3{font-size:14px;font-weight:700;color:#f1f5f9;margin-bottom:3px}
+    .tab.on{background:#fff;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:11px;padding:18px;margin-bottom:14px}
+    .card h3{font-size:14px;font-weight:700;color:#0f172a;margin-bottom:3px}
     .sub{font-size:12px;color:#64748b;line-height:1.5;margin-bottom:14px}
     .btn{display:flex;align-items:center;justify-content:center;gap:6px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;padding:11px 18px;transition:all .15s;width:100%}
     .btn-g{background:#25D366;color:#fff}
     .btn-g:hover{background:#1da851}
     .btn-g:disabled{opacity:.5;cursor:not-allowed}
-    .btn-o{background:#1a1f2e;color:#cbd5e1;border:1.5px solid #2d3748}
-    .btn-o:hover{border-color:#4b5563}
-    .conn{display:flex;align-items:center;gap:10px;background:rgba(37,211,102,.07);border:1px solid rgba(37,211,102,.18);border-radius:9px;padding:12px 14px;margin-bottom:14px}
-    .conn-name{font-size:14px;font-weight:700;color:#4ade80}
-    .conn-sub{font-size:11px;color:#475569;margin-top:1px}
-    .notconn{background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.18);border-radius:9px;padding:12px 14px;margin-bottom:14px}
-    .notconn p{font-size:13px;color:#fca5a5}
-    .notif-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #1a1f2e}
+    .btn-o{background:#F8FAFC;color:#334155;border:1.5px solid #cbd5e1}
+    .btn-o:hover{border-color:#94a3b8}
+    .conn{display:flex;align-items:center;gap:10px;background:rgba(37,211,102,.07);border:1px solid rgba(37,211,102,.25);border-radius:9px;padding:12px 14px;margin-bottom:14px}
+    .conn-name{font-size:14px;font-weight:700;color:#16a34a}
+    .conn-sub{font-size:11px;color:#64748b;margin-top:1px}
+    .notconn{background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:9px;padding:12px 14px;margin-bottom:14px}
+    .notconn p{font-size:13px;color:#dc2626}
+    .notif-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #e2e8f0}
     .notif-row:last-child{border:none}
-    .notif-row span{font-size:12px;color:#cbd5e1}
+    .notif-row span{font-size:12px;color:#334155}
     .badge{font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px}
-    .badge.ok{background:rgba(37,211,102,.12);color:#4ade80}
-    .badge.no{background:#1a1f2e;color:#475569}
-    .plan-box{background:rgba(37,211,102,.07);border:1px solid rgba(37,211,102,.18);border-radius:9px;padding:12px 14px;margin-bottom:16px}
-    .plan-name{font-size:20px;font-weight:800;color:#4ade80}
-    .plan-sub{font-size:11px;color:#475569;margin-top:3px}
-    .plan-card{border:1px solid #1e2433;border-radius:9px;padding:12px 14px;margin-bottom:8px;cursor:default}
-    .plan-card.curr{border-color:rgba(37,211,102,.4);background:rgba(37,211,102,.04)}
+    .badge.ok{background:rgba(37,211,102,.12);color:#16a34a}
+    .badge.no{background:#e2e8f0;color:#64748b}
+    .plan-box{background:rgba(37,211,102,.07);border:1px solid rgba(37,211,102,.25);border-radius:9px;padding:12px 14px;margin-bottom:16px}
+    .plan-name{font-size:20px;font-weight:800;color:#16a34a}
+    .plan-sub{font-size:11px;color:#64748b;margin-top:3px}
+    .plan-card{border:1px solid #e2e8f0;border-radius:9px;padding:12px 14px;margin-bottom:8px;cursor:default;background:#fff}
+    .plan-card.curr{border-color:rgba(37,211,102,.5);background:rgba(37,211,102,.05)}
     .plan-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
-    .plan-title{font-size:14px;font-weight:700;color:#f1f5f9}
-    .plan-price{font-size:16px;font-weight:700;color:#f1f5f9}
-    .plan-mo{font-size:11px;color:#475569}
+    .plan-title{font-size:14px;font-weight:700;color:#0f172a}
+    .plan-price{font-size:16px;font-weight:700;color:#0f172a}
+    .plan-mo{font-size:11px;color:#64748b}
     .plan-feat{font-size:11px;color:#64748b}
-    .curr-badge{font-size:10px;background:rgba(37,211,102,.2);color:#4ade80;padding:2px 8px;border-radius:20px;font-weight:600;margin-left:6px}
-    label{display:block;font-size:11px;font-weight:600;color:#64748b;margin-bottom:4px}
-    textarea{width:100%;padding:9px 11px;border:1.5px solid #2d3748;border-radius:7px;font-size:12px;outline:none;background:#0f172a;color:#f8fafc;font-family:monospace;resize:vertical;transition:border .15s;line-height:1.7}
+    .curr-badge{font-size:10px;background:rgba(37,211,102,.18);color:#16a34a;padding:2px 8px;border-radius:20px;font-weight:600;margin-left:6px}
+    label{display:block;font-size:11px;font-weight:600;color:#475569;margin-bottom:4px}
+    textarea{width:100%;padding:9px 11px;border:1.5px solid #cbd5e1;border-radius:7px;font-size:12px;outline:none;background:#fff;color:#0f172a;font-family:monospace;resize:vertical;transition:border .15s;line-height:1.7}
     textarea:focus{border-color:#25D366}
-    .ev-label{font-size:12px;font-weight:700;color:#e2e8f0;margin:14px 0 5px}
-    .vars{font-size:10px;color:#374151;margin-top:3px}
-    code{background:#1e2433;color:#7dd3fc;padding:1px 5px;border-radius:3px;font-size:10px}
-    .divider{border:none;border-top:1px solid #1e2433;margin:14px 0}
-    .info{background:rgba(14,165,233,.07);border:1px solid rgba(14,165,233,.18);border-radius:8px;padding:10px 13px;margin-bottom:12px}
-    .info p{font-size:12px;color:#7dd3fc;line-height:1.7;margin:0}
+    .ev-label{font-size:12px;font-weight:700;color:#334155;margin:14px 0 5px}
+    .vars{font-size:10px;color:#94a3b8;margin-top:3px}
+    code{background:#F1F5F9;color:#0369a1;padding:1px 5px;border-radius:3px;font-size:10px}
+    .divider{border:none;border-top:1px solid #e2e8f0;margin:14px 0}
+    .info{background:rgba(14,165,233,.06);border:1px solid rgba(14,165,233,.2);border-radius:8px;padding:10px 13px;margin-bottom:12px}
+    .info p{font-size:12px;color:#0369a1;line-height:1.7;margin:0}
     .loading{text-align:center;padding:40px 20px;color:#64748b;font-size:13px}
-    .spinner{width:32px;height:32px;border:3px solid #1e2433;border-top-color:#25D366;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px}
+    .spinner{width:32px;height:32px;border:3px solid #e2e8f0;border-top-color:#25D366;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px}
     @keyframes spin{to{transform:rotate(360deg)}}
-    .err-page{background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.18);border-radius:11px;padding:20px;text-align:center;color:#fca5a5;font-size:13px}
+    .err-page{background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:11px;padding:20px;text-align:center;color:#dc2626;font-size:13px}
     .features-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
-    .feature-item{background:#1a1f2e;border-radius:8px;padding:10px;text-align:center;font-size:11px;color:#94a3b8}
-    .feature-item strong{display:block;color:#f1f5f9;font-size:13px;margin-bottom:2px}
+    .feature-item{background:#F8FAFC;border:1px solid #e2e8f0;border-radius:8px;padding:10px;text-align:center;font-size:11px;color:#64748b}
+    .feature-item strong{display:block;color:#0f172a;font-size:13px;margin-bottom:2px}
   `
 
   const WaIcon = () => <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.125.554 4.122 1.524 5.855L.057 23.213a.75.75 0 00.921.902l5.455-1.43A11.943 11.943 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.907 0-3.695-.498-5.246-1.369l-.376-.219-3.889 1.02 1.041-3.796-.237-.389A9.955 9.955 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
@@ -308,11 +308,11 @@ export default function WixSetupPage() {
               {diagResult && (
                 <div style={{marginTop:4}}>
                   {diagResult.map((check: any, i: number) => (
-                    <div key={i} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'8px 0',borderBottom:'1px solid #1a1f2e'}}>
+                    <div key={i} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'8px 0',borderBottom:'1px solid #e2e8f0'}}>
                       <span style={{fontSize:16,flexShrink:0}}>{check.ok ? '✅' : '❌'}</span>
                       <div style={{flex:1}}>
-                        <p style={{fontSize:12,fontWeight:600,color: check.ok ? '#4ade80' : '#fca5a5'}}>{check.label}</p>
-                        <p style={{fontSize:11,color:'#475569',marginTop:1}}>{check.detail}</p>
+                        <p style={{fontSize:12,fontWeight:600,color: check.ok ? '#16a34a' : '#dc2626'}}>{check.label}</p>
+                        <p style={{fontSize:11,color:'#64748b',marginTop:1}}>{check.detail}</p>
                       </div>
                     </div>
                   ))}
@@ -349,7 +349,7 @@ export default function WixSetupPage() {
               <button className="btn btn-g" onClick={() => openDashboard('/dashboard')} disabled={openingDash}>
                 {openingDash ? '⏳ Opening...' : '🚀 Open Full Dashboard →'}
               </button>
-              <p style={{fontSize:11,color:'#374151',textAlign:'center',marginTop:6}}>
+              <p style={{fontSize:11,color:'#64748b',textAlign:'center',marginTop:6}}>
                 Opens in a new tab • Auto sign-in included
               </p>
             </div>
@@ -388,7 +388,7 @@ export default function WixSetupPage() {
               <button className="btn btn-g" onClick={saveTemplates} disabled={tplSaving}>
                 {tplSaving ? 'Saving...' : '💾 Save Templates'}
               </button>
-              {tplSaved && <p style={{ fontSize: 12, color: '#4ade80', textAlign: 'center', marginTop: 6 }}>✅ Saved!</p>}
+              {tplSaved && <p style={{ fontSize: 12, color: '#16a34a', textAlign: 'center', marginTop: 6 }}>✅ Saved!</p>}
             </div>
           </div>
         )}
@@ -398,7 +398,7 @@ export default function WixSetupPage() {
           <>
             {/* Current plan — from Wix */}
             <div className="plan-box">
-              <p style={{ fontSize: 11, color: '#475569', marginBottom: 3 }}>YOUR PLAN (via Wix)</p>
+              <p style={{ fontSize: 11, color: '#64748b', marginBottom: 3 }}>YOUR PLAN (via Wix)</p>
               <div className="plan-name" style={{textTransform:'capitalize'}}>
                 {wixPlanId || 'Free'}
               </div>
@@ -406,7 +406,7 @@ export default function WixSetupPage() {
             </div>
 
             {/* Plans */}
-            <p style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', marginBottom: 10 }}>Available Plans</p>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 10 }}>Available Plans</p>
             {[
               { id: 'free',     name: 'Free',     price: 'Free',  mo: '',        msgs: '500 messages/mo',      feat: '1 instance · Basic features' },
               { id: 'starter',  name: 'Starter',  price: '$29',   mo: '/mo',     msgs: '50,000 messages/mo',   feat: '5 instances · Campaigns · Analytics' },
@@ -426,7 +426,7 @@ export default function WixSetupPage() {
                       <span className="plan-mo">{plan.mo}</span>
                     </div>
                   </div>
-                  <p style={{ fontSize: 11, color: '#4ade80', marginBottom: 2 }}>{plan.msgs}</p>
+                  <p style={{ fontSize: 11, color: '#16a34a', marginBottom: 2 }}>{plan.msgs}</p>
                   <p className="plan-feat">{plan.feat}</p>
                 </div>
               )
@@ -439,7 +439,7 @@ export default function WixSetupPage() {
               >
                 💳 Upgrade Plan on Wix →
               </button>
-              <p style={{ fontSize: 11, color: '#E2E8F0', textAlign: 'center', marginTop: 6 }}>
+              <p style={{ fontSize: 11, color: '#64748b', textAlign: 'center', marginTop: 6 }}>
                 Payments are processed securely by Wix
               </p>
             </div>

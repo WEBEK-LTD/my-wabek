@@ -245,24 +245,24 @@ export default function WixPage() {
 
             {/* Info bar */}
             <div style={{background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:10,padding:'12px 16px'}}>
-              <p style={{color:'#a5b4fc',fontSize:13,margin:0}}>
+              <p style={{color:'#4338ca',fontSize:13,margin:0}}>
                 Toggle each notification on/off. When enabled, customize the message text using variables like{' '}
-                <code style={{background:'rgba(99,102,241,0.15)',color:'#818cf8',padding:'1px 6px',borderRadius:4,fontSize:12}}>{'{{customer_name}}'}</code>
+                <code style={{background:'rgba(99,102,241,0.12)',color:'#4338ca',padding:'1px 6px',borderRadius:4,fontSize:12}}>{'{{customer_name}}'}</code>
               </p>
             </div>
 
             {EVENTS.map(ev => {
               const isOn = enabled[ev.key] !== false
               return (
-                <div key={ev.key} style={{background:'#141824',border:`1px solid ${isOn ? 'rgba(34,197,94,0.2)' : '#1e2433'}`,borderRadius:12,padding:16,transition:'border-color 0.2s'}}>
+                <div key={ev.key} style={{background:'#fff',border:`1px solid ${isOn ? 'rgba(34,197,94,0.2)' : '#e2e8f0'}`,borderRadius:12,padding:16,transition:'border-color 0.2s'}}>
 
                   {/* Header row */}
                   <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12,marginBottom: isOn ? 12 : 0}}>
                     <div style={{flex:1}}>
                       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
-                        <span style={{color:'#f1f5f9',fontWeight:600,fontSize:14}}>{ev.label}</span>
+                        <span style={{color:'#0f172a',fontWeight:600,fontSize:14}}>{ev.label}</span>
                         {isOn && <span style={{fontSize:10,background:'rgba(34,197,94,0.15)',color:'#4ade80',padding:'2px 8px',borderRadius:20,fontWeight:600}}>ON</span>}
-                        {!isOn && <span style={{fontSize:10,background:'#1e2433',color:'#475569',padding:'2px 8px',borderRadius:20,fontWeight:600}}>OFF</span>}
+                        {!isOn && <span style={{fontSize:10,background:'#F1F5F9',color:'#64748b',padding:'2px 8px',borderRadius:20,fontWeight:600}}>OFF</span>}
                       </div>
                       <p style={{color:'#64748b',fontSize:12,margin:0}}>{ev.desc}</p>
                     </div>
@@ -271,7 +271,7 @@ export default function WixPage() {
                       onClick={() => setEnabled(e => ({ ...e, [ev.key]: !isOn }))}
                       style={{
                         position:'relative',width:44,height:24,borderRadius:12,border:'none',cursor:'pointer',
-                        background: isOn ? '#22c55e' : '#374151',
+                        background: isOn ? '#22c55e' : '#cbd5e1',
                         transition:'background 0.2s',flexShrink:0,
                       }}
                     >
@@ -292,12 +292,12 @@ export default function WixPage() {
                         onChange={e => setTemplates((t:any) => ({ ...t, [ev.key]: e.target.value }))}
                         style={{
                           width:'100%',
-                          background:'#0f172a',
-                          border:'1.5px solid #334155',
+                          background:'#fff',
+                          border:'1.5px solid #cbd5e1',
                           borderRadius:8,
                           padding:'10px 12px',
                           fontSize:13,
-                          color:'#f8fafc',
+                          color:'#0f172a',
                           fontFamily:'monospace',
                           resize:'vertical',
                           outline:'none',
@@ -306,7 +306,7 @@ export default function WixPage() {
                           display:'block',
                         }}
                         onFocus={e => { e.target.style.borderColor = '#6366f1' }}
-                        onBlur={e => { e.target.style.borderColor = '#334155' }}
+                        onBlur={e => { e.target.style.borderColor = '#cbd5e1' }}
                       />
                       {/* Variables */}
                       <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
@@ -318,7 +318,7 @@ export default function WixPage() {
                               setTemplates((t:any) => ({ ...t, [ev.key]: cur + `{{${v}}}` }))
                             }}
                             style={{
-                              fontSize:11,background:'rgba(99,102,241,0.12)',color:'#818cf8',
+                              fontSize:11,background:'rgba(99,102,241,0.1)',color:'#4338ca',
                               border:'1px solid rgba(99,102,241,0.25)',padding:'2px 8px',
                               borderRadius:4,fontFamily:'monospace',cursor:'pointer',
                             }}
