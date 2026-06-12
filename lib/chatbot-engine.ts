@@ -258,6 +258,20 @@ async function executeNode(
 
   switch (node.type) {
     case 'start': {
+      const startEdge = edges.find(e => e.source === node.id)
+      if (!startEdge) {
+        // No connection drawn from Start. If there's exactly one other node,
+        // assume it's meant to follow Start directly (common case: user adds
+        // a single "message" node but never draws the connecting line).
+        const others = nodes.filter(n => n.id !== node.id)
+        if (others.length === 1) {
+          console.log(`[CHATBOT] start node has no edge — auto-running single node "${others[0].id}" (${others[0].type})`)
+          await db.from('chatbot_sessions').update({ current_node_id: others[0].id }).eq('id', session.id)
+          return await executeNode(others[0], session, flow, instance)
+        }
+        console.log(`[CHATBOT] start node has no outgoing edge and ${others.length} other nodes — nothing to execute`)
+        return false
+      }
       return await next()
     }
 
