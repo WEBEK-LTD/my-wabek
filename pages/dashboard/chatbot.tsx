@@ -185,12 +185,13 @@ export default function ChatbotPage() {
     setTestMessages(m => [...m, { role: 'user', text: userMsg }])
     setTestLoading(true)
     try {
+      const useLive = editingFlow?.id === testFlow.id
       const { data } = await axios.post('/api/chatbot/test', {
         flow_id: testFlow.id,
         message: userMsg,
-        nodes: testFlow.nodes,
-        edges: testFlow.edges,
-        trigger_keywords: testFlow.trigger_keywords,
+        nodes: useLive ? nodes : testFlow.nodes,
+        edges: useLive ? edges : testFlow.edges,
+        trigger_keywords: useLive ? (testFlow.trigger_keywords) : testFlow.trigger_keywords,
       })
       setTestMessages(m => [...m, { role: 'bot', text: data.response || '(no response)', nodes: data.triggered_nodes }])
     } catch {
