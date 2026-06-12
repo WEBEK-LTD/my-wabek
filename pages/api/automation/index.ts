@@ -14,9 +14,9 @@ const nodeSchema = z.object({
 
 const createSchema = z.object({
   name: z.string().min(1).max(200),
-  instance_id: z.string().uuid().optional(),
+  instance_id: z.string().uuid().nullable().optional(),
   trigger_type: z.enum(['keyword', 'message_received', 'opt_in', 'scheduled']),
-  trigger_value: z.string().optional(),
+  trigger_value: z.string().nullable().optional(),
   nodes: z.array(nodeSchema).default([]),
   is_active: z.boolean().default(false),
 })
