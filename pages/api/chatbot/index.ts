@@ -29,7 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       instance_id: instance_id || null,
       nodes: nodes || [],
       edges: edges || [],
-      is_active: false,
+      is_active: true,
     }).select().single()
 
     if (error) return res.status(500).json({ error: error.message })
