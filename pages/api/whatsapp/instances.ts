@@ -58,9 +58,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (error) return res.status(500).json({ error: error.message })
 
+      // Subscribe our App to this WABA's webhooks — required for Meta to
+      // send inbound message/status webhooks. Non-fatal: the token may lack
+      // `whatsapp_business_management` permission (#200), in which case we
+      // surface a warning so the user can fix it via the
+      // "Fix Webhook Subscription" button or Graph API Explorer.
+      let webhookWarning: string | undefined
+      if (body.waba_id) {
+        try {
+          const subRes  = await fetch(`https://graph.facebook.com/v19.0/${body.waba_id}/subscribed_apps`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${body.access_token}` },
+          })
+          const subData = await subRes.json()
+          if (!subData?.success) {
+            webhookWarning = subData?.error?.message
+              ? `Webhook subscription failed: ${subData.error.message}. Incoming messages won't arrive until this is fixed (use the "Fix Webhook Subscription" button).`
+              : 'Webhook subscription did not return success. Incoming messages may not arrive.'
+          }
+        } catch (e: any) {
+          webhookWarning = `Could not subscribe to webhooks: ${e?.message}. Incoming messages won't arrive until this is fixed.`
+        }
+      } else {
+        webhookWarning = 'No WABA ID provided — incoming messages will NOT arrive. Add the WhatsApp Business Account ID and use "Fix Webhook Subscription".'
+      }
+
       await logAction({ userId: user.userId, action: 'create_instance', resource: 'whatsapp_instance', resourceId: data.id, ipAddress: getClientIp(req) })
 
-      return res.status(201).json({ instance: data })
+      return res.status(201).json({ instance: data, webhook_warning: webhookWarning })
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ error: 'Invalid data', details: err.errors })
       return res.status(500).json({ error: 'Failed to create instance' })

@@ -176,7 +176,14 @@ export default function InstancesPage() {
 
   const createCloudMut = useMutation(
     (body) => axios.post('/api/whatsapp/instances', body),
-    { onSuccess: () => { qc.invalidateQueries('instances'); reset(); setShowCloudForm(false); toast.success('Cloud API instance connected!') }, onError: (e) => toast.error(e?.response?.data?.error || 'Failed') }
+    { onSuccess: (res) => {
+        qc.invalidateQueries('instances'); reset(); setShowCloudForm(false)
+        if (res.data?.webhook_warning) {
+          toast.error(res.data.webhook_warning, { duration: 8000 })
+        } else {
+          toast.success('Cloud API instance connected! Webhook subscription active.')
+        }
+      }, onError: (e) => toast.error(e?.response?.data?.error || 'Failed') }
   )
 
   const createWebMut = useMutation(
