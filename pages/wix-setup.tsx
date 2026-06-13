@@ -9,7 +9,13 @@ export default function WixSetupPage() {
   const [instanceId, setInstanceId]   = useState('')
   const [instances, setInstances]     = useState<any[]>([])
   const [userPlan, setUserPlan]       = useState<any>(null)
-  const [tab, setTab]                 = useState<'status'|'messages'|'billing'>('status')
+  const [tab, setTab]                 = useState<'status'|'messages'|'billing'>(() => {
+    if (typeof window !== 'undefined') {
+      const t = new URLSearchParams(window.location.search).get('tab')
+      if (t === 'messages' || t === 'billing') return t
+    }
+    return 'status'
+  })
   const [templates, setTemplates]     = useState<any>({})
   const [tplSaving, setTplSaving]     = useState(false)
   const [tplSaved, setTplSaved]       = useState(false)

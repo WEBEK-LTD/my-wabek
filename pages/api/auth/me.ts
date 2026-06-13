@@ -10,7 +10,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const db = supabaseAdmin()
     const { data } = await db
       .from('users')
-      .select('id, email, name, role, plan_id, trial_ends_at, plan_expires_at, api_key, created_at, phone, otp_mode, is_verified, last_login_at, last_login_ip, last_login_device')
+      .select('id, email, name, role, plan_id, trial_ends_at, plan_expires_at, api_key, created_at, phone, otp_mode, is_verified, last_login_at, last_login_ip, last_login_device, wix_instance_id')
       .eq('id', user.userId)
       .single()
 

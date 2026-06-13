@@ -16,8 +16,19 @@ export default function BillingPage() {
   const [showGift, setShowGift] = useState(false)
   const [giftCode, setGiftCode] = useState('')
 
+  // Wix-origin accounts must manage billing/upgrades inside Wix only
+  // (Wix Internal Pricing requirement) — redirect away from this page.
+  const { data: me, isLoading: meLoading } = useQuery('me', () => axios.get('/api/auth/me').then(r => r.data.user))
+
+  useEffect(() => {
+    if (me?.wix_instance_id) {
+      router.replace('/wix-setup?tab=billing')
+    }
+  }, [me, router])
+
   const { data, isLoading } = useQuery('billing', () => axios.get('/api/billing').then(r => r.data), {
     refetchOnWindowFocus: true, staleTime: 0,
+    enabled: !meLoading && !me?.wix_instance_id,
   })
 
   const plans = data?.plans || []
@@ -55,7 +66,15 @@ export default function BillingPage() {
     }
   )
 
-  const planColors = ['#3B82F6', '#00D46A', '#A855F7', '#F59E0B']
+  if (meLoading || me?.wix_instance_id) {
+    return (
+      <DashboardLayout title="Billing">
+        <div className="flex items-center justify-center py-20 text-slate-400 text-sm">
+          {me?.wix_instance_id ? 'Redirecting to Wix billing…' : 'Loading…'}
+        </div>
+      </DashboardLayout>
+    )
+  }
 
   return (
     <DashboardLayout title="Billing & Plans">

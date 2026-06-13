@@ -107,7 +107,7 @@ const notifIcons = {
 
 
 // ── Collapsible Nav Groups ────────────────────────────────
-function NavGroups({ groups, features, isActive, unreadCount, pathname }: {
+function NavGroups({ groups, features, isActive, unreadCount, pathname, isWix }: {
   groups: typeof NAV_GROUPS
   features: Record<string, boolean>
   isActive: (href: string) => boolean
@@ -127,7 +127,7 @@ function NavGroups({ groups, features, isActive, unreadCount, pathname }: {
   return (
     <>
       {groups.map(group => {
-        const visibleItems = group.items.filter(item => !item.feature || features[item.feature as string])
+        const visibleItems = group.items.filter(item => (!item.feature || features[item.feature as string]) && (item.href !== '/dashboard/billing' || !isWix))
         if (!visibleItems.length) return null
 
         // Groups without label render flat
@@ -209,7 +209,7 @@ function NavItem({ item, isActive, unreadCount }: {
 
 
 // ── Collapsible Sidebar Nav ───────────────────────────────
-function CollapsibleNav({ groups, features, isActive, setSidebarOpen, brandColor, unreadCount, pathname }: any) {
+function CollapsibleNav({ groups, features, isActive, setSidebarOpen, brandColor, unreadCount, pathname, isWix }: any) {
   const getDefaultOpen = () => {
     const open: Record<string, boolean> = {}
     groups.forEach((g: any) => {
@@ -243,7 +243,7 @@ function CollapsibleNav({ groups, features, isActive, setSidebarOpen, brandColor
   return (
     <>
       {groups.map((group: any) => {
-        const visibleItems = group.items.filter((item: any) => !item.feature || features[item.feature] !== false)
+        const visibleItems = group.items.filter((item: any) => (!item.feature || features[item.feature] !== false) && (item.href !== '/dashboard/billing' || !isWix))
         if (!visibleItems.length) return null
 
         if (!group.label) {
@@ -419,6 +419,7 @@ export default function DashboardLayout({ children, title = 'Dashboard' }) {
               brandColor={brandColor}
               unreadCount={unreadCount}
               pathname={router.pathname}
+              isWix={!!meData?.user?.wix_instance_id}
             />
           </nav>
 
@@ -532,10 +533,12 @@ export default function DashboardLayout({ children, title = 'Dashboard' }) {
                       className="flex items-center gap-2 px-4 py-2.5 text-sm text-[#475569] hover:text-[#0F172A] hover:bg-[#F8FAFC]">
                       <Cog6ToothIcon className="w-4 h-4" /> Settings
                     </Link>
-                    <Link href="/dashboard/billing" onClick={() => setProfileOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2.5 text-sm text-[#475569] hover:text-[#0F172A] hover:bg-[#F8FAFC]">
-                      <CreditCardIcon className="w-4 h-4" /> Billing
-                    </Link>
+                    {!meData?.user?.wix_instance_id && (
+                      <Link href="/dashboard/billing" onClick={() => setProfileOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-[#475569] hover:text-[#0F172A] hover:bg-[#F8FAFC]">
+                        <CreditCardIcon className="w-4 h-4" /> Billing
+                      </Link>
+                    )}
                     <div className="border-t border-wabek-border">
                       <button onClick={logout}
                         className="flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-900/10 w-full">
