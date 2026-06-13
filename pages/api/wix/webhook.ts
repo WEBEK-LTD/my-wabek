@@ -83,16 +83,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const db = supabaseAdmin()
 
-    // Deduplication — use raw event key
-    if (orderId) {
-      const dedupeKey = `wix_sent_${orderId}_${event}`
-      const { data: already } = await db.from('system_settings').select('key').eq('key', dedupeKey).maybeSingle()
-      if (already) { console.log('[wix webhook] duplicate — skip'); return }
-      await db.from('system_settings').upsert({
-        key: dedupeKey, value: { ts: new Date().toISOString() }, updated_at: new Date().toISOString(),
-      }, { onConflict: 'key' })
-    }
-
     // Find user
     const { data: link } = await db.from('wix_user_links').select('user_id').eq('wix_instance_id', instanceId).maybeSingle()
     if (!link?.user_id) { console.log('[wix webhook] no user for instance:', instanceId); return }
@@ -156,14 +146,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // For order_updated — map to correct event based on status
     if (event === 'order_updated') {
-      const status        = String((orderData as any)?.status || '').toUpperCase()
-      const paymentStatus = String((orderData as any)?.paymentStatus || '').toUpperCase()
+      const status            = String((orderData as any)?.status || '').toUpperCase()
+      const fulfillmentStatus = String((orderData as any)?.fulfillmentStatus || '').toUpperCase()
+      const paymentStatus     = String((orderData as any)?.paymentStatus || '').toUpperCase()
       const isRefunded    = ['REFUNDED', 'PARTIALLY_REFUNDED'].includes(paymentStatus)
       const isCancelled   = ['CANCELED', 'CANCELLED'].includes(status)
       const isNew         = ['INITIALIZED', 'APPROVED', 'NEW'].includes(status)
+      const isShipped     = ['FULFILLED', 'PARTIALLY_FULFILLED'].includes(fulfillmentStatus)
 
       if (isCancelled || isRefunded) {
         // Will be handled as order_cancelled below
+      } else if (isShipped) {
+        // Order marked as fulfilled/shipped — Wix sends this as
+        // order_updated with fulfillmentStatus changed, NOT order.status.
+        // Previously this fell into the "else" branch below and was
+        // silently skipped — no shipping notification was ever sent.
+        console.log('[wix webhook] order_updated with fulfillmentStatus:', fulfillmentStatus, '— treating as order_shipped')
+        ;(req.query as any).event = 'order_shipped'
       } else if (isNew) {
         // New order — treat as order_placed
         console.log('[wix webhook] order_updated with new status:', status, '— treating as order_placed')
@@ -237,6 +236,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Use the potentially updated event
     const finalEvent = String((req.query as any).event || event)
+
+    // Deduplication — keyed by the FINAL (remapped) event, e.g.
+    // order_placed vs order_shipped for the same orderId are different
+    // notifications and must NOT share a dedupe key.
+    if (orderId) {
+      const dedupeKey = `wix_sent_${orderId}_${finalEvent}`
+      const { data: already } = await db.from('system_settings').select('key').eq('key', dedupeKey).maybeSingle()
+      if (already) { console.log('[wix webhook] duplicate — skip', dedupeKey); return }
+      await db.from('system_settings').upsert({
+        key: dedupeKey, value: { ts: new Date().toISOString() }, updated_at: new Date().toISOString(),
+      }, { onConflict: 'key' })
+    }
 
     const message = buildMessage(finalEvent, {
       customer_name:   buyerName,
