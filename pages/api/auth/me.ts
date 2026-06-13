@@ -10,11 +10,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const db = supabaseAdmin()
     const { data } = await db
       .from('users')
-      .select('id, email, name, role, plan_id, trial_ends_at, plan_expires_at, api_key, created_at, phone, otp_mode, is_verified, last_login_at, last_login_ip, last_login_device, wix_instance_id')
+      .select('id, email, name, role, plan_id, trial_ends_at, plan_expires_at, api_key, created_at, phone, otp_mode, is_verified, last_login_at, last_login_ip, last_login_device')
       .eq('id', user.userId)
       .single()
 
-    return res.status(200).json({ user: data })
+    // Wix-origin accounts: looked up via the link table (users has no
+    // wix_instance_id column). Used by the dashboard to redirect/hide
+    // billing UI (Wix Internal Pricing requirement).
+    const { data: wixLink } = await db
+      .from('wix_user_links')
+      .select('wix_instance_id')
+      .eq('user_id', user.userId)
+      .maybeSingle()
+
+    return res.status(200).json({ user: { ...data, wix_instance_id: wixLink?.wix_instance_id || null } })
   }
 
   if (req.method === 'POST') {
