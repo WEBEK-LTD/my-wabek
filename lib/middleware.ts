@@ -104,7 +104,8 @@ export async function checkPlanLimit(
     // users with no plan_id (e.g. before any purchase webhook) had NO
     // campaign limit at all.
     if (!planId || expired) {
-      const { data: freePlan } = await db.from('plans').select('id').ilike('name', 'free').maybeSingle()
+      const { data: freePlans } = await db.from('plans').select('id').ilike('name', 'free').order('id')
+      const freePlan = freePlans?.[0]
       if (!freePlan) return ALLOW() // no Free plan configured → don't block
       planId = freePlan.id
     }
@@ -203,7 +204,8 @@ export async function checkPlanFeature(
     const expired = user?.plan_expires_at && new Date(user.plan_expires_at) < new Date()
 
     if (!planId || expired) {
-      const { data: freePlan } = await db.from('plans').select('id').ilike('name', 'free').maybeSingle()
+      const { data: freePlans } = await db.from('plans').select('id').ilike('name', 'free').order('id')
+      const freePlan = freePlans?.[0]
       if (!freePlan) return true // no Free plan configured → don't block (fail open)
       planId = freePlan.id
     }
