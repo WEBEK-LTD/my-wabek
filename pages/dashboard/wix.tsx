@@ -176,7 +176,7 @@ export default function WixPage() {
                 <div className="flex-1">
                   <h2 className="font-semibold text-slate-900 mb-1">Connect a Wix Store</h2>
                   <p className="text-slate-400 text-sm mb-4">Install WABEK on your Wix store to automatically send WhatsApp notifications with zero manual setup.</p>
-                  <a href={`https://www.wix.com/app-market/add-app?appId=48cfce94-1e3d-4d09-a34d-e5f41e5b0469`} target="_blank" rel="noopener" className="btn-primary inline-flex items-center gap-2">
+                  <a href={`https://www.wix.com/app-market/48cfce94-1e3d-4d09-a34d-e5f41e5b0469`} target="_blank" rel="noopener" className="btn-primary inline-flex items-center gap-2">
                     Install on Wix →
                   </a>
                 </div>
