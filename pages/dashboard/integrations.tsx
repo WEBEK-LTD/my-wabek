@@ -85,7 +85,7 @@ export default function IntegrationsPage() {
 
         {/* Tabs */}
         <div className="flex gap-1 border-b border-slate-200 mb-2">
-          {[{ id: 'webhooks', label: '🔗 Webhooks' }, { id: 'zapier', label: '⚡ Zapier' }, { id: 'make', label: '🔄 Make' }, { id: 'api', label: '🔌 REST API' }].map(t => (
+          {[{ id: 'webhooks', label: '🔗 Webhooks' }, { id: 'zapier', label: '⚡ Zapier' }, { id: 'make', label: '🔄 Make' }, { id: 'api', label: '🔌 REST API' }, { id: 'modules', label: '📦 Modules' }].map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)} className={clsx('px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',
               activeTab === t.id ? 'border-brand-500 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700')}>
               {t.label}
@@ -288,6 +288,60 @@ export default function IntegrationsPage() {
           </div>
         </div>
 
+        </>
+        }
+
+        {activeTab === 'modules' && <>
+        <div className="card">
+          <h3 className="font-display font-semibold text-slate-900 mb-1">📦 Plugins &amp; Modules</h3>
+          <p className="text-xs text-slate-500 mb-4">Download and install WABEK integrations for your platform.</p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="border border-slate-200 rounded-xl p-4 flex flex-col">
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-2xl">🔵</span>
+                <div>
+                  <h4 className="font-semibold text-slate-900 text-sm">WordPress Plugin</h4>
+                  <p className="text-xs text-slate-500">WhatsApp notifications &amp; OTP for WordPress/WooCommerce</p>
+                </div>
+              </div>
+              <ul className="text-xs text-slate-500 space-y-1 mb-4 mt-1">
+                <li>• Order &amp; OTP notifications via WhatsApp</li>
+                <li>• WooCommerce integration</li>
+                <li>• Connects with your WABEK API key</li>
+              </ul>
+              <a href="/downloads/wabek-wordpress-plugin.zip" download
+                className="btn-primary text-sm w-full justify-center mt-auto">
+                ⬇️ Download Plugin (.zip)
+              </a>
+              <p className="text-xs text-slate-400 mt-2">Install via WordPress Admin → Plugins → Add New → Upload Plugin.</p>
+            </div>
+
+            <div className="border border-slate-200 rounded-xl p-4 flex flex-col">
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-2xl">🟣</span>
+                <div>
+                  <h4 className="font-semibold text-slate-900 text-sm">WHMCS Addon</h4>
+                  <p className="text-xs text-slate-500">Full WhatsApp automation suite for WHMCS</p>
+                </div>
+              </div>
+              <ul className="text-xs text-slate-500 space-y-1 mb-4 mt-1">
+                <li>• Invoice, ticket &amp; service notifications</li>
+                <li>• Campaigns, chatbot &amp; shared inbox</li>
+                <li>• White label mode &amp; permissions manager</li>
+              </ul>
+              <a href="/downloads/wabek-whmcs-addon.zip" download
+                className="btn-primary text-sm w-full justify-center mt-auto">
+                ⬇️ Download Addon (.zip)
+              </a>
+              <p className="text-xs text-slate-400 mt-2">Install via WHMCS Admin → System → Addon Modules → Upload &amp; Activate.</p>
+            </div>
+          </div>
+
+          <div className="mt-4 p-3 bg-[#F8FAFC] rounded-lg text-xs text-slate-500">
+            💡 Need your API key for setup? Find it under <strong>Integrations → REST API</strong> in this page.
+          </div>
+        </div>
         </>
         }
       </div>
