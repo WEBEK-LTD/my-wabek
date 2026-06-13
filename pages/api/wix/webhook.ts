@@ -36,15 +36,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const pad    = b64.length % 4
         const jwt    = JSON.parse(Buffer.from(pad ? b64 + '='.repeat(4-pad) : b64, 'base64').toString('utf8'))
         instanceId   = String(jwt.instanceId || jwt.appInstanceId || '')
+        console.log('[wix webhook] JWT ROOT', JSON.stringify(jwt).slice(0, 500))
 
         if (jwt.data) {
           try {
             const d1 = JSON.parse(typeof jwt.data === 'string' ? jwt.data : JSON.stringify(jwt.data))
+            console.log('[wix webhook] D1', JSON.stringify(d1).slice(0, 500))
+            console.log('[wix webhook] D1 INSTANCE', d1?.instanceId, 'D1 metaSiteId', d1?.metaSiteId || d1?.siteId)
+
+            // instanceId for order webhooks lives one level down, inside
+            // the first-decoded `data` field — not at the JWT root.
+            if (!instanceId) instanceId = String(d1.instanceId || d1.metaSiteId || d1.siteId || '')
+
             orderId  = String(d1.entityId || d1.id || d1.orderId || '')
 
             if (d1.data) {
               const d2 = JSON.parse(typeof d1.data === 'string' ? d1.data : JSON.stringify(d1.data))
               if (!orderId) orderId = String(d2.entityId || d2.id || d2.orderId || '')
+              if (!instanceId) instanceId = String(d2.instanceId || d2.metaSiteId || d2.siteId || '')
 
               // Extract order entity from webhook payload
               if (d2.updatedEvent?.currentEntity) jwtOrderData = d2.updatedEvent.currentEntity
