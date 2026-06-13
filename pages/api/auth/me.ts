@@ -17,13 +17,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Wix-origin accounts: looked up via the link table (users has no
     // wix_instance_id column). Used by the dashboard to redirect/hide
     // billing UI (Wix Internal Pricing requirement).
-    const { data: wixLink } = await db
+    const { data: wixLinks } = await db
       .from('wix_user_links')
       .select('wix_instance_id')
       .eq('user_id', user.userId)
-      .maybeSingle()
+      .order('connected_at', { ascending: false })
 
-    return res.status(200).json({ user: { ...data, wix_instance_id: wixLink?.wix_instance_id || null } })
+    return res.status(200).json({ user: { ...data, wix_instance_id: wixLinks?.[0]?.wix_instance_id || null } })
   }
 
   if (req.method === 'POST') {
