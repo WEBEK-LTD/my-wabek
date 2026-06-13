@@ -18,7 +18,8 @@ export default function BillingPage() {
 
   // Wix-origin accounts must manage billing/upgrades inside Wix only
   // (Wix Internal Pricing requirement) — redirect away from this page.
-  const { data: me, isLoading: meLoading } = useQuery('me', () => axios.get('/api/auth/me').then(r => r.data.user))
+  const { data: meData, isLoading: meLoading } = useQuery('me', () => axios.get('/api/auth/me').then(r => r.data))
+  const me = meData?.user
 
   useEffect(() => {
     if (me?.wix_instance_id) {
