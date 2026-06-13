@@ -290,7 +290,11 @@ export async function smartSendWAWeb(params: {
   // WA Web — no templates, no 24h window restriction
   const db = supabaseAdmin()
   const { userId, instanceId, to, text, contactId, source = 'api' } = params
-  const cleanPhone = to.replace(/[^0-9]/g, '')
+  // Preserve full JID for @lid/@g.us/@s.whatsapp.net contacts — stripping
+  // to digits-only and re-appending the default suffix server-side sends
+  // to the WRONG (non-existent) JID for @lid contacts, causing send errors.
+  const isJid = /@(lid|g\.us|s\.whatsapp\.net|broadcast)$/.test(to)
+  const cleanPhone = isJid ? to : to.replace(/[^0-9]/g, '')
 
   console.log(`[smart-send] START instance_id=${instanceId} instance_type=wa_web provider=WA_WEB phone=${cleanPhone} method=text`)
   try {

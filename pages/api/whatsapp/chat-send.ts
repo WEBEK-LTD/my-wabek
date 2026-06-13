@@ -33,7 +33,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!instance) return res.status(404).json({ error: 'Instance not found' })
 
   const provider = resolveProvider(instance)
-  const cleanPhone = to.replace(/[^0-9]/g, '')
+  const isJid = /@(lid|g\.us|s\.whatsapp\.net|broadcast)$/.test(to)
+  const cleanPhone = isJid ? to : to.replace(/[^0-9]/g, '')
 
   console.log(`[live_chat] send to=${cleanPhone} provider=${provider.toUpperCase()} instance=${instance.id}`)
 
