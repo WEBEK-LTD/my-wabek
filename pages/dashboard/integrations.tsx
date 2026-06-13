@@ -299,7 +299,7 @@ export default function IntegrationsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="border border-slate-200 rounded-xl p-4 flex flex-col">
               <div className="flex items-center gap-3 mb-2">
-                <span className="text-2xl">🔵</span>
+                <img src="https://cdn.simpleicons.org/wordpress/21759B" alt="WordPress" className="w-8 h-8 flex-shrink-0" />
                 <div>
                   <h4 className="font-semibold text-slate-900 text-sm">WordPress Plugin</h4>
                   <p className="text-xs text-slate-500">WhatsApp notifications &amp; OTP for WordPress/WooCommerce</p>
@@ -319,7 +319,7 @@ export default function IntegrationsPage() {
 
             <div className="border border-slate-200 rounded-xl p-4 flex flex-col">
               <div className="flex items-center gap-3 mb-2">
-                <span className="text-2xl">🟣</span>
+                <img src="https://logo.clearbit.com/whmcs.com" alt="WHMCS" className="w-8 h-8 flex-shrink-0 rounded" />
                 <div>
                   <h4 className="font-semibold text-slate-900 text-sm">WHMCS Addon</h4>
                   <p className="text-xs text-slate-500">Full WhatsApp automation suite for WHMCS</p>
