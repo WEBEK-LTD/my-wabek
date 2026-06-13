@@ -21,7 +21,6 @@ export default function WixSetupPage() {
   const [tplSaved, setTplSaved]       = useState(false)
   const [openingDash, setOpeningDash] = useState(false)
   const [stats, setStats]             = useState({ messages: 0, contacts: 0, campaigns: 0 })
-  const [wixPlanId, setWixPlanId]     = useState('')  // from Wix JWT
   const [diagLoading, setDiagLoading] = useState(false)
   const [diagResult, setDiagResult]   = useState<any>(null)
 
@@ -117,7 +116,7 @@ export default function WixSetupPage() {
     checks.push({ label: 'WABEK account created', ok: !!userId, detail: userId ? `User ID: ${userId.slice(0,8)}...` : 'No user ID' })
 
     // 4. Check Wix plan
-    checks.push({ label: 'Wix plan detected', ok: !!wixPlanId, detail: wixPlanId ? `Plan: ${wixPlanId}` : 'No plan (Free or not detected)' })
+    checks.push({ label: 'Plan detected', ok: !!userPlan?.name, detail: userPlan?.name ? `Plan: ${userPlan.name}` : 'No plan (Free)' })
 
     setDiagResult(checks)
     setDiagLoading(false)
@@ -406,7 +405,7 @@ export default function WixSetupPage() {
             <div className="plan-box">
               <p style={{ fontSize: 11, color: '#64748b', marginBottom: 3 }}>YOUR PLAN (via Wix)</p>
               <div className="plan-name" style={{textTransform:'capitalize'}}>
-                {wixPlanId || 'Free'}
+                {userPlan?.name || 'Free'}
               </div>
               <div className="plan-sub">Managed by Wix · Payments processed by Wix</div>
             </div>
