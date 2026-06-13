@@ -66,6 +66,8 @@ export default function BillingPage() {
     }
   )
 
+  const planColors = ['#3B82F6', '#00D46A', '#A855F7', '#F59E0B']
+
   if (meLoading || me?.wix_instance_id) {
     return (
       <DashboardLayout title="Billing">
