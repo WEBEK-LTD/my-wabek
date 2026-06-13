@@ -30,27 +30,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const rawBody = await getRawBody(req)
     if (!rawBody) return
 
-    const event = req.query.event as string
-
-    // Decode Wix JWT payload
+    // Decode Wix JWT payload (two-level: root JWT -> data is a JSON
+    // *string* containing the real event payload, NOT base64 - the
+    // previous base64-decode here threw, was caught by the outer try,
+    // and reset `payload = {}` for EVERY event, so this handler always
+    // returned early with instanceId='').
     let payload: Record<string, unknown> = {}
     try {
       const parts = rawBody.split('.')
       if (parts.length === 3) {
-        payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString())
-        if (payload.data) {
-          const inner = JSON.parse(Buffer.from(payload.data as string, 'base64').toString())
-          payload = { ...payload, ...inner }
+        const root = JSON.parse(Buffer.from(parts[1], 'base64url').toString())
+        payload = root
+        console.log('[Wix Billing] JWT ROOT', JSON.stringify(root).slice(0, 500))
+        if (root.data) {
+          try {
+            const d1 = JSON.parse(typeof root.data === 'string' ? root.data : JSON.stringify(root.data))
+            console.log('[Wix Billing] D1', JSON.stringify(d1).slice(0, 500))
+            payload = { ...root, ...d1 }
+            if (d1.data) {
+              const d2 = JSON.parse(typeof d1.data === 'string' ? d1.data : JSON.stringify(d1.data))
+              console.log('[Wix Billing] D2', JSON.stringify(d2).slice(0, 500))
+              payload = { ...payload, ...d2 }
+            }
+          } catch (e) {
+            console.log('[Wix Billing] inner data parse error:', (e as Error)?.message)
+          }
         }
       } else {
         payload = JSON.parse(rawBody)
       }
-    } catch {
+    } catch (e) {
+      console.log('[Wix Billing] JWT decode error:', (e as Error)?.message)
       payload = {}
     }
 
-    const instanceId      = String(payload.instanceId || payload.appInstanceId || '')
-    const vendorProductId = String(payload.vendorProductId || payload.packageName || '')
+    const event = String(req.query.event || (payload as any).eventType || '').replace(/^wix\.app_market\.v1\.app_/, '').replace(/^wix\.iam\.v1\./, '')
+
+    const instanceId      = String(payload.instanceId || payload.appInstanceId || payload.metaSiteId || payload.siteId || '')
+    const vendorProductId = String(payload.vendorProductId || payload.packageName || payload.planId || '')
+    console.log('[Wix Billing] event:', event, 'instanceId:', instanceId, 'vendorProductId:', vendorProductId)
 
     if (!instanceId) return
 
@@ -70,11 +88,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (event === 'plan_purchased' || event === 'plan_upgraded') {
       // Find matching WABEK plan
       const wabPlanName = WIX_PLAN_MAP[vendorProductId] || vendorProductId
-      const { data: plan } = await db
+      const { data: plans } = await db
         .from('plans')
         .select('id, name')
         .ilike('name', wabPlanName)
-        .maybeSingle()
+        .limit(1)
+      const plan = plans?.[0]
 
       if (plan) {
         // Assign plan to user
