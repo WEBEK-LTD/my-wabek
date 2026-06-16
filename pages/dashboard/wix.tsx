@@ -205,14 +205,7 @@ export default function WixPage() {
                               ? conn.wix_installations.site_name
                               : <span className="text-slate-500">Wix Store</span>}
                           </p>
-                          {conn.wix_installations?.site_url ? (
-                            <a href={conn.wix_installations.site_url} target="_blank" rel="noopener"
-                              className="text-blue-500 text-xs hover:underline">
-                              {conn.wix_installations.site_url}
-                            </a>
-                          ) : (
-                            <p className="text-slate-400 text-xs font-mono">{conn.wix_instance_id}</p>
-                          )}
+                          <p className="text-slate-400 text-xs font-mono">{conn.wix_instance_id}</p>
                           <p className="text-slate-400 text-xs mt-0.5">
                             Connected {conn.connected_at ? new Date(conn.connected_at).toLocaleDateString() : ''}
                           </p>
