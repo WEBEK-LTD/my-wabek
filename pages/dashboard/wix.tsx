@@ -145,7 +145,7 @@ export default function WixPage() {
 
         {/* Header */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-xl flex-shrink-0">🔷</div>
+          <img src="https://cdn.simpleicons.org/wix/000000" alt="Wix" className="w-10 h-10 flex-shrink-0" />
           <div>
             <h1 className="text-2xl font-display font-bold text-slate-900">Wix Integration</h1>
             <p className="text-slate-400 text-sm">Send automatic WhatsApp notifications for your Wix store events.</p>
@@ -172,7 +172,7 @@ export default function WixPage() {
             {/* Install */}
             <div className="card border-blue-900/40 bg-blue-900/10">
               <div className="flex items-start gap-4">
-                <div className="text-3xl flex-shrink-0">🔷</div>
+                <img src="https://cdn.simpleicons.org/wix/000000" alt="Wix" className="w-8 h-8 flex-shrink-0" />
                 <div className="flex-1">
                   <h2 className="font-semibold text-slate-900 mb-1">Connect a Wix Store</h2>
                   <p className="text-slate-400 text-sm mb-4">Install WABEK on your Wix store to automatically send WhatsApp notifications with zero manual setup.</p>
