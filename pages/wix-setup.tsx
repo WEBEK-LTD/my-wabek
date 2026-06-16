@@ -50,14 +50,12 @@ export default function WixSetupPage() {
           setUserId(d.user_id)
           setInstanceId(d.instance_id)
           if (d.vendor_product_id) setWixPlanId(d.vendor_product_id)
-          try {
-            await Promise.all([
-              loadInstances(d.instance_id),
-              loadUserPlan(d.user_id),
-              loadTemplates(d.instance_id),
-              loadStats(d.user_id),
-            ])
-          } catch {}
+          await Promise.all([
+            loadInstances(d.instance_id),
+            loadUserPlan(d.user_id),
+            loadTemplates(d.instance_id),
+            loadStats(d.user_id),
+          ])
         } else {
           setError(d.error || 'Connection failed')
         }
