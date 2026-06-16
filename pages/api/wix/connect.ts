@@ -10,7 +10,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === 'GET') {
     const db = supabaseAdmin()
 
-    // Get all links for this user
     const { data: links } = await db
       .from('wix_user_links')
       .select('user_id, wix_instance_id, connected_at')
@@ -18,14 +17,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!links?.length) return res.status(200).json({ connections: [] })
 
-    // Manually join wix_installations (no FK exists → PostgREST can't do it automatically)
     const instanceIds = links.map(l => l.wix_instance_id)
     const { data: installations } = await db
       .from('wix_installations')
-      .select('wix_instance_id, site_name, site_url, installed_at')
+      .select('wix_instance_id, site_name, site_url, installed_at, access_token')
       .in('wix_instance_id', instanceIds)
 
-    const installMap = Object.fromEntries((installations || []).map(i => [i.wix_instance_id, i]))
+    // For any installation missing site_name, try to fetch from Wix API
+    const updatedInstalls = await Promise.all((installations || []).map(async (inst) => {
+      if (inst.site_name) return inst  // already have it
+
+      // Try Wix Instance API with stored access_token
+      const token = inst.access_token
+      if (!token) return inst
+
+      try {
+        const r = await fetch('https://www.wixapis.com/apps/v1/instance', {
+          headers: { Authorization: token },
+        })
+        if (r.ok) {
+          const d = await r.json()
+          const siteName = String(d?.site?.siteDisplayName || d?.instance?.appName || '')
+          const siteUrl  = String(d?.site?.url || '')
+          if (siteName || siteUrl) {
+            await db.from('wix_installations').update({
+              site_name: siteName || null,
+              site_url:  siteUrl  || null,
+              updated_at: new Date().toISOString(),
+            }).eq('wix_instance_id', inst.wix_instance_id)
+            return { ...inst, site_name: siteName, site_url: siteUrl }
+          }
+        }
+      } catch {}
+      return inst
+    }))
+
+    const installMap = Object.fromEntries(updatedInstalls.map(i => [i.wix_instance_id, i]))
 
     const connections = links.map(link => ({
       ...link,
