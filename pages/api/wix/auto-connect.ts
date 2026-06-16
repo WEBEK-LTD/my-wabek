@@ -127,27 +127,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     connected_at: new Date().toISOString(),
   }, { onConflict: 'user_id,wix_instance_id' })
 
-  // Try to fetch site name/URL from Wix API and save them
-  // (the JWT doesn't contain site_name/site_url)
+  // Try to fetch site name via Wix Instance API using the raw instance JWT.
+  // This is available in the auto-connect flow (unlike the OAuth access_token).
+  // We use it to populate site_name for the Connected Stores display.
   try {
-    const accessToken = await db.from('wix_installations')
-      .select('access_token').eq('wix_instance_id', instanceId).maybeSingle()
-    const token = accessToken?.data?.access_token
-    if (token) {
-      const siteRes = await fetch('https://www.wixapis.com/site-properties/v4/properties', {
-        headers: { Authorization: token, 'wix-site-id': instanceId },
-      })
-      if (siteRes.ok) {
-        const siteData = await siteRes.json()
-        const siteName = siteData?.properties?.name || siteData?.site?.displayName || ''
-        const siteUrl  = siteData?.properties?.url  || ''
-        if (siteName || siteUrl) {
-          await db.from('wix_installations').update({
-            site_name: siteName || null,
-            site_url:  siteUrl  || null,
-            updated_at: new Date().toISOString(),
-          }).eq('wix_instance_id', instanceId)
-        }
+    const rawInstance = req.body?.instance || ''
+    const instanceRes = await fetch('https://www.wixapis.com/apps/v1/instance', {
+      headers: { Authorization: `Bearer ${rawInstance}` },
+    })
+    if (instanceRes.ok) {
+      const instanceData = await instanceRes.json()
+      const siteName = instanceData?.site?.siteDisplayName || instanceData?.instance?.appName || ''
+      const siteUrl  = instanceData?.site?.url || ''
+      if (siteName || siteUrl) {
+        await db.from('wix_installations').update({
+          site_name:  siteName || null,
+          site_url:   siteUrl  || null,
+          updated_at: new Date().toISOString(),
+        }).eq('wix_instance_id', instanceId)
+        console.log('[wix auto-connect] site info saved:', siteName, siteUrl)
       }
     }
   } catch (e: any) {
