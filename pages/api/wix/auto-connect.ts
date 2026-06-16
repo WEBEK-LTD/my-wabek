@@ -73,12 +73,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const db = supabaseAdmin()
   const rawInstance = String(instance)
 
-  // ── Path A: plain UUID (from internal Meta OAuth callback) ──────────────────
+  // ── Path A: plain UUID (from Wix panel - instanceId sent directly) ──────────
   const cleanInstance = rawInstance.split('#')[0].trim()
   const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanInstance)
 
   if (isUUID) {
     const instanceId = cleanInstance
+
+    // Check if already linked
     const { data: existingLink } = await db
       .from('wix_user_links').select('user_id')
       .eq('wix_instance_id', instanceId).maybeSingle()
@@ -91,7 +93,46 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         site_name: 'Wix Store', session_token: instanceId,
       })
     }
-    return res.status(401).json({ error: 'Store not connected. Please open from your Wix Dashboard.' })
+
+    // Not linked yet — create a new WABEK account for this Wix instance
+    const newId  = uuidv4()
+    const email  = `wix_${instanceId.split('-')[0]}@wix.waabek.com`
+
+    // Check if user already exists (re-install case)
+    const { data: existingUser } = await db.from('users').select('id, email').eq('email', email).maybeSingle()
+    const userId    = existingUser?.id || newId
+    const userEmail = existingUser?.email || email
+
+    if (!existingUser) {
+      const { error: createErr } = await db.from('users').insert({
+        id: newId, email, name: 'Wix User',
+        password_hash: uuidv4(),
+        api_key: `wbk_wix_${uuidv4().replace(/-/g, '')}`,
+        role: 'user', is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      if (createErr) {
+        console.error('[wix auto-connect] UUID path create user error:', createErr)
+        return res.status(500).json({ error: 'Failed to create account' })
+      }
+    }
+
+    await db.from('wix_installations').upsert({
+      id: uuidv4(), wix_instance_id: instanceId, owner_id: userId,
+      installed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    }, { onConflict: 'wix_instance_id' })
+
+    await db.from('wix_user_links').upsert({
+      user_id: userId, wix_instance_id: instanceId,
+      connected_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,wix_instance_id' })
+
+    return res.status(200).json({
+      success: true, user_id: userId,
+      email: userEmail, instance_id: instanceId,
+      site_name: 'Wix Store', session_token: instanceId,
+    })
   }
 
   // ── Path B: Wix signed JWT ──────────────────────────────────────────────────
