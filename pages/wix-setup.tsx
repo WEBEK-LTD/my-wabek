@@ -50,16 +50,12 @@ export default function WixSetupPage() {
           setUserId(d.user_id)
           setInstanceId(d.instance_id)
           if (d.vendor_product_id) setWixPlanId(d.vendor_product_id)
-          try {
-            await Promise.all([
-              loadInstances(d.instance_id),
-              loadUserPlan(d.user_id),
-              loadTemplates(d.instance_id),
-              loadStats(d.user_id),
-            ])
-          } catch (e) {
-            console.warn('[wix-setup] post-connect load error (non-fatal):', e)
-          }
+          await Promise.all([
+            loadInstances(d.instance_id),
+            loadUserPlan(d.user_id),
+            loadTemplates(d.instance_id),
+            loadStats(d.user_id),
+          ])
         } else {
           setError(d.error || 'Connection failed')
         }
@@ -78,11 +74,9 @@ export default function WixSetupPage() {
 
   const loadInstances = async (instId: string) => {
     if (!instId) return
-    try {
-      const r = await fetch(`/api/wix/instances?instance_id=${instId}`)
-      const d = await r.json()
-      if (d?.instances) setInstances(d.instances)
-    } catch {}
+    const r = await fetch(`/api/wix/instances?instance_id=${instId}`).catch(() => null)
+    const d = await r?.json().catch(() => null)
+    if (d?.instances) setInstances(d.instances)
   }
 
   const loadUserPlan = async (uid: string) => {

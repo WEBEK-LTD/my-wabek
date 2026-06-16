@@ -31,45 +31,24 @@ function verifyAndDecodeInstance(instance: string): Record<string, unknown> | nu
   } catch { return null }
 }
 
-// ─── Sync site info ──────────────────────────────────────────────────────────
-// Extracts site name from JWT payload (always available) and optionally from
-// stored OAuth access_token. Does NOT use the raw instance JWT as Bearer token
-// (that returns 403 — Wix Instance API needs the OAuth access_token).
-async function syncSiteInfo(
-  instanceId: string,
-  jwtPayload: Record<string, unknown>,
-  db: ReturnType<typeof supabaseAdmin>
-): Promise<{ siteName: string; siteUrl: string }> {
+// ─── Fetch & save site info from Wix Instance API ─────────────────────────────
+// Called for BOTH new and existing installations on every panel open,
+// so site_name/site_url stay up to date automatically.
+async function syncSiteInfo(instanceId: string, rawInstance: string): Promise<{ siteName: string; siteUrl: string }> {
   try {
-    // 1. Extract from JWT payload fields (available without any API call)
-    let siteName = String(
-      (jwtPayload as any)?.siteDisplayName ||
-      (jwtPayload as any)?.siteName        ||
-      (jwtPayload as any)?.appName         || ''
-    )
-    let siteUrl = String((jwtPayload as any)?.siteUrl || '')
-
-    // 2. Try Instance API with stored OAuth access_token (richer data, optional)
-    const { data: inst } = await db
-      .from('wix_installations')
-      .select('access_token')
-      .eq('wix_instance_id', instanceId)
-      .maybeSingle()
-
-    if (inst?.access_token) {
-      try {
-        const r = await fetch('https://www.wixapis.com/apps/v1/instance', {
-          headers: { Authorization: inst.access_token },
-        })
-        if (r.ok) {
-          const d = await r.json()
-          siteName = String(d?.site?.siteDisplayName || d?.instance?.appName || siteName)
-          siteUrl  = String(d?.site?.url || siteUrl)
-        }
-      } catch {}
+    const r = await fetch('https://www.wixapis.com/apps/v1/instance', {
+      headers: { Authorization: `Bearer ${rawInstance}` },
+    })
+    if (!r.ok) {
+      console.log('[wix auto-connect] syncSiteInfo HTTP', r.status)
+      return { siteName: '', siteUrl: '' }
     }
+    const d = await r.json()
+    const siteName = String(d?.site?.siteDisplayName || d?.instance?.appName || '')
+    const siteUrl  = String(d?.site?.url || '')
 
     if (siteName || siteUrl) {
+      const db = supabaseAdmin()
       await db.from('wix_installations').update({
         site_name:  siteName || null,
         site_url:   siteUrl  || null,
@@ -134,7 +113,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // This is the key fix: previously syncSiteInfo was placed AFTER the early
   // return for existing links, so existing installations never got updated.
   // Moving it here ensures site_name/site_url stay current on every panel open.
-  const { siteName, siteUrl } = await syncSiteInfo(instanceId, data as Record<string, unknown>, db)
+  const { siteName, siteUrl } = await syncSiteInfo(instanceId, rawInstance)
 
   // Try to get vendorProductId (paid plan) from JWT
   let vendorProductId = ''
