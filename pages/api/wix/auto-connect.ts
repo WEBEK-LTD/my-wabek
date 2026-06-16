@@ -127,6 +127,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     connected_at: new Date().toISOString(),
   }, { onConflict: 'user_id,wix_instance_id' })
 
+  // Try to fetch site name/URL from Wix API and save them
+  // (the JWT doesn't contain site_name/site_url)
+  try {
+    const accessToken = await db.from('wix_installations')
+      .select('access_token').eq('wix_instance_id', instanceId).maybeSingle()
+    const token = accessToken?.data?.access_token
+    if (token) {
+      const siteRes = await fetch('https://www.wixapis.com/site-properties/v4/properties', {
+        headers: { Authorization: token, 'wix-site-id': instanceId },
+      })
+      if (siteRes.ok) {
+        const siteData = await siteRes.json()
+        const siteName = siteData?.properties?.name || siteData?.site?.displayName || ''
+        const siteUrl  = siteData?.properties?.url  || ''
+        if (siteName || siteUrl) {
+          await db.from('wix_installations').update({
+            site_name: siteName || null,
+            site_url:  siteUrl  || null,
+            updated_at: new Date().toISOString(),
+          }).eq('wix_instance_id', instanceId)
+        }
+      }
+    }
+  } catch (e: any) {
+    console.log('[wix auto-connect] site info fetch failed:', e?.message)
+  }
+
   // Try to get vendorProductId (paid plan) from JWT
   let vendorProductId = ''
   try {

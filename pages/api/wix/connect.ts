@@ -9,12 +9,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'GET') {
     const db = supabaseAdmin()
-    const { data } = await db
+
+    // Get all links for this user
+    const { data: links } = await db
       .from('wix_user_links')
-      .select('*, wix_installations(site_name, site_url, installed_at)')
+      .select('user_id, wix_instance_id, connected_at')
       .eq('user_id', user.userId)
 
-    return res.status(200).json({ connections: data || [] })
+    if (!links?.length) return res.status(200).json({ connections: [] })
+
+    // Manually join wix_installations (no FK exists → PostgREST can't do it automatically)
+    const instanceIds = links.map(l => l.wix_instance_id)
+    const { data: installations } = await db
+      .from('wix_installations')
+      .select('wix_instance_id, site_name, site_url, installed_at')
+      .in('wix_instance_id', instanceIds)
+
+    const installMap = Object.fromEntries((installations || []).map(i => [i.wix_instance_id, i]))
+
+    const connections = links.map(link => ({
+      ...link,
+      wix_installations: installMap[link.wix_instance_id] || null,
+    }))
+
+    return res.status(200).json({ connections })
   }
 
   if (req.method === 'POST') {

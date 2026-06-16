@@ -652,26 +652,35 @@ After installing, go to **WooCommerce → Settings → WABEK** to configure even
       },
       {
         title: 'Wix Integration',
-        content: `Connect WABEK to your Wix store for automated WhatsApp notifications.
+        content: `Connect WABEK to your Wix store in minutes — no manual webhook setup required.
 
-## Setup
-1. Go to **Dashboard → Wix**
-2. Enter your **Wix Instance ID**
-3. Copy the webhook URL and add to Wix
+## Setup (via Wix App Market)
+1. Go to the Wix App Market and search for **WABEK WhatsApp** (or use the Install button in **Dashboard → Wix**)
+2. Select your Wix site and approve the permissions
+3. WABEK is automatically installed and connected to your store
+4. Log in to **waabek.com** using the **WABEK app panel** inside your Wix Dashboard
+5. Your store will appear under **Dashboard → Wix → Connected Stores**
 
-## Wix Webhook URL
-\`\`\`
-https://waabek.com/api/wix/webhook?key=YOUR_API_KEY
-\`\`\`
+## Automatic Webhooks
+Once installed, Wix automatically sends order events to WABEK — no copying webhook URLs or manual configuration needed. The connection is handled entirely via the Wix App platform.
 
 ## Supported Events
-- New order placed
-- Order fulfilled/shipped
-- Abandoned cart recovery
-- New member registration
+- ✅ New order placed
+- ✅ Order fulfilled / shipped (with tracking link when available)
+- ✅ Order updated / cancelled
+- ✅ Plan purchased / upgraded / cancelled (billing)
 
-## Test the Integration
-Use the **Send Test Message** button in **Dashboard → Wix** to verify the connection.`,
+## Notification Templates
+Customize the WhatsApp message sent for each event under **Dashboard → Wix → Notification Templates**.
+You can use variables like {{customer_name}}, {{order_id}}, {{total}}, {{tracking_url}}.
+
+## Managing Your Plan
+Upgrade or change your plan directly from within Wix — go to **Wix Dashboard → WABEK App → Billing**.
+All billing is processed by Wix. No external payment pages needed.
+
+## Connected Stores
+View all your connected Wix stores under **Dashboard → Wix → Connected Stores**.
+Each new Wix site you install WABEK on appears here automatically.`,
       },
       {
         title: 'WHMCS Integration',

@@ -198,10 +198,24 @@ export default function WixPage() {
                   {connections.map((conn: any) => (
                     <div key={conn.wix_instance_id} className="flex items-center justify-between p-3 bg-[#F8FAFC] rounded-xl">
                       <div className="flex items-center gap-3">
-                        <CheckCircleIcon className="w-5 h-5 text-green-400 flex-shrink-0" />
+                        <img src="https://cdn.simpleicons.org/wix/000000" alt="Wix" className="w-5 h-5 flex-shrink-0" />
                         <div>
-                          <p className="text-slate-900 text-sm font-medium">{conn.wix_installations?.site_name || 'Wix Store'}</p>
-                          <p className="text-slate-500 text-xs">{conn.wix_instance_id}</p>
+                          <p className="text-slate-900 text-sm font-medium">
+                            {conn.wix_installations?.site_name
+                              ? conn.wix_installations.site_name
+                              : <span className="text-slate-500">Wix Store</span>}
+                          </p>
+                          {conn.wix_installations?.site_url ? (
+                            <a href={conn.wix_installations.site_url} target="_blank" rel="noopener"
+                              className="text-blue-500 text-xs hover:underline">
+                              {conn.wix_installations.site_url}
+                            </a>
+                          ) : (
+                            <p className="text-slate-400 text-xs font-mono">{conn.wix_instance_id}</p>
+                          )}
+                          <p className="text-slate-400 text-xs mt-0.5">
+                            Connected {conn.connected_at ? new Date(conn.connected_at).toLocaleDateString() : ''}
+                          </p>
                         </div>
                       </div>
                       <button onClick={() => disconnectMutation.mutate(conn.wix_instance_id)}
