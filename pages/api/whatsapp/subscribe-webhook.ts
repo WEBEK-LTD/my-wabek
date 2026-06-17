@@ -27,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const apiVer = process.env.WHATSAPP_API_VERSION || 'v20.0'
+    const apiVer = 'v25.0' // subscribed_apps requires v25.0 (v20/v21 return #200 Permissions error)
     const url    = `https://graph.facebook.com/${apiVer}/${instance.waba_id}/subscribed_apps`
 
     console.log('[subscribe-webhook] REQUEST', JSON.stringify({

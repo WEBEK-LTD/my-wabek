@@ -233,7 +233,7 @@ export async function smartSend(params: SmartSendParams): Promise<SmartSendResul
         method = 'template'
       } catch (sendErr: any) {
         const metaErr = sendErr?.response?.data || sendErr?.response || sendErr?.message
-        console.error(`[smart-send] Meta template FAILED status=${sendErr?.response?.status} url=https://graph.facebook.com/v20.0/${phoneNumberId}/messages body=`, JSON.stringify(metaErr))
+        console.error(`[smart-send] Meta template FAILED status=${sendErr?.response?.status} url=https://graph.facebook.com/v21.0/${phoneNumberId}/messages body=`, JSON.stringify(metaErr))
         throw sendErr
       }
     }

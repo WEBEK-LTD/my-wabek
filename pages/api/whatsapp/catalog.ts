@@ -39,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    const response = await fetch(`https://graph.facebook.com/v20.0/${instance.phone_number_id}/messages`, {
+    const response = await fetch(`https://graph.facebook.com/v21.0/${instance.phone_number_id}/messages`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${instance.access_token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

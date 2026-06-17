@@ -47,7 +47,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 1. Exchange code for token
     console.log(`[META] step 1: exchanging code`)
-    const tokenRes  = await fetch(`https://graph.facebook.com/v20.0/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&redirect_uri=${encodeURIComponent(redirectUri)}&code=${code}`)
+    const tokenRes  = await fetch(`https://graph.facebook.com/v21.0/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&redirect_uri=${encodeURIComponent(redirectUri)}&code=${code}`)
     const tokenData = await tokenRes.json()
     console.log(`[META] token result: ${JSON.stringify({ has_token: !!tokenData.access_token, error: tokenData.error?.message })}`)
     if (!tokenData.access_token) return res.redirect(`${appUrl}/dashboard/instances?error=${encodeURIComponent(tokenData.error?.message || 'token_exchange_failed')}`)
@@ -56,7 +56,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 2. Long-lived token
     try {
-      const llRes  = await fetch(`https://graph.facebook.com/v20.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${finalToken}`)
+      const llRes  = await fetch(`https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${finalToken}`)
       const llData = await llRes.json()
       if (llData.access_token) { finalToken = llData.access_token; console.log(`[META] got long-lived token`) }
     } catch {}
@@ -66,7 +66,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 3. If we have phoneNumberId from Embedded Signup, get phone details directly
     if (phoneNumberId) {
       try {
-        const phoneRes  = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}?fields=id,display_phone_number,verified_name&access_token=${finalToken}`)
+        const phoneRes  = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}?fields=id,display_phone_number,verified_name&access_token=${finalToken}`)
         const phoneData = await phoneRes.json()
         console.log(`[META] phone direct:`, JSON.stringify(phoneData).slice(0, 200))
         if (phoneData?.id) {
@@ -79,7 +79,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 4. If no phoneNumberId, try to get via WABA
     if (!phoneNumberId && wabaId) {
       try {
-        const phoneRes  = await fetch(`https://graph.facebook.com/v20.0/${wabaId}/phone_numbers?fields=id,display_phone_number,verified_name&access_token=${finalToken}`)
+        const phoneRes  = await fetch(`https://graph.facebook.com/v21.0/${wabaId}/phone_numbers?fields=id,display_phone_number,verified_name&access_token=${finalToken}`)
         const phoneData = await phoneRes.json()
         console.log(`[META] phones via WABA:`, JSON.stringify(phoneData).slice(0, 200))
         const first = phoneData?.data?.[0]
@@ -95,7 +95,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!wabaId) {
       // Try /me/whatsapp_business_accounts
       try {
-        const r = await fetch(`https://graph.facebook.com/v20.0/me/whatsapp_business_accounts?access_token=${finalToken}`)
+        const r = await fetch(`https://graph.facebook.com/v21.0/me/whatsapp_business_accounts?access_token=${finalToken}`)
         const d = await r.json()
         wabaId = d?.data?.[0]?.id || ''
         console.log(`[META] waba direct:`, wabaId)
@@ -104,11 +104,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Try via businesses
       if (!wabaId) {
         try {
-          const bizRes  = await fetch(`https://graph.facebook.com/v20.0/me/businesses?access_token=${finalToken}`)
+          const bizRes  = await fetch(`https://graph.facebook.com/v21.0/me/businesses?access_token=${finalToken}`)
           const bizData = await bizRes.json()
           const bizId   = bizData?.data?.[0]?.id || ''
           if (bizId) {
-            const wabaRes  = await fetch(`https://graph.facebook.com/v20.0/${bizId}/owned_whatsapp_business_accounts?access_token=${finalToken}`)
+            const wabaRes  = await fetch(`https://graph.facebook.com/v21.0/${bizId}/owned_whatsapp_business_accounts?access_token=${finalToken}`)
             const wabaData = await wabaRes.json()
             wabaId = wabaData?.data?.[0]?.id || ''
             console.log(`[META] wabaId via biz=${wabaId}`)
@@ -119,7 +119,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Get phone via WABA
       if (wabaId && !phoneNumberId) {
         try {
-          const phoneRes  = await fetch(`https://graph.facebook.com/v20.0/${wabaId}/phone_numbers?fields=id,display_phone_number,verified_name&access_token=${finalToken}`)
+          const phoneRes  = await fetch(`https://graph.facebook.com/v21.0/${wabaId}/phone_numbers?fields=id,display_phone_number,verified_name&access_token=${finalToken}`)
           const phoneData = await phoneRes.json()
           const first = phoneData?.data?.[0]
           if (first?.id) {
@@ -140,7 +140,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // automatically.
     if (wabaId) {
       try {
-        const subRes  = await fetch(`https://graph.facebook.com/v20.0/${wabaId}/subscribed_apps`, {
+        const subRes  = await fetch(`https://graph.facebook.com/v25.0/${wabaId}/subscribed_apps`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${finalToken}` },
         })

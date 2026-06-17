@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const WA_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v20.0'
+const WA_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v21.0'
 const WA_BASE_URL = `https://graph.facebook.com/${WA_API_VERSION}`
 
 export interface SendTextMessageParams {

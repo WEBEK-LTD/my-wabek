@@ -66,7 +66,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       let webhookWarning: string | undefined
       if (body.waba_id) {
         try {
-          const apiVer = process.env.WHATSAPP_API_VERSION || 'v20.0'
+          const apiVer = 'v25.0' // subscribed_apps requires v25.0 (v20/v21 return #200 Permissions error)
           const subRes = await fetch(`https://graph.facebook.com/${apiVer}/${body.waba_id}/subscribed_apps`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${body.access_token}` },
