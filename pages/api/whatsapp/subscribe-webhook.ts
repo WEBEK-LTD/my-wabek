@@ -26,10 +26,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'No WhatsApp Business Account ID (waba_id) on this instance. Reconnect via Embedded Signup.' })
   }
 
+  // Use App Access Token (APP_ID|APP_SECRET) instead of User Access Token.
+  // App tokens always have whatsapp_business_management permission without
+  // requiring user-level grants — this is the recommended approach for
+  // server-side WABA webhook subscriptions.
+  const appId     = process.env.META_APP_ID
+  const appSecret = process.env.META_APP_SECRET
+  const appToken  = appId && appSecret ? `${appId}|${appSecret}` : instance.access_token
+
   try {
     const r = await fetch(`https://graph.facebook.com/v19.0/${instance.waba_id}/subscribed_apps`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${instance.access_token}` },
+      headers: { Authorization: `Bearer ${appToken}` },
     })
     const data = await r.json()
 
