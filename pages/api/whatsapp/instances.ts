@@ -67,7 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (body.waba_id) {
         try {
           const appId  = process.env.META_APP_ID || ''
-          const subUrl = `https://graph.facebook.com/v19.0/${body.waba_id}/subscribed_apps${appId ? `?app_id=${appId}` : ''}`
+          const subUrl = `https://graph.facebook.com/v20.0/${body.waba_id}/subscribed_apps${appId ? `?app_id=${appId}` : ''}`
           const subRes = await fetch(subUrl, {
             method: 'POST',
             headers: { Authorization: `Bearer ${body.access_token}` },

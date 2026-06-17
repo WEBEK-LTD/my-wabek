@@ -30,7 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // subscribed_apps requires the user access token (not App Token).
     // Pass META_APP_ID as a query param to scope the subscription to our app.
     const appId = process.env.META_APP_ID || ''
-    const url   = `https://graph.facebook.com/v19.0/${instance.waba_id}/subscribed_apps${appId ? `?app_id=${appId}` : ''}`
+    const url   = `https://graph.facebook.com/v20.0/${instance.waba_id}/subscribed_apps${appId ? `?app_id=${appId}` : ''}`
     const r = await fetch(url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${instance.access_token}` },

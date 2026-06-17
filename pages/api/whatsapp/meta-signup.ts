@@ -68,13 +68,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
 
         // Exchange code — use empty redirect_uri to match FB.login behavior
-        const tokenRes  = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&code=${code}`)
+        const tokenRes  = await fetch(`https://graph.facebook.com/v20.0/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&code=${code}`)
         const tokenData = await tokenRes.json()
         if (!tokenData.access_token) return res.status(400).json({ error: tokenData.error?.message || 'token_exchange_failed' })
         finalToken = tokenData.access_token
 
         // Long-lived token
-        const llRes  = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${finalToken}`)
+        const llRes  = await fetch(`https://graph.facebook.com/v20.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${finalToken}`)
         const llData = await llRes.json()
         if (llData.access_token) finalToken = llData.access_token
       } catch (e: any) {
@@ -89,7 +89,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Get phone details
     let phoneNumber = '', displayNameFinal = display_name || 'WhatsApp Business'
     try {
-      const phoneRes  = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}?fields=id,display_phone_number,verified_name&access_token=${finalToken}`)
+      const phoneRes  = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}?fields=id,display_phone_number,verified_name&access_token=${finalToken}`)
       const phoneData = await phoneRes.json()
       phoneNumber       = phoneData.display_phone_number || ''
       displayNameFinal  = phoneData.verified_name || displayNameFinal
