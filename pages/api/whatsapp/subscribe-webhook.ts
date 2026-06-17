@@ -27,23 +27,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const appId  = process.env.META_APP_ID || ''
     const apiVer = process.env.WHATSAPP_API_VERSION || 'v20.0'
-    const url    = `https://graph.facebook.com/${apiVer}/${instance.waba_id}/subscribed_apps${appId ? `?app_id=${appId}` : ''}`
+    const url    = `https://graph.facebook.com/${apiVer}/${instance.waba_id}/subscribed_apps`
 
     console.log('[subscribe-webhook] REQUEST', JSON.stringify({
-      endpoint:   url,
+      endpoint:    url,
       api_version: apiVer,
-      waba_id:    instance.waba_id,
+      waba_id:     instance.waba_id,
       instance_id: instanceId,
       token_prefix: instance.access_token ? instance.access_token.slice(0, 20) + '...' : 'MISSING',
       token_length: instance.access_token?.length || 0,
-      app_id_env:  appId || 'NOT_SET',
     }))
 
     // Debug token via Meta Token Debugger
     try {
-      const debugRes  = await fetch(`https://graph.facebook.com/debug_token?input_token=${instance.access_token}&access_token=${appId}|${process.env.META_APP_SECRET || ''}`)
+      const metaAppId = process.env.META_APP_ID || ''
+      const debugRes  = await fetch(`https://graph.facebook.com/debug_token?input_token=${instance.access_token}&access_token=${metaAppId}|${process.env.META_APP_SECRET || ''}`)
       const debugData = await debugRes.json()
       console.log('[subscribe-webhook] TOKEN_DEBUG', JSON.stringify({
         app_id:      debugData?.data?.app_id,

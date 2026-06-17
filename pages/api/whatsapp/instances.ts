@@ -66,9 +66,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       let webhookWarning: string | undefined
       if (body.waba_id) {
         try {
-          const appId  = process.env.META_APP_ID || ''
-          const subUrl = `https://graph.facebook.com/v20.0/${body.waba_id}/subscribed_apps${appId ? `?app_id=${appId}` : ''}`
-          const subRes = await fetch(subUrl, {
+          const apiVer = process.env.WHATSAPP_API_VERSION || 'v20.0'
+          const subRes = await fetch(`https://graph.facebook.com/${apiVer}/${body.waba_id}/subscribed_apps`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${body.access_token}` },
           })
