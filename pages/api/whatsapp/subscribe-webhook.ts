@@ -27,21 +27,56 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // subscribed_apps requires the user access token (not App Token).
-    // Pass META_APP_ID as a query param to scope the subscription to our app.
-    const appId = process.env.META_APP_ID || ''
-    const url   = `https://graph.facebook.com/v20.0/${instance.waba_id}/subscribed_apps${appId ? `?app_id=${appId}` : ''}`
-    const r = await fetch(url, {
-      method: 'POST',
+    const appId  = process.env.META_APP_ID || ''
+    const apiVer = process.env.WHATSAPP_API_VERSION || 'v20.0'
+    const url    = `https://graph.facebook.com/${apiVer}/${instance.waba_id}/subscribed_apps${appId ? `?app_id=${appId}` : ''}`
+
+    console.log('[subscribe-webhook] REQUEST', JSON.stringify({
+      endpoint:   url,
+      api_version: apiVer,
+      waba_id:    instance.waba_id,
+      instance_id: instanceId,
+      token_prefix: instance.access_token ? instance.access_token.slice(0, 20) + '...' : 'MISSING',
+      token_length: instance.access_token?.length || 0,
+      app_id_env:  appId || 'NOT_SET',
+    }))
+
+    // Debug token via Meta Token Debugger
+    try {
+      const debugRes  = await fetch(`https://graph.facebook.com/debug_token?input_token=${instance.access_token}&access_token=${appId}|${process.env.META_APP_SECRET || ''}`)
+      const debugData = await debugRes.json()
+      console.log('[subscribe-webhook] TOKEN_DEBUG', JSON.stringify({
+        app_id:      debugData?.data?.app_id,
+        type:        debugData?.data?.type,
+        expires_at:  debugData?.data?.expires_at,
+        is_valid:    debugData?.data?.is_valid,
+        scopes:      debugData?.data?.scopes,
+        error:       debugData?.data?.error || debugData?.error,
+      }))
+    } catch (debugErr: any) {
+      console.log('[subscribe-webhook] TOKEN_DEBUG_FAILED', debugErr?.message)
+    }
+
+    const r    = await fetch(url, {
+      method:  'POST',
       headers: { Authorization: `Bearer ${instance.access_token}` },
     })
-    const data = await r.json()
+    const raw  = await r.text()
+    let data: any = {}
+    try { data = JSON.parse(raw) } catch {}
+
+    console.log('[subscribe-webhook] RESPONSE', JSON.stringify({
+      status:  r.status,
+      ok:      r.ok,
+      body:    raw.slice(0, 500),
+    }))
 
     if (data?.success) {
       return res.status(200).json({ success: true, message: 'Webhook subscription active. Incoming messages should now arrive.' })
     }
-    return res.status(502).json({ success: false, error: data?.error?.message || 'Subscription failed', raw: data })
+    return res.status(502).json({ success: false, error: data?.error?.message || 'Subscription failed', meta_error: data?.error, meta_status: r.status })
   } catch (err: any) {
-    return res.status(502).json({ success: false, error: err?.message || 'Request failed' })
+    console.error('[subscribe-webhook] EXCEPTION', err?.message, err?.stack)
+    return res.status(502).json({ success: false, error: err?.message || 'Request failed', stack: err?.stack?.slice(0, 300) })
   }
 }
