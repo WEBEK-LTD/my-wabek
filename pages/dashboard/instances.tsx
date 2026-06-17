@@ -521,8 +521,12 @@ export default function InstancesPage() {
                 <input {...register('waba_id', { required: true })} placeholder="987654321098765" className="input font-mono text-sm" />
               </div>
               <div>
-                <label className="label">Access Token * <span className="text-slate-500 font-normal">(System User token)</span></label>
+                <label className="label">Access Token * <span className="text-slate-500 font-normal">(System User token — permanent)</span></label>
                 <input {...register('access_token', { required: true })} type="password" placeholder="EAAx…" className="input font-mono text-sm" />
+                <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                  ⚠️ <strong>Must be a System User Token</strong> — the Temporary Token from Meta Developer Portal will NOT work for receiving incoming messages.<br/>
+                  <span className="mt-1 block">Get it from: <strong>Meta Business Suite → Settings → Users → System Users → Generate Token</strong> (select <code className="bg-amber-100 px-1 rounded">whatsapp_business_messaging</code> + <code className="bg-amber-100 px-1 rounded">whatsapp_business_management</code>)</span>
+                </div>
               </div>
               <div className="bg-[#F8FAFC] rounded-lg px-3 py-2 text-xs text-slate-400">
                 <strong className="text-slate-900">Webhook URL to set in Meta:</strong>
