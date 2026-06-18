@@ -32,8 +32,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (error) return res.status(500).json({ error: error.message })
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://waabek.com'
     const inviteUrl = `${appUrl}/auth/team-invite?token=${inviteToken}`
+
+    // Send invite email
+    try {
+      const { sendEmail, teamInviteEmail } = await import('@/lib/email')
+      const ownerInfo = await db.from('users').select('name, email').eq('id', user.userId).maybeSingle()
+      const html = teamInviteEmail(
+        ownerInfo?.data?.name || 'Your team',
+        ownerInfo?.data?.name || 'WABEK',
+        inviteUrl
+      )
+      await sendEmail({ to: email, subject: `You've been invited to join WABEK`, html })
+    } catch (emailErr: any) {
+      console.error('[team invite] email send failed:', emailErr?.message)
+      // Non-fatal — return invite URL anyway
+    }
 
     return res.status(201).json({ member: data, inviteUrl })
   }

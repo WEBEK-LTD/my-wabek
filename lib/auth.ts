@@ -13,6 +13,7 @@ const JWT_SECRET = new TextEncoder().encode(jwtSecretValue)
 
 export interface JWTPayload {
   userId: string
+  actualUserId?: string  // set when user is a sub-account (team member)
   email: string
   role: 'user' | 'admin'
   iat?: number
@@ -67,6 +68,18 @@ export async function requireAuth(
     res.status(401).json({ error: 'Invalid or expired token' })
     return null
   }
+
+  // If this user is a sub-account (team member), resolve their owner's ID
+  // so all API calls use the owner's data (instances, contacts, messages...).
+  try {
+    const { supabaseAdmin } = await import('./supabase')
+    const db = supabaseAdmin()
+    const { data: u } = await db.from('users').select('sub_account_of').eq('id', payload.userId).maybeSingle()
+    if (u?.sub_account_of) {
+      return { ...payload, userId: u.sub_account_of, actualUserId: payload.userId }
+    }
+  } catch {}
+
   return payload
 }
 

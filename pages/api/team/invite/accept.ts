@@ -15,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const passwordHash = await hashPassword(password)
   const { key: apiKey } = generateApiKey()
 
-  // Create user account
+  // Create user account linked to owner (sub_account_of = owner_id)
   const { data: user, error } = await db.from('users').insert({
     id: uuidv4(),
     email: invite.email.toLowerCase(),
@@ -25,6 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     api_key: apiKey,
     is_active: true,
     is_verified: true,
+    sub_account_of: invite.owner_id,
   }).select().single()
 
   if (error) {
