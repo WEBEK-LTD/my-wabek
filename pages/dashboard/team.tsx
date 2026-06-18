@@ -6,7 +6,6 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import { PlusIcon, TrashIcon, ClipboardIcon, UserGroupIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
-
 const ROLE_COLORS = {
   admin: 'badge-red',
   agent: 'badge-green',
@@ -21,6 +20,9 @@ const STATUS_COLORS = {
 
 export default function TeamPage() {
   const qc = useQueryClient()
+  const { data: meData } = useQuery('me', () => axios.get('/api/auth/me').then(r => r.data))
+  // A team member (sub-account) has actualUserId set — only owner can manage team
+  const isOwner = !meData?.user?.actualUserId
   const [showInvite, setShowInvite] = useState(false)
   const [form, setForm] = useState({ name: '', email: '', role: 'agent' })
   const [inviteUrl, setInviteUrl] = useState('')
@@ -135,6 +137,7 @@ export default function TeamPage() {
                 <div className="flex items-center gap-2">
                   <span className={ROLE_COLORS[member.role] || 'badge-gray'}>{member.role}</span>
                   <span className={STATUS_COLORS[member.status] || 'badge-gray'}>{member.status}</span>
+                  {isOwner && <>
                   <select value={member.role} onChange={e => updateMut.mutate({ id: member.id, role: e.target.value })}
                     className="input text-xs py-1 px-2 w-24">
                     <option value="agent">Agent</option>
@@ -145,6 +148,7 @@ export default function TeamPage() {
                     className="p-1.5 text-slate-500 hover:text-red-400">
                     <TrashIcon className="w-4 h-4" />
                   </button>
+                  </>}
                 </div>
               </div>
             ))}
