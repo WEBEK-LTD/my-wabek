@@ -41,6 +41,76 @@ function formatTime(d) {
   return format(date, 'MMM d')
 }
 
+function formatBytes(bytes) {
+  if (!bytes) return ''
+  const units = ['B', 'KB', 'MB', 'GB']
+  let i = 0
+  let n = bytes
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++ }
+  return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`
+}
+
+function docIconFor(mime, filename) {
+  const ext = (filename || '').split('.').pop()?.toLowerCase() || ''
+  if (mime?.includes('pdf') || ext === 'pdf') return '📄'
+  if (mime?.includes('word') || ['doc', 'docx'].includes(ext)) return '📝'
+  if (mime?.includes('sheet') || mime?.includes('excel') || ['xls', 'xlsx'].includes(ext)) return '📊'
+  if (mime?.includes('zip') || mime?.includes('compressed') || ['zip', 'rar', '7z'].includes(ext)) return '🗜️'
+  if (mime?.includes('presentation') || ['ppt', 'pptx'].includes(ext)) return '📑'
+  return '📎'
+}
+
+// Renders the media portion of a message bubble (image/video/audio/ptt/
+// document/sticker). Returns null for plain text — caller still renders
+// msg.content as a caption underneath when present. Fully isolated: any
+// unrecognized/missing media_url silently falls back to showing nothing
+// extra, the text content below still renders normally.
+function MediaBubbleContent({ msg }) {
+  if (!msg.media_url) return null
+
+  switch (msg.type) {
+    case 'image':
+      return (
+        <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
+          <img src={msg.media_url} alt="image" className="rounded-lg mb-1 max-w-64 max-h-64 object-cover" />
+        </a>
+      )
+    case 'sticker':
+      return <img src={msg.media_url} alt="sticker" className="w-32 h-32 mb-1" />
+    case 'video':
+      return (
+        <video src={msg.media_url} controls className="rounded-lg mb-1 max-w-64 max-h-64" />
+      )
+    case 'ptt':
+      return (
+        <div className="flex items-center gap-2 mb-1 min-w-[200px]">
+          <span className="text-lg">🎤</span>
+          <audio src={msg.media_url} controls className="h-9 max-w-[220px]" />
+        </div>
+      )
+    case 'audio':
+      return (
+        <div className="flex items-center gap-2 mb-1 min-w-[200px]">
+          <span className="text-lg">🎵</span>
+          <audio src={msg.media_url} controls className="h-9 max-w-[220px]" />
+        </div>
+      )
+    case 'document':
+      return (
+        <a href={msg.media_url} target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-2 mb-1 bg-black/5 rounded-lg px-3 py-2 hover:bg-black/10 transition-colors min-w-[200px]">
+          <span className="text-2xl flex-shrink-0">{docIconFor(msg.media_mime_type, msg.media_filename)}</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium truncate">{msg.media_filename || 'Document'}</p>
+            <p className="text-[10px] opacity-60">Open / Download</p>
+          </div>
+        </a>
+      )
+    default:
+      return null
+  }
+}
+
 function MessageBubble({ msg, showAvatar }) {
   const isOut = msg.direction === 'outbound'
   const statusIcon = {
@@ -64,10 +134,10 @@ function MessageBubble({ msg, showAvatar }) {
       {!isOut && !showAvatar && <div className="w-6 flex-shrink-0" />}
       <div className="max-w-[70%]">
         <div className={clsx('px-3 py-2 rounded-2xl text-sm', isOut ? 'bg-brand-600 text-white rounded-br-sm' : 'bg-[#F8FAFC] text-slate-800 rounded-bl-sm', msg._windowWarning && 'opacity-60')}>
-          {msg.type === 'image' && msg.media_url && (
-            <img src={msg.media_url} alt="image" className="rounded-lg mb-1 max-w-48" />
+          <MediaBubbleContent msg={msg} />
+          {msg.content && !(msg.media_url && /^\[(image|video|audio|document|sticker|ptt)\]$/.test(msg.content)) && (
+            <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
           )}
-          <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
           <div className={clsx('flex items-center gap-1 mt-1', isOut ? 'justify-end' : 'justify-start')}>
             {(msg.type === 'ai_reply' || msg.meta?.source === 'ai_assistant') && (
               <span className="text-[9px] text-purple-400 bg-purple-900/30 px-1.5 py-0.5 rounded-full">🧠 AI</span>
@@ -155,6 +225,9 @@ export default function ChatPage() {
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
+  const [attachment, setAttachment] = useState(null) // { file, previewUrl, type, caption }
+  const [uploadingAttachment, setUploadingAttachment] = useState(false)
+  const fileInputRef = useRef(null)
   const [loading, setLoading] = useState(true)
   const [searchQ, setSearchQ] = useState('')
   const [statusFilter, setStatusFilter] = useState('open')
@@ -365,6 +438,85 @@ export default function ChatPage() {
     } finally { setSending(false) }
   }
 
+  // ── Attachments (isolated from the text sendMessage flow above) ──────────
+  function mimeToWaType(mime) {
+    if (!mime) return 'document'
+    if (mime.startsWith('image/')) return 'image'
+    if (mime.startsWith('video/')) return 'video'
+    if (mime.startsWith('audio/')) return mime.includes('ogg') ? 'ptt' : 'audio'
+    return 'document'
+  }
+
+  const pickAttachment = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 16 * 1024 * 1024) { toast.error('File too large (max 16MB)'); return }
+    const previewUrl = file.type.startsWith('image/') || file.type.startsWith('video/')
+      ? URL.createObjectURL(file) : null
+    setAttachment({ file, previewUrl, type: mimeToWaType(file.type), caption: '' })
+    e.target.value = '' // allow picking the same file again later
+  }
+
+  const cancelAttachment = () => {
+    if (attachment?.previewUrl) URL.revokeObjectURL(attachment.previewUrl)
+    setAttachment(null)
+  }
+
+  const sendAttachment = async () => {
+    if (!attachment || !activeConv || uploadingAttachment) return
+    setUploadingAttachment(true)
+
+    try {
+      const instance = instances.find(i => i.id === selectedInstance) || instances[0]
+      if (!instance) { toast.error('No WhatsApp instance connected'); return }
+
+      // 1. Upload to our storage
+      const formData = new FormData()
+      formData.append('file', attachment.file)
+      const uploadResp = await axios.post('/api/whatsapp/chat-upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      const { url, mimeType, filename } = uploadResp.data
+
+      // Optimistic bubble
+      const tempMsg = {
+        id: 'temp-' + Date.now(), direction: 'outbound', content: attachment.caption,
+        status: 'sending', created_at: new Date().toISOString(),
+        type: attachment.type, media_url: url, media_mime_type: mimeType, media_filename: filename,
+      }
+      setMessages(prev => [...prev, tempMsg])
+      const sentCaption = attachment.caption
+      cancelAttachment()
+
+      // 2. Send via existing chat-send endpoint (media branch)
+      const sendResp = await axios.post('/api/whatsapp/chat-send', {
+        instance_id: instance.id,
+        to: activeConv.contacts?.phone,
+        text: sentCaption || undefined,
+        media_url: url,
+        media_type: attachment.type,
+        media_mime_type: mimeType,
+        media_filename: filename,
+        contact_id: activeConv.contacts?.id,
+      })
+
+      const waId = sendResp.data?.wa_message_id
+      setMessages(prev => prev.map(m => m.id === tempMsg.id ? { ...m, status: 'sent', wa_message_id: waId } : m))
+      setConversations(prev => prev.map(c =>
+        c.id === activeConv.id ? { ...c, last_message: { content: sentCaption || `[${attachment.type}]`, direction: 'outbound', created_at: new Date().toISOString() } } : c
+      ))
+    } catch (e: any) {
+      const data = e?.response?.data
+      if (data?.outside_window) {
+        setMessages(prev => prev.map(m => m.status === 'sending' ? { ...m, status: 'failed', _windowWarning: true } : m))
+        setWindowWarning('outside')
+      } else {
+        setMessages(prev => prev.map(m => m.status === 'sending' ? { ...m, status: 'failed' } : m))
+        toast.error(data?.error || 'Attachment send failed')
+      }
+    } finally { setUploadingAttachment(false) }
+  }
+
   const updateConversation = async (updates) => {
     if (!activeConv) return
     try {
@@ -525,7 +677,49 @@ export default function ChatPage() {
                     </div>
                   )}
 
-                  <div className="flex items-end gap-2">
+                  {/* Attachment preview */}
+                {attachment && (
+                  <div className="mb-2 bg-[#F8FAFC] border border-slate-200 rounded-xl p-3">
+                    <div className="flex items-start gap-3">
+                      {attachment.previewUrl && attachment.type === 'image' && (
+                        <img src={attachment.previewUrl} alt="preview" className="w-16 h-16 rounded-lg object-cover flex-shrink-0" />
+                      )}
+                      {attachment.previewUrl && attachment.type === 'video' && (
+                        <video src={attachment.previewUrl} className="w-16 h-16 rounded-lg object-cover flex-shrink-0" />
+                      )}
+                      {!attachment.previewUrl && (
+                        <div className="w-16 h-16 rounded-lg bg-slate-200 flex items-center justify-center text-2xl flex-shrink-0">
+                          {attachment.type === 'audio' || attachment.type === 'ptt' ? '🎵' : '📎'}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-900 truncate">{attachment.file.name}</p>
+                        <p className="text-xs text-slate-500">{(attachment.file.size / 1024).toFixed(0)} KB</p>
+                        <input
+                          value={attachment.caption}
+                          onChange={e => setAttachment(a => ({ ...a, caption: e.target.value }))}
+                          placeholder="Add a caption (optional)…"
+                          className="mt-1.5 w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-brand-700"
+                        />
+                      </div>
+                      <button onClick={cancelAttachment} className="p-1 text-slate-400 hover:text-slate-900 flex-shrink-0">
+                        <XMarkIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <button onClick={sendAttachment} disabled={uploadingAttachment}
+                      className="btn-primary text-xs w-full justify-center mt-2 py-2">
+                      {uploadingAttachment ? <><ArrowPathIcon className="w-4 h-4 animate-spin" /> Sending…</> : <>📤 Send {attachment.type}</>}
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex items-end gap-2">
+                    <input ref={fileInputRef} type="file" className="hidden" onChange={pickAttachment}
+                      accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.ppt,.pptx" />
+                    <button onClick={() => fileInputRef.current?.click()}
+                      className="p-2 text-slate-400 hover:text-slate-900 flex-shrink-0" title="Attach file">
+                      <PaperClipIcon className="w-5 h-5" />
+                    </button>
                     <button onClick={() => { setShowEmoji(v => !v); setShowQuickReplies(false) }}
                       className="p-2 text-slate-400 hover:text-slate-900 flex-shrink-0">
                       <FaceSmileIcon className="w-5 h-5" />

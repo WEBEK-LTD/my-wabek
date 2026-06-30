@@ -23,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .eq('user_id', user.userId)
       .order('connected_at', { ascending: false })
 
-    return res.status(200).json({ user: { ...data, wix_instance_id: wixLinks?.[0]?.wix_instance_id || null, actualUserId: user.actualUserId || null } })
+    return res.status(200).json({ user: { ...data, wix_instance_id: wixLinks?.[0]?.wix_instance_id || null } })
   }
 
   if (req.method === 'POST') {

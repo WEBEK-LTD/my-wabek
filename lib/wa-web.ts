@@ -82,3 +82,35 @@ export async function sendWAWebMessage(params: { instanceId: string; to: string;
   const data = await callWAServer(`/instance/${params.instanceId}/send`, { to: params.to, text: params.text }) as { messageId: string }
   return data
 }
+
+// Send media (image/video/audio/document) via the Baileys server.
+// Uses a NEW route (/instance/:id/send-media) on the same Railway server,
+// following the exact same callWAServer() pattern as the existing /send
+// and /qr routes — does not modify or affect them in any way.
+//
+// NOTE: if this route doesn't exist yet on the Railway server, it needs
+// to be added there (see docs/baileys-server.md for the expected shape:
+// POST /instance/:id/send-media { to, mediaUrl, mediaType, caption?, filename? }
+// using sock.sendMessage(jid, { image/video/audio/document: { url }, caption, ... })).
+export async function sendWAWebMedia(params: {
+  instanceId: string
+  to: string
+  mediaUrl: string
+  mediaType: string // 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'ptt'
+  caption?: string
+  filename?: string
+}): Promise<{ messageId?: string; error?: string }> {
+  try {
+    const data = await callWAServer(`/instance/${params.instanceId}/send-media`, {
+      to: params.to,
+      mediaUrl: params.mediaUrl,
+      mediaType: params.mediaType,
+      caption: params.caption,
+      filename: params.filename,
+    }) as { messageId: string }
+    return { messageId: data.messageId }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { error: msg }
+  }
+}

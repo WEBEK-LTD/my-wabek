@@ -1,8 +1,9 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
-import { verifyWebhook, parseWebhookPayload } from '@/lib/whatsapp'
+import { verifyWebhook, parseWebhookPayload, fetchInboundMedia } from '@/lib/whatsapp'
 import { sendTextMessage } from '@/lib/whatsapp'
 import { sendWAWebMessage } from '@/lib/wa-web'
+import { uploadMediaBuffer, mimeToMessageType } from '@/lib/media-storage'
 import { notifyNewMessage } from '@/lib/notifications'
 import { executeAutomationFlow } from '@/lib/automation-engine'
 import { processChatbotMessage } from '@/lib/chatbot-engine'
@@ -57,11 +58,49 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       const content = msg.text || `[${msg.type}]`
+
+      // ── Inbound media (isolated — never blocks text message saving) ──────
+      // Meta only gives us a media `id` in the webhook payload, with a
+      // signed URL that expires in minutes. We must fetch + re-host it on
+      // our own storage immediately. Any failure here falls back silently
+      // to the existing "[type]" placeholder text behavior.
+      let mediaUrl: string | null = null
+      let mediaMimeType: string | null = null
+      let mediaFilename: string | null = null
+      let resolvedType: string = msg.type
+
+      const mediaObj = (msg.image || msg.document || msg.audio || msg.video || msg.sticker) as
+        { id?: string; mime_type?: string; filename?: string; voice?: boolean } | undefined
+
+      if (mediaObj?.id) {
+        try {
+          const fetched = await fetchInboundMedia(mediaObj.id, instance.access_token)
+          if (fetched) {
+            const uploaded = await uploadMediaBuffer(fetched.buffer, {
+              userId: instance.user_id,
+              mimeType: fetched.mimeType,
+              filename: mediaObj.filename,
+            })
+            if (uploaded) {
+              mediaUrl = uploaded.url
+              mediaMimeType = fetched.mimeType
+              mediaFilename = mediaObj.filename || null
+              resolvedType = mimeToMessageType(fetched.mimeType, !!mediaObj.voice)
+            }
+          }
+        } catch (mediaErr) {
+          console.error(`[WEBHOOK] media fetch/upload failed (non-fatal) wa_message_id=${msg.messageId}:`, mediaErr instanceof Error ? mediaErr.message : mediaErr)
+        }
+      }
+
       await db.from('messages').insert({
         id: uuidv4(), user_id: instance.user_id, instance_id: instance.id, contact_id: contactId,
         wa_message_id: msg.messageId, direction: 'inbound',
-        type: msg.type as 'text' | 'image' | 'document' | 'audio' | 'video',
+        type: resolvedType as 'text' | 'image' | 'document' | 'audio' | 'video' | 'sticker' | 'ptt',
         content, status: 'delivered',
+        media_url: mediaUrl,
+        media_mime_type: mediaMimeType,
+        media_filename: mediaFilename,
       })
 
       // Notification for new message

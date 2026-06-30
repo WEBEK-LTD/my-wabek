@@ -124,6 +124,38 @@ export async function markMessageAsRead(
   })
 }
 
+// ── Inbound media (Cloud API) ──────────────────────────────────────────────
+// Meta inbound messages only include a `media.id`, not a usable URL.
+// Step 1: GET /{media-id} → returns a short-lived (a few minutes) signed URL.
+// Step 2: download the bytes from that URL using the same access token.
+// The caller is responsible for re-uploading the bytes to permanent
+// storage before the signed URL expires.
+export async function fetchInboundMedia(
+  mediaId: string,
+  accessToken: string
+): Promise<{ buffer: Buffer; mimeType: string; sizeBytes: number } | null> {
+  try {
+    const client = waAxios(accessToken)
+    const { data: meta } = await client.get(`/${mediaId}`)
+    const url = meta?.url as string | undefined
+    if (!url) return null
+
+    const fileRes = await axios.get(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      responseType: 'arraybuffer',
+      timeout: 30000,
+    })
+    return {
+      buffer: Buffer.from(fileRes.data),
+      mimeType: meta?.mime_type || fileRes.headers['content-type'] || 'application/octet-stream',
+      sizeBytes: Number(meta?.file_size) || fileRes.data.byteLength,
+    }
+  } catch (err) {
+    console.error('[whatsapp] fetchInboundMedia failed:', err instanceof Error ? err.message : err)
+    return null
+  }
+}
+
 export async function getPhoneNumberInfo(
   phoneNumberId: string,
   accessToken: string
@@ -192,6 +224,7 @@ export function parseWebhookPayload(body: unknown): {
           document: msg.document,
           audio: msg.audio,
           video: msg.video,
+          sticker: msg.sticker,
           contactName: value?.contacts?.[0]?.profile?.name,
         })
       }
@@ -224,6 +257,7 @@ export interface WebhookMessage {
   document?: unknown
   audio?: unknown
   video?: unknown
+  sticker?: unknown
   contactName?: string
 }
 

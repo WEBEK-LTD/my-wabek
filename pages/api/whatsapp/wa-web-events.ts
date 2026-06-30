@@ -89,7 +89,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           id: uuidv4(), user_id: instance.user_id, instance_id: instanceId, contact_id: contactId,
           wa_message_id: data.messageId, direction: 'inbound',
           type: data.type || 'text', content,
-          media_url: data.mediaUrl || null, status: 'delivered',
+          media_url: data.mediaUrl || null,
+          media_mime_type: data.mimeType || data.mimetype || null,
+          media_filename: data.filename || null,
+          status: 'delivered',
         })
 
         // Notification
