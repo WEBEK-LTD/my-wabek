@@ -1,30 +1,30 @@
 /**
- * WABEK Baileys Server v6 — Supabase Session Storage
+ * WABEK Baileys Server v7
  *
- * Sessions are stored in Supabase (wa_sessions table) instead of
- * Railway's ephemeral disk. This means sessions survive Railway
- * restarts and deploys without needing a Persistent Volume.
+ * Session strategy:
+ * - Primary:  useMultiFileAuthState on disk (/app/sessions/) — same as v3
+ * - Backup:   After every creds.update, mirror to Supabase wa_sessions table
+ * - Restore:  On startup, if disk file missing but Supabase has creds, restore from Supabase first
  *
- * Required environment variables:
- *   SERVER_SECRET         — shared secret for API auth
- *   WABEK_EVENTS_URL      — WABEK webhook endpoint
- *   WABEK_EVENTS_SECRET   — secret for WABEK webhook
- *   SUPABASE_URL          — Supabase project URL
- *   SUPABASE_SERVICE_KEY  — Supabase service role key
+ * This means:
+ * - Railway restart (disk survives): restore from disk instantly ✅
+ * - Railway redeploy (disk wiped):   restore from Supabase backup ✅
+ * - First QR scan:                   saves to both disk and Supabase ✅
  */
 
-const express  = require('express')
+const express = require('express')
 const {
   default: makeWASocket,
   DisconnectReason,
+  useMultiFileAuthState,
   fetchLatestBaileysVersion,
   downloadMediaMessage,
-  initAuthCreds,
-  BufferJSON,
 } = require('@whiskeysockets/baileys')
-const { Boom }  = require('@hapi/boom')
-const QRCode    = require('qrcode')
-const pino      = require('pino')
+const { Boom } = require('@hapi/boom')
+const QRCode   = require('qrcode')
+const fs       = require('fs')
+const path     = require('path')
+const pino     = require('pino')
 
 const app = express()
 app.use(express.json({ limit: '50mb' }))
@@ -36,107 +36,22 @@ const WABEK_EVENTS_SECRET = process.env.WABEK_EVENTS_SECRET || SERVER_SECRET
 const SUPABASE_URL        = process.env.SUPABASE_URL
 const SUPABASE_KEY        = process.env.SUPABASE_SERVICE_KEY
 
-const logger   = pino({ level: 'silent' })
-const sessions = new Map()
-
-// ─── Supabase helper ──────────────────────────────────────
-async function sbFetch(path, opts = {}) {
-  const url = `${SUPABASE_URL}/rest/v1${path}`
-  const res  = await fetch(url, {
-    ...opts,
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-      'Prefer': opts.prefer || '',
-      ...(opts.headers || {}),
-    },
-  })
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`Supabase ${path} ${res.status}: ${body}`)
-  }
-  const text = await res.text()
-  return text ? JSON.parse(text) : null
-}
-
-// ─── Supabase Auth State ───────────────────────────────────
-// Replaces useMultiFileAuthState — stores creds + keys in Supabase
-async function useSupabaseAuthState(instanceId) {
-  // Load existing session
-  let row = null
-  try {
-    const rows = await sbFetch(`/wa_sessions?instance_id=eq.${encodeURIComponent(instanceId)}&select=creds,keys`)
-    row = rows?.[0] || null
-  } catch (e) {
-    console.error(`[${instanceId}] load session error:`, e.message)
-  }
-
-  let creds = row?.creds ? JSON.parse(JSON.stringify(row.creds), BufferJSON.reviver) : initAuthCreds()
-  let keys  = row?.keys  ? JSON.parse(JSON.stringify(row.keys),  BufferJSON.reviver) : {}
-
-  const saveState = async () => {
-    try {
-      await sbFetch('/wa_sessions', {
-        method: 'POST',
-        prefer: 'resolution=merge-duplicates',
-        headers: { 'Prefer': 'resolution=merge-duplicates' },
-        body: JSON.stringify({
-          instance_id: instanceId,
-          creds:       JSON.parse(JSON.stringify(creds, BufferJSON.replacer)),
-          keys:        JSON.parse(JSON.stringify(keys,  BufferJSON.replacer)),
-          updated_at:  new Date().toISOString(),
-        }),
-      })
-    } catch (e) {
-      console.error(`[${instanceId}] save session error:`, e.message)
-    }
-  }
-
-  return {
-    state: {
-      creds,
-      keys: {
-        get: (type, ids) => {
-          const data = {}
-          for (const id of ids) {
-            const val = keys[`${type}-${id}`]
-            if (val) data[id] = val
-          }
-          return data
-        },
-        set: async (data) => {
-          for (const category of Object.keys(data)) {
-            for (const id of Object.keys(data[category])) {
-              const val = data[category][id]
-              if (val) keys[`${category}-${id}`] = val
-              else delete keys[`${category}-${id}`]
-            }
-          }
-          await saveState()
-        },
-      },
-    },
-    saveCreds: saveState,
-    deleteSession: async () => {
-      try {
-        await sbFetch(`/wa_sessions?instance_id=eq.${encodeURIComponent(instanceId)}`, { method: 'DELETE' })
-      } catch {}
-    },
-  }
-}
+const logger       = pino({ level: 'silent' })
+const sessions     = new Map()
+const SESSIONS_DIR = path.join(__dirname, 'sessions')
+fs.mkdirSync(SESSIONS_DIR, { recursive: true })
 
 // ─── Auth middleware ───────────────────────────────────────
 function auth(req, res, next) {
-  const secret = req.headers['x-secret'] || req.query.secret
-  if (secret !== SERVER_SECRET) return res.status(403).json({ error: 'Forbidden' })
+  const s = req.headers['x-secret'] || req.query.secret
+  if (s !== SERVER_SECRET) return res.status(403).json({ error: 'Forbidden' })
   next()
 }
 
 // ─── Notify WABEK ─────────────────────────────────────────
 async function notifyWabek(event, instanceId, data) {
   if (!WABEK_EVENTS_URL) {
-    console.log(`[${instanceId}] ${event} (no URL):`, JSON.stringify(data).slice(0, 150))
+    console.log(`[${instanceId}] ${event}:`, JSON.stringify(data).slice(0, 150))
     return
   }
   try {
@@ -151,8 +66,65 @@ async function notifyWabek(event, instanceId, data) {
     } else {
       console.log(`[${instanceId}] notify ${event} → ${r.status}`)
     }
+  } catch (e) { console.error(`[${instanceId}] notify error:`, e.message) }
+}
+
+// ─── Supabase session backup (fire-and-forget) ─────────────
+async function backupToSupabase(instanceId) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return
+  try {
+    const authDir = path.join(SESSIONS_DIR, instanceId)
+    const files = {}
+    if (fs.existsSync(authDir)) {
+      for (const f of fs.readdirSync(authDir)) {
+        files[f] = fs.readFileSync(path.join(authDir, f), 'utf8')
+      }
+    }
+    if (!Object.keys(files).length) return
+
+    await fetch(`${SUPABASE_URL}/rest/v1/wa_sessions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Prefer': 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({
+        instance_id: instanceId,
+        creds: files,
+        keys: {},
+        updated_at: new Date().toISOString(),
+      }),
+    })
   } catch (e) {
-    console.error(`[${instanceId}] notify error:`, e.message)
+    console.error(`[${instanceId}] Supabase backup error:`, e.message)
+  }
+}
+
+// ─── Restore from Supabase to disk if disk is empty ────────
+async function restoreFromSupabase(instanceId) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return false
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/wa_sessions?instance_id=eq.${encodeURIComponent(instanceId)}&select=creds`,
+      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
+    )
+    if (!res.ok) return false
+    const rows = await res.json()
+    const files = rows?.[0]?.creds
+    if (!files || !Object.keys(files).length) return false
+
+    const authDir = path.join(SESSIONS_DIR, instanceId)
+    fs.mkdirSync(authDir, { recursive: true })
+    for (const [name, content] of Object.entries(files)) {
+      fs.writeFileSync(path.join(authDir, name), content, 'utf8')
+    }
+    console.log(`[${instanceId}] Restored ${Object.keys(files).length} file(s) from Supabase`)
+    return true
+  } catch (e) {
+    console.error(`[${instanceId}] Supabase restore error:`, e.message)
+    return false
   }
 }
 
@@ -163,17 +135,15 @@ function toJid(to) {
   return `${to.replace(/\D/g, '')}@s.whatsapp.net`
 }
 
-// ─── Media payload builder ─────────────────────────────────
+// ─── Media payload ─────────────────────────────────────────
 function buildMediaPayload(mediaType, mediaUrl, caption, filename, mimetype) {
   switch (mediaType) {
-    case 'image':    return { image:    { url: mediaUrl }, caption: caption || '', mimetype: mimetype || 'image/jpeg' }
-    case 'video':    return { video:    { url: mediaUrl }, caption: caption || '', mimetype: mimetype || 'video/mp4' }
-    case 'audio':    return { audio:    { url: mediaUrl }, mimetype: mimetype || 'audio/mpeg', ptt: false }
-    case 'ptt':      return { audio:    { url: mediaUrl }, mimetype: mimetype || 'audio/ogg; codecs=opus', ptt: true }
-    case 'sticker':  return { sticker:  { url: mediaUrl }, mimetype: mimetype || 'image/webp' }
-    case 'document':
-    default:
-      return { document: { url: mediaUrl }, mimetype: mimetype || 'application/octet-stream', fileName: filename || 'file', caption: caption || '' }
+    case 'image':   return { image:    { url: mediaUrl }, caption: caption || '', mimetype: mimetype || 'image/jpeg' }
+    case 'video':   return { video:    { url: mediaUrl }, caption: caption || '', mimetype: mimetype || 'video/mp4' }
+    case 'audio':   return { audio:    { url: mediaUrl }, mimetype: mimetype || 'audio/mpeg', ptt: false }
+    case 'ptt':     return { audio:    { url: mediaUrl }, mimetype: mimetype || 'audio/ogg; codecs=opus', ptt: true }
+    case 'sticker': return { sticker:  { url: mediaUrl }, mimetype: mimetype || 'image/webp' }
+    default:        return { document: { url: mediaUrl }, mimetype: mimetype || 'application/octet-stream', fileName: filename || 'file', caption: caption || '' }
   }
 }
 
@@ -184,27 +154,40 @@ async function downloadInboundMedia(msg, msgType) {
     if (!buffer?.length) return null
     const m = msg.message || {}
     const mimes = {
-      image: m.imageMessage?.mimetype || 'image/jpeg', video: m.videoMessage?.mimetype || 'video/mp4',
-      audio: m.audioMessage?.mimetype || 'audio/ogg', ptt: m.audioMessage?.mimetype || 'audio/ogg; codecs=opus',
-      document: m.documentMessage?.mimetype || 'application/octet-stream', sticker: m.stickerMessage?.mimetype || 'image/webp',
+      image: m.imageMessage?.mimetype || 'image/jpeg',
+      video: m.videoMessage?.mimetype || 'video/mp4',
+      audio: m.audioMessage?.mimetype || 'audio/ogg',
+      ptt:   m.audioMessage?.mimetype || 'audio/ogg; codecs=opus',
+      document: m.documentMessage?.mimetype || 'application/octet-stream',
+      sticker: m.stickerMessage?.mimetype || 'image/webp',
     }
-    return { base64: buffer.toString('base64'), mimeType: mimes[msgType] || 'application/octet-stream', filename: m.documentMessage?.fileName || null }
+    return {
+      base64: buffer.toString('base64'),
+      mimeType: mimes[msgType] || 'application/octet-stream',
+      filename: m.documentMessage?.fileName || null,
+    }
   } catch (e) {
     console.error('[downloadInboundMedia] failed:', e.message)
     return null
   }
 }
 
-// ─── Create session ────────────────────────────────────────
+// ─── Create session — same as v3 ──────────────────────────
 async function createSession(instanceId) {
-  console.log(`[${instanceId}] Starting session (Supabase storage)...`)
+  console.log(`[${instanceId}] Creating session...`)
 
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_KEY are required for session storage')
+  const authDir = path.join(SESSIONS_DIR, instanceId)
+
+  // If no local creds, try to restore from Supabase first
+  const credsFile = path.join(authDir, 'creds.json')
+  if (!fs.existsSync(credsFile)) {
+    console.log(`[${instanceId}] No local creds, trying Supabase restore...`)
+    await restoreFromSupabase(instanceId)
   }
 
-  const { state, saveCreds, deleteSession } = await useSupabaseAuthState(instanceId)
-  const { version } = await fetchLatestBaileysVersion()
+  fs.mkdirSync(authDir, { recursive: true })
+  const { state, saveCreds } = await useMultiFileAuthState(authDir)
+  const { version }          = await fetchLatestBaileysVersion()
 
   const sock = makeWASocket({
     version, auth: state, logger,
@@ -218,7 +201,11 @@ async function createSession(instanceId) {
   const session = { sock, qr: null, connected: false, phoneNumber: null }
   sessions.set(instanceId, session)
 
-  sock.ev.on('creds.update', saveCreds)
+  // Save to disk AND backup to Supabase on every creds update
+  sock.ev.on('creds.update', async () => {
+    await saveCreds()
+    backupToSupabase(instanceId)  // fire-and-forget, non-blocking
+  })
 
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
@@ -248,10 +235,17 @@ async function createSession(instanceId) {
       console.log(`[${instanceId}] Disconnected. Code: ${statusCode}, Reconnect: ${shouldReconnect}`)
       await notifyWabek('disconnected', instanceId, { shouldReconnect, statusCode, loggedOut: !shouldReconnect })
       if (shouldReconnect) {
-        setTimeout(() => createSession(instanceId).catch(e => console.error(`[${instanceId}] reconnect failed:`, e.message)), 5000)
+        setTimeout(() => createSession(instanceId).catch(e => console.error(`[${instanceId}] reconnect error:`, e.message)), 5000)
       } else {
         sessions.delete(instanceId)
-        await deleteSession()
+        try { fs.rmSync(authDir, { recursive: true, force: true }) } catch {}
+        // Also delete from Supabase
+        if (SUPABASE_URL && SUPABASE_KEY) {
+          fetch(`${SUPABASE_URL}/rest/v1/wa_sessions?instance_id=eq.${encodeURIComponent(instanceId)}`, {
+            method: 'DELETE',
+            headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` },
+          }).catch(() => {})
+        }
       }
     }
   })
@@ -269,14 +263,18 @@ async function createSession(instanceId) {
         : m.audioMessage && isPtt ? 'ptt' : m.audioMessage ? 'audio'
         : m.documentMessage ? 'document' : m.stickerMessage ? 'sticker' : 'text'
 
-      const text = m.conversation || m.extendedTextMessage?.text || m.imageMessage?.caption
-        || m.videoMessage?.caption || m.documentMessage?.caption || ''
+      const text = m.conversation || m.extendedTextMessage?.text
+        || m.imageMessage?.caption || m.videoMessage?.caption || m.documentMessage?.caption || ''
 
       let mediaUrl = null, mimeType = null, filename = null
       if (msgType !== 'text') {
         try {
           const media = await downloadInboundMedia(msg, msgType)
-          if (media) { mediaUrl = `data:${media.mimeType};base64,${media.base64}`; mimeType = media.mimeType; filename = media.filename }
+          if (media) {
+            mediaUrl = `data:${media.mimeType};base64,${media.base64}`
+            mimeType = media.mimeType
+            filename = media.filename
+          }
         } catch (e) { console.error(`[${instanceId}] media error:`, e.message) }
       }
 
@@ -289,36 +287,47 @@ async function createSession(instanceId) {
   })
 
   sock.ev.on('messages.update', async (updates) => {
-    for (const update of updates) {
-      if (!update.update?.status) continue
+    for (const u of updates) {
+      if (!u.update?.status) continue
       const statusMap = { 1: 'sent', 2: 'delivered', 3: 'read', 4: 'played' }
-      await notifyWabek('message_status', instanceId, { messageId: update.key.id, status: statusMap[update.update.status] || 'sent' })
+      await notifyWabek('message_status', instanceId, { messageId: u.key.id, status: statusMap[u.update.status] || 'sent' })
     }
   })
 
   return session
 }
 
-// ─── Restore all sessions from Supabase on startup ────────
+// ─── Restore sessions on startup ──────────────────────────
 async function restoreSessions() {
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    console.warn('[startup] ⚠️  SUPABASE_URL/SUPABASE_SERVICE_KEY not set — cannot restore sessions')
-    return
+  // 1. Try disk first (fast, works after restart)
+  const diskIds = fs.existsSync(SESSIONS_DIR)
+    ? fs.readdirSync(SESSIONS_DIR).filter(d => fs.existsSync(path.join(SESSIONS_DIR, d, 'creds.json')))
+    : []
+
+  // 2. Try Supabase (works after redeploy when disk is wiped)
+  let supabaseIds = []
+  if (SUPABASE_URL && SUPABASE_KEY) {
+    try {
+      const res  = await fetch(`${SUPABASE_URL}/rest/v1/wa_sessions?select=instance_id`, {
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` },
+      })
+      const rows = await res.json()
+      supabaseIds = (rows || []).map(r => r.instance_id)
+    } catch (e) { console.error('[startup] Supabase session list error:', e.message) }
   }
-  try {
-    const rows = await sbFetch('/wa_sessions?select=instance_id&order=updated_at.desc')
-    console.log(`[startup] Found ${rows?.length || 0} session(s) in Supabase: ${(rows || []).map(r => r.instance_id).join(', ')}`)
-    for (const row of rows || []) {
-      try {
-        await createSession(row.instance_id)
-        console.log(`[startup] ✅ Restored: ${row.instance_id}`)
-        await new Promise(r => setTimeout(r, 1000))
-      } catch (e) {
-        console.error(`[startup] ❌ Failed to restore ${row.instance_id}:`, e.message)
-      }
+
+  const allIds = [...new Set([...diskIds, ...supabaseIds])]
+  console.log(`[startup] Sessions — disk: [${diskIds.join(',')}] supabase: [${supabaseIds.join(',')}]`)
+  console.log(`[startup] Restoring ${allIds.length} session(s): [${allIds.join(',')}]`)
+
+  for (const instanceId of allIds) {
+    try {
+      await createSession(instanceId)
+      console.log(`[startup] ✅ Restored: ${instanceId}`)
+      await new Promise(r => setTimeout(r, 1000))
+    } catch (e) {
+      console.error(`[startup] ❌ Failed ${instanceId}:`, e.message)
     }
-  } catch (e) {
-    console.error('[startup] restore error:', e.message)
   }
 }
 
@@ -328,11 +337,10 @@ app.get('/health', (req, res) => {
   const list = [...sessions.entries()].map(([id, s]) => ({ id, connected: s.connected, phoneNumber: s.phoneNumber, hasQR: !!s.qr }))
   res.json({
     ok: true, sessions: sessions.size, instances: list,
-    storage: SUPABASE_URL ? '✅ Supabase' : '❌ NOT CONFIGURED',
     env: {
-      WABEK_EVENTS_URL:   WABEK_EVENTS_URL   || '⚠️  NOT SET',
-      SUPABASE_URL:       SUPABASE_URL        ? '✅ set' : '⚠️  NOT SET',
-      SUPABASE_KEY:       SUPABASE_KEY        ? '✅ set' : '⚠️  NOT SET',
+      WABEK_EVENTS_URL:  WABEK_EVENTS_URL || '⚠️ NOT SET',
+      SUPABASE_URL:      SUPABASE_URL     ? '✅ set' : '⚠️ NOT SET',
+      SUPABASE_KEY:      SUPABASE_KEY     ? '✅ set' : '⚠️ NOT SET',
     },
   })
 })
@@ -352,14 +360,12 @@ app.post('/instance/:id/send', auth, async (req, res) => {
   const { id } = req.params
   const { to, text, mediaUrl, mediaType, caption, filename, mimetype } = req.body
   if (!to || (!text && !mediaUrl)) return res.status(400).json({ error: 'to and (text or mediaUrl) required' })
-
   const s = sessions.get(id)
-  console.log(`[${id}] /send to=${to} type=${mediaType || 'text'} loaded_sessions=[${[...sessions.keys()].join(',')}]`)
+  console.log(`[${id}] /send to=${to} sessions=[${[...sessions.keys()].join(',')}]`)
   if (!s) return res.status(404).json({ error: 'Instance not found', loaded: sessions.size })
   if (!s.connected) return res.status(400).json({ error: 'Instance not connected' })
-
   try {
-    const jid = toJid(to)
+    const jid    = toJid(to)
     const result = mediaUrl && mediaType
       ? await s.sock.sendMessage(jid, buildMediaPayload(mediaType, mediaUrl, caption || text || '', filename, mimetype))
       : await s.sock.sendMessage(jid, { text })
@@ -374,11 +380,9 @@ app.post('/instance/:id/send-media', auth, async (req, res) => {
   const { id } = req.params
   const { to, mediaUrl, mediaType, caption, filename, mimetype } = req.body
   if (!to || !mediaUrl || !mediaType) return res.status(400).json({ error: 'to, mediaUrl, mediaType required' })
-
   const s = sessions.get(id)
   if (!s) return res.status(404).json({ error: 'Instance not found' })
   if (!s.connected) return res.status(400).json({ error: 'Instance not connected' })
-
   try {
     const result = await s.sock.sendMessage(toJid(to), buildMediaPayload(mediaType, mediaUrl, caption || '', filename, mimetype))
     res.json({ success: true, messageId: result?.key?.id })
@@ -390,12 +394,13 @@ app.post('/instance/:id/send-media', auth, async (req, res) => {
 
 app.post('/instance/:id/restore', auth, async (req, res) => {
   const { id } = req.params
-  if (sessions.has(id) && sessions.get(id).connected) {
+  if (sessions.has(id) && sessions.get(id).connected)
     return res.json({ ok: true, status: 'already_connected', phoneNumber: sessions.get(id).phoneNumber })
-  }
+  const credsFile = path.join(SESSIONS_DIR, id, 'creds.json')
+  const hasDisk   = fs.existsSync(credsFile)
+  const hasSupa   = await restoreFromSupabase(id)
+  if (!hasDisk && !hasSupa) return res.status(404).json({ error: 'No saved credentials', needsQR: true })
   try {
-    const rows = await sbFetch(`/wa_sessions?instance_id=eq.${encodeURIComponent(id)}&select=instance_id`)
-    if (!rows?.length) return res.status(404).json({ error: 'No saved credentials', needsQR: true })
     await createSession(id)
     for (let i = 0; i < 30; i++) {
       await new Promise(r => setTimeout(r, 500))
@@ -404,9 +409,7 @@ app.post('/instance/:id/restore', auth, async (req, res) => {
     }
     const s = sessions.get(id)
     return res.json({ ok: true, status: s?.qr ? 'qr_pending' : 'connecting' })
-  } catch (e) {
-    res.status(500).json({ error: e.message })
-  }
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 app.get('/instance/:id/status', auth, (req, res) => {
@@ -420,7 +423,12 @@ app.post('/instance/:id/disconnect', auth, async (req, res) => {
   const s = sessions.get(id)
   if (s?.sock) { try { await s.sock.logout() } catch {} try { s.sock.end() } catch {} }
   sessions.delete(id)
-  try { await sbFetch(`/wa_sessions?instance_id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' }) } catch {}
+  try { fs.rmSync(path.join(SESSIONS_DIR, id), { recursive: true, force: true }) } catch {}
+  if (SUPABASE_URL && SUPABASE_KEY) {
+    fetch(`${SUPABASE_URL}/rest/v1/wa_sessions?instance_id=eq.${encodeURIComponent(id)}`, {
+      method: 'DELETE', headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` },
+    }).catch(() => {})
+  }
   res.json({ success: true })
 })
 
@@ -429,7 +437,12 @@ app.delete('/instance/:id', auth, async (req, res) => {
   const s = sessions.get(id)
   if (s?.sock) { try { await s.sock.logout() } catch {} try { s.sock.end() } catch {} }
   sessions.delete(id)
-  try { await sbFetch(`/wa_sessions?instance_id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' }) } catch {}
+  try { fs.rmSync(path.join(SESSIONS_DIR, id), { recursive: true, force: true }) } catch {}
+  if (SUPABASE_URL && SUPABASE_KEY) {
+    fetch(`${SUPABASE_URL}/rest/v1/wa_sessions?instance_id=eq.${encodeURIComponent(id)}`, {
+      method: 'DELETE', headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` },
+    }).catch(() => {})
+  }
   res.json({ success: true })
 })
 
@@ -437,11 +450,10 @@ app.get('/instances', auth, (req, res) => {
   res.json({ instances: [...sessions.entries()].map(([id, s]) => ({ id, connected: s.connected, phoneNumber: s.phoneNumber, status: s.connected ? 'connected' : s.qr ? 'qr_pending' : 'initializing' })) })
 })
 
-// ─── Start ─────────────────────────────────────────────────
 app.listen(PORT, async () => {
-  console.log(`WABEK Baileys Server v6 — port ${PORT} — Supabase session storage`)
-  if (!SUPABASE_URL || !SUPABASE_KEY) console.error('❌ SUPABASE_URL and SUPABASE_SERVICE_KEY must be set!')
+  console.log(`WABEK Baileys Server v7 — port ${PORT}`)
+  console.log(`Sessions: disk=${SESSIONS_DIR} + Supabase backup=${SUPABASE_URL ? '✅' : '⚠️ not configured'}`)
   if (!WABEK_EVENTS_URL) console.warn('⚠️  WABEK_EVENTS_URL not set')
   await restoreSessions()
-  console.log(`[startup] Complete. ${sessions.size} session(s) loaded.`)
+  console.log(`[startup] Done. ${sessions.size} session(s) loaded.`)
 })
