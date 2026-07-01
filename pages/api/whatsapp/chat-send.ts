@@ -80,13 +80,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
+      // Cloud API has no separate "ptt" send type — voice notes are sent as
+      // regular "audio" messages (the `voice: true` distinction only exists
+      // on the RECEIVING side of the webhook, not for sending).
+      const sendType = media_type === 'ptt' ? 'audio' : (media_type || 'document')
+
       const result = await sendMediaMessage({
         phoneNumberId: instance.phone_number_id,
         accessToken: instance.access_token,
         to: cleanPhone,
-        type: (media_type || 'document') as 'image' | 'document' | 'audio' | 'video',
+        type: sendType as 'image' | 'document' | 'audio' | 'video' | 'sticker',
         mediaUrl: media_url,
         caption: text || undefined,
+        filename: sendType === 'document' ? (media_filename || undefined) : undefined,
       })
       const waMessageId = result?.messages?.[0]?.id || null
 

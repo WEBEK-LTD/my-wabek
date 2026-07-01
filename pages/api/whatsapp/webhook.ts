@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { verifyWebhook, parseWebhookPayload, fetchInboundMedia } from '@/lib/whatsapp'
 import { sendTextMessage } from '@/lib/whatsapp'
 import { sendWAWebMessage } from '@/lib/wa-web'
-import { uploadMediaBuffer, mimeToMessageType } from '@/lib/media-storage'
+import { uploadMediaBuffer } from '@/lib/media-storage'
 import { notifyNewMessage } from '@/lib/notifications'
 import { executeAutomationFlow } from '@/lib/automation-engine'
 import { processChatbotMessage } from '@/lib/chatbot-engine'
@@ -67,10 +67,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       let mediaUrl: string | null = null
       let mediaMimeType: string | null = null
       let mediaFilename: string | null = null
-      let resolvedType: string = msg.type
-
+      // Meta's own msg.type is authoritative for media classification
+      // (image/document/audio/video/sticker) — it already correctly tells
+      // us a document is a document even if its mime type is image/pdf etc.
+      // The ONE thing it does NOT distinguish is voice note vs regular
+      // audio (both arrive as type:"audio"); audio.voice=true means PTT.
       const mediaObj = (msg.image || msg.document || msg.audio || msg.video || msg.sticker) as
         { id?: string; mime_type?: string; filename?: string; voice?: boolean } | undefined
+      let resolvedType: string = (msg.type === 'audio' && mediaObj?.voice) ? 'ptt' : msg.type
 
       if (mediaObj?.id) {
         try {
@@ -85,7 +89,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               mediaUrl = uploaded.url
               mediaMimeType = fetched.mimeType
               mediaFilename = mediaObj.filename || null
-              resolvedType = mimeToMessageType(fetched.mimeType, !!mediaObj.voice)
+              // resolvedType already set correctly above from Meta's msg.type
             }
           }
         } catch (mediaErr) {

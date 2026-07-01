@@ -24,9 +24,10 @@ export interface SendMediaMessageParams {
   phoneNumberId: string
   accessToken: string
   to: string
-  type: 'image' | 'document' | 'audio' | 'video'
+  type: 'image' | 'document' | 'audio' | 'video' | 'sticker'
   mediaUrl: string
   caption?: string
+  filename?: string // document only — Meta rejects this field for other types
 }
 
 export interface WAMessage {
@@ -98,10 +99,21 @@ export async function sendMediaMessage({
   type,
   mediaUrl,
   caption,
+  filename,
 }: SendMediaMessageParams): Promise<WAMessage> {
   const client = waAxios(accessToken)
   const mediaPayload: Record<string, unknown> = { link: mediaUrl }
-  if (caption) mediaPayload.caption = caption
+
+  // Per Meta's exact rules:
+  // - caption: supported on image/video/document — NOT on audio or sticker
+  // - filename: supported ONLY on document — rejected on any other type
+  if (caption && (type === 'image' || type === 'video' || type === 'document')) {
+    mediaPayload.caption = caption
+  }
+  if (filename && type === 'document') {
+    mediaPayload.filename = filename
+  }
+
   const { data } = await client.post(`/${phoneNumberId}/messages`, {
     messaging_product: 'whatsapp',
     to: formatPhone(to),
