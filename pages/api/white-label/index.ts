@@ -95,7 +95,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       brand_secondary_color: brand_secondary_color || '#F8FAFC',
       custom_domain:         custom_domain?.trim().toLowerCase() || null,
       favicon_url:           favicon_url || null,
-      brand_favicon:         favicon_url || null,  // keep old column in sync
       support_email:         support_email || null,
       support_whatsapp:      support_whatsapp || null,
       hide_powered_by:       hide_powered_by || false,
