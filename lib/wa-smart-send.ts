@@ -5,6 +5,7 @@
 import { supabaseAdmin } from '@/lib/supabase'
 import { sendTextMessage, sendTemplateMessage } from '@/lib/whatsapp'
 import { sendWAWebMessage } from '@/lib/wa-web'
+import { insertMessage } from '@/lib/message-insert'
 import { v4 as uuidv4 } from 'uuid'
 
 // ── Provider resolver — single source of truth ────────────────
@@ -315,8 +316,7 @@ export async function smartSendWAWeb(params: {
     }
 
     if (shouldInsert) {
-      const { error: insertErr } = await db.from('messages').insert({
-        id: uuidv4(),
+      const { error: insertErr } = await insertMessage({
         user_id: userId,
         instance_id: instanceId,
         contact_id: contactId || null,
@@ -328,7 +328,7 @@ export async function smartSendWAWeb(params: {
         meta: { method: 'text', source },
       })
       if (insertErr) {
-        console.error(`[smart-send] DB insert error:`, insertErr.message)
+        console.error(`[smart-send] DB insert error:`, insertErr)
       } else {
         console.log(`[smart-send] ✅ message saved to DB wa_message_id=${messageId}`)
       }

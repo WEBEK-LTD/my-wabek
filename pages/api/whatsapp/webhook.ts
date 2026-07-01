@@ -4,6 +4,7 @@ import { verifyWebhook, parseWebhookPayload, fetchInboundMedia } from '@/lib/wha
 import { sendTextMessage } from '@/lib/whatsapp'
 import { sendWAWebMessage } from '@/lib/wa-web'
 import { uploadMediaBuffer } from '@/lib/media-storage'
+import { insertMessage } from '@/lib/message-insert'
 import { notifyNewMessage } from '@/lib/notifications'
 import { executeAutomationFlow } from '@/lib/automation-engine'
 import { processChatbotMessage } from '@/lib/chatbot-engine'
@@ -97,14 +98,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       }
 
-      await db.from('messages').insert({
-        id: uuidv4(), user_id: instance.user_id, instance_id: instance.id, contact_id: contactId,
-        wa_message_id: msg.messageId, direction: 'inbound',
-        type: resolvedType as 'text' | 'image' | 'document' | 'audio' | 'video' | 'sticker' | 'ptt',
-        content, status: 'delivered',
-        media_url: mediaUrl,
+      await insertMessage({
+        user_id:         instance.user_id,
+        instance_id:     instance.id,
+        contact_id:      contactId,
+        wa_message_id:   msg.messageId,
+        direction:       'inbound',
+        type:            resolvedType,
+        content,
+        status:          'delivered',
+        media_url:       mediaUrl,
         media_mime_type: mediaMimeType,
-        media_filename: mediaFilename,
+        media_filename:  mediaFilename,
       })
 
       // Notification for new message

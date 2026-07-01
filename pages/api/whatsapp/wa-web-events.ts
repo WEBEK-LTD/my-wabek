@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { sendWAWebMessage } from '@/lib/wa-web'
 import { processChatbotMessage } from '@/lib/chatbot-engine'
 import { processAIReply } from '@/lib/ai-engine'
+import { insertMessage } from '@/lib/message-insert'
 import { executeAutomationFlow } from '@/lib/automation-engine'
 import { notifyNewMessage, notifyInstanceConnected, notifyInstanceDisconnected } from '@/lib/notifications'
 import { v4 as uuidv4 } from 'uuid'
@@ -86,18 +87,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         console.log(`[wa-web-events] saving message contactId=${contactId} content="${content.slice(0, 50)}" mediaUrl=${data.mediaUrl ? 'yes' : 'no'}`)
 
         // Save message
-        const { error: msgErr } = await db.from('messages').insert({
-          id: uuidv4(), user_id: instance.user_id, instance_id: instanceId, contact_id: contactId,
-          wa_message_id: data.messageId, direction: 'inbound',
-          type: data.type || 'text', content,
-          media_url: data.mediaUrl || null,
+        // Save message (safe — falls back if media columns missing in DB)
+        const { error: msgErr } = await insertMessage({
+          user_id:        instance.user_id,
+          instance_id:    instanceId,
+          contact_id:     contactId,
+          wa_message_id:  data.messageId,
+          direction:      'inbound',
+          type:           data.type || 'text',
+          content,
+          status:         'delivered',
+          media_url:      data.mediaUrl || null,
           media_mime_type: data.mimeType || data.mimetype || null,
           media_filename: data.filename || null,
-          status: 'delivered',
         })
 
         if (msgErr) {
-          console.error(`[wa-web-events] ❌ message save failed:`, msgErr.message)
+          console.error(`[wa-web-events] ❌ message save failed:`, msgErr)
         } else {
           console.log(`[wa-web-events] ✅ message saved wa_message_id=${data.messageId}`)
         }

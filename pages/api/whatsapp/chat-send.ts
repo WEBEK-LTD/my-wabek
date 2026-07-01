@@ -11,6 +11,7 @@ import { requireAuth } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { smartSend, smartSendWAWeb, resolveProvider, isInWindow } from '@/lib/wa-smart-send'
 import { sendMediaMessage } from '@/lib/whatsapp'
+import { insertMessage } from '@/lib/message-insert'
 import { v4 as uuidv4 } from 'uuid'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -56,8 +57,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           mimetype: media_mime_type || undefined,
         })
 
-        await db.from('messages').insert({
-          id: uuidv4(), user_id: instance.user_id, instance_id: instance.id, contact_id: contact_id || null,
+        await insertMessage({
+          user_id: instance.user_id, instance_id: instance.id, contact_id: contact_id || null,
           wa_message_id: r.messageId || null, direction: 'outbound',
           type: media_type || 'document', content: text || '',
           media_url, media_mime_type: media_mime_type || null, media_filename: media_filename || null,
@@ -96,8 +97,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
       const waMessageId = result?.messages?.[0]?.id || null
 
-      await db.from('messages').insert({
-        id: uuidv4(), user_id: instance.user_id, instance_id: instance.id, contact_id: contact_id || null,
+      await insertMessage({
+        user_id: instance.user_id, instance_id: instance.id, contact_id: contact_id || null,
         wa_message_id: waMessageId, direction: 'outbound',
         type: media_type || 'document', content: text || '',
         media_url, media_mime_type: media_mime_type || null, media_filename: media_filename || null,
