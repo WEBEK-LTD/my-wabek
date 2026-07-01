@@ -102,8 +102,24 @@ export async function disconnectWAWeb(instanceId: string): Promise<void> {
 }
 
 export async function sendWAWebMessage(params: { instanceId: string; to: string; text: string }): Promise<{ messageId: string }> {
-  const data = await callWAServer(`/instance/${params.instanceId}/send`, { to: params.to, text: params.text }) as { messageId: string }
-  return data
+  try {
+    const data = await callWAServer(`/instance/${params.instanceId}/send`, { to: params.to, text: params.text }) as { messageId: string }
+    return data
+  } catch (err: any) {
+    // If instance not found, try to restore the session automatically
+    if (err?.message?.includes('Instance not found') || err?.message?.includes('404')) {
+      console.log(`[wa-web] Instance ${params.instanceId} not found — attempting auto-restore...`)
+      try {
+        await callWAServer(`/instance/${params.instanceId}/restore`, {})
+        // Retry send after restore
+        const data = await callWAServer(`/instance/${params.instanceId}/send`, { to: params.to, text: params.text }) as { messageId: string }
+        return data
+      } catch (restoreErr: any) {
+        throw new Error(`Instance not found and restore failed: ${restoreErr?.message}`)
+      }
+    }
+    throw err
+  }
 }
 
 // Send media (image/video/audio/document) via the Baileys server.

@@ -117,7 +117,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // Auto-create inbox conversation — scoped to this instance (inbox)
       try {
-        const { error: upsertErr } = await db.from('conversation_assignments').upsert({
+        await db.from('conversation_assignments').upsert({
           owner_id:        instance.user_id,
           contact_id:      contactId,
           instance_id:     instance.id,
@@ -126,18 +126,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           last_message_at: new Date().toISOString(),
           updated_at:      new Date().toISOString(),
         }, { onConflict: 'owner_id,contact_id,instance_id', ignoreDuplicates: false })
-
-        if (upsertErr) {
-          // Fallback: migration 021 not run yet
-          await db.from('conversation_assignments').upsert({
-            owner_id:        instance.user_id,
-            contact_id:      contactId,
-            status:          'open',
-            priority:        'normal',
-            last_message_at: new Date().toISOString(),
-            updated_at:      new Date().toISOString(),
-          }, { onConflict: 'owner_id,contact_id', ignoreDuplicates: false })
-        }
       } catch {}
 
       await executeAutomationFlow({
