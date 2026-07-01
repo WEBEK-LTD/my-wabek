@@ -1,5 +1,11 @@
 const express = require('express')
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion, downloadMediaMessage } = require('@whiskeysockets/baileys')
+const {
+  default: makeWASocket,
+  DisconnectReason,
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  downloadMediaMessage,
+} = require('@whiskeysockets/baileys')
 const { Boom } = require('@hapi/boom')
 const QRCode = require('qrcode')
 const fs = require('fs')
@@ -35,78 +41,115 @@ async function notifyWabek(event, instanceId, data) {
   try {
     const res = await fetch(WABEK_EVENTS_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Secret': WABEK_EVENTS_SECRET },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Secret': WABEK_EVENTS_SECRET,
+      },
       body: JSON.stringify({ event, instanceId, data }),
     })
-    if (!res.ok) console.error(`Notify failed: ${res.status}`)
+    if (!res.ok) console.error(`[${instanceId}] Notify failed: ${res.status}`)
   } catch (e) {
-    console.error('Notify error:', e.message)
-  }
-}
-
-// ─── Media Upload Helper ───────────────────────────────────
-// Upload a media buffer from an inbound message to WABEK's storage
-// (via the wa-web-events endpoint which handles re-hosting).
-async function uploadMediaToWabek(sock, msg, msgType, instanceId) {
-  try {
-    const buffer = await downloadMediaMessage(msg, 'buffer', {})
-    if (!buffer) return null
-
-    // We send raw base64 to WABEK — the events endpoint will re-upload to Supabase Storage
-    const b64 = buffer.toString('base64')
-    const mimeMap = {
-      image: msg.message?.imageMessage?.mimetype || 'image/jpeg',
-      video: msg.message?.videoMessage?.mimetype || 'video/mp4',
-      audio: msg.message?.audioMessage?.mimetype || 'audio/ogg',
-      document: msg.message?.documentMessage?.mimetype || 'application/octet-stream',
-      sticker: msg.message?.stickerMessage?.mimetype || 'image/webp',
-      ptt: msg.message?.audioMessage?.mimetype || 'audio/ogg',
-    }
-    const mime = mimeMap[msgType] || 'application/octet-stream'
-    const filename = msg.message?.documentMessage?.fileName || null
-
-    // Notify WABEK with base64 media (WABEK will store and return permanent URL)
-    // For now, return a data URI so WABEK can at least display it inline for images
-    // (WABEK's wa-web-events handles re-upload if needed)
-    return { base64: b64, mimeType: mime, filename }
-  } catch (e) {
-    console.error(`[${instanceId}] Media download failed:`, e.message)
-    return null
+    console.error(`[${instanceId}] Notify error:`, e.message)
   }
 }
 
 // ─── JID Helper ───────────────────────────────────────────
 function toJid(to) {
   if (to.includes('@')) return to
-  const digits = to.replace(/\D/g, '')
-  return `${digits}@s.whatsapp.net`
+  return `${to.replace(/\D/g, '')}@s.whatsapp.net`
 }
 
-// ─── Mime → Baileys message type ──────────────────────────
-function mediaTypeToPayload(mediaType, mediaUrl, caption, filename, mimetype) {
+// ─── Build Baileys payload per media type ─────────────────
+// Matches WhatsApp Web's native send-message format.
+// Each type has specific fields — do NOT mix caption/filename
+// between types (e.g. audio has no caption, filename is only for document).
+function buildMediaPayload(mediaType, mediaUrl, caption, filename, mimetype) {
   switch (mediaType) {
     case 'image':
-      return { image: { url: mediaUrl }, caption: caption || '', mimetype: mimetype || 'image/jpeg' }
+      return {
+        image: { url: mediaUrl },
+        caption: caption || '',
+        mimetype: mimetype || 'image/jpeg',
+      }
     case 'video':
-      return { video: { url: mediaUrl }, caption: caption || '', mimetype: mimetype || 'video/mp4' }
+      return {
+        video: { url: mediaUrl },
+        caption: caption || '',
+        mimetype: mimetype || 'video/mp4',
+      }
     case 'audio':
-      return { audio: { url: mediaUrl }, mimetype: mimetype || 'audio/ogg; codecs=opus', ptt: false }
+      // Regular audio file — no caption, no filename
+      return {
+        audio: { url: mediaUrl },
+        mimetype: mimetype || 'audio/mpeg',
+        ptt: false,
+      }
     case 'ptt':
-      // PTT (voice note) — ptt:true tells WhatsApp to show as voice note waveform
-      return { audio: { url: mediaUrl }, mimetype: mimetype || 'audio/ogg; codecs=opus', ptt: true }
+      // Voice Note (Push-To-Talk) — ptt:true shows waveform UI in WhatsApp
+      return {
+        audio: { url: mediaUrl },
+        mimetype: mimetype || 'audio/ogg; codecs=opus',
+        ptt: true,
+      }
     case 'document':
-      return { document: { url: mediaUrl }, mimetype: mimetype || 'application/octet-stream', fileName: filename || 'file' }
+      // Documents: filename is shown in chat, caption appears below file
+      return {
+        document: { url: mediaUrl },
+        mimetype: mimetype || 'application/octet-stream',
+        fileName: filename || 'file',
+        caption: caption || '',
+      }
     case 'sticker':
-      return { sticker: { url: mediaUrl }, mimetype: mimetype || 'image/webp' }
+      // Static webp sticker (must be 512x512, ≤100KB)
+      return {
+        sticker: { url: mediaUrl },
+        mimetype: mimetype || 'image/webp',
+      }
     default:
-      // Unknown type — send as document so it's always downloadable
-      return { document: { url: mediaUrl }, mimetype: mimetype || 'application/octet-stream', fileName: filename || 'file' }
+      // Unknown type → send as downloadable document (safe fallback)
+      console.log(`[buildMediaPayload] unknown type "${mediaType}", sending as document`)
+      return {
+        document: { url: mediaUrl },
+        mimetype: mimetype || 'application/octet-stream',
+        fileName: filename || 'file',
+      }
+  }
+}
+
+// ─── Download inbound media from Baileys ──────────────────
+// Returns { base64, mimeType, filename } or null on failure.
+// WABEK receives this in the wa-web-events payload and re-hosts it
+// on Supabase Storage so it has a permanent public URL.
+async function downloadInboundMedia(msg, msgType) {
+  try {
+    const buffer = await downloadMediaMessage(msg, 'buffer', {})
+    if (!buffer || !buffer.length) return null
+
+    const m = msg.message || {}
+    const mimeMap = {
+      image:    m.imageMessage?.mimetype    || 'image/jpeg',
+      video:    m.videoMessage?.mimetype    || 'video/mp4',
+      audio:    m.audioMessage?.mimetype    || 'audio/ogg',
+      ptt:      m.audioMessage?.mimetype    || 'audio/ogg; codecs=opus',
+      document: m.documentMessage?.mimetype || 'application/octet-stream',
+      sticker:  m.stickerMessage?.mimetype  || 'image/webp',
+    }
+
+    return {
+      base64:   buffer.toString('base64'),
+      mimeType: mimeMap[msgType] || 'application/octet-stream',
+      filename: m.documentMessage?.fileName || null,
+    }
+  } catch (e) {
+    console.error('[downloadInboundMedia] failed:', e.message)
+    return null
   }
 }
 
 // ─── Create/Restore Session ────────────────────────────────
 async function createSession(instanceId) {
   console.log(`[${instanceId}] Creating session...`)
+
   const authDir = path.join(SESSIONS_DIR, instanceId)
   fs.mkdirSync(authDir, { recursive: true })
 
@@ -157,7 +200,10 @@ async function createSession(instanceId) {
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut
       console.log(`[${instanceId}] Disconnected. Reconnect: ${shouldReconnect}, Code: ${statusCode}`)
       if (sessions.has(instanceId)) sessions.get(instanceId).connected = false
-      await notifyWabek('disconnected', instanceId, { shouldReconnect, statusCode, loggedOut: statusCode === DisconnectReason.loggedOut })
+      await notifyWabek('disconnected', instanceId, {
+        shouldReconnect, statusCode,
+        loggedOut: statusCode === DisconnectReason.loggedOut,
+      })
       if (shouldReconnect) {
         console.log(`[${instanceId}] Reconnecting in 5s...`)
         setTimeout(() => createSession(instanceId), 5000)
@@ -168,7 +214,7 @@ async function createSession(instanceId) {
     }
   })
 
-  // ── Inbound messages (text + all media types) ──────────
+  // ── Inbound messages — text + ALL media types ─────────
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return
 
@@ -180,8 +226,9 @@ async function createSession(instanceId) {
       const m = msg.message || {}
       const isPtt = !!m.audioMessage?.ptt
 
-      // Determine message type
-      const msgType = m.imageMessage    ? 'image'
+      // Determine exact message type (PTT vs regular audio matters for display)
+      const msgType =
+        m.imageMessage                  ? 'image'
         : m.videoMessage                ? 'video'
         : m.audioMessage && isPtt       ? 'ptt'
         : m.audioMessage                ? 'audio'
@@ -189,39 +236,42 @@ async function createSession(instanceId) {
         : m.stickerMessage              ? 'sticker'
         : 'text'
 
+      // Text content (caption for media messages)
       const text =
-        m.conversation ||
-        m.extendedTextMessage?.text ||
-        m.imageMessage?.caption ||
-        m.videoMessage?.caption ||
-        m.documentMessage?.caption ||
+        m.conversation                  ||
+        m.extendedTextMessage?.text     ||
+        m.imageMessage?.caption         ||
+        m.videoMessage?.caption         ||
+        m.documentMessage?.caption      ||
         ''
 
-      // Media metadata (URL will be set by WABEK after re-hosting)
-      let mediaUrl = null
-      let mimeType = null
-      let filename = null
+      // Download and attach media as base64
+      // WABEK's wa-web-events handler will re-host on Supabase Storage
+      let mediaUrl  = null
+      let mimeType  = null
+      let filename  = null
 
       if (msgType !== 'text') {
-        const mediaMeta = await uploadMediaToWabek(sock, msg, msgType, instanceId)
-        if (mediaMeta) {
-          // Send as data URI for now — WABEK's wa-web-events will re-host if needed
-          mediaUrl = `data:${mediaMeta.mimeType};base64,${mediaMeta.base64}`
-          mimeType = mediaMeta.mimeType
-          filename = mediaMeta.filename
+        const media = await downloadInboundMedia(msg, msgType)
+        if (media) {
+          // Data URI lets WABEK display inline immediately;
+          // wa-web-events will also re-upload to Supabase if configured
+          mediaUrl = `data:${media.mimeType};base64,${media.base64}`
+          mimeType = media.mimeType
+          filename = media.filename
         }
       }
 
       await notifyWabek('message_received', instanceId, {
-        messageId: msg.key.id,
+        messageId:  msg.key.id,
         from,
-        pushName: msg.pushName || '',
-        type: msgType,
+        pushName:   msg.pushName || '',
+        type:       msgType,
         text,
         mediaUrl,
         mimeType,
         filename,
-        timestamp: msg.messageTimestamp,
+        timestamp:  msg.messageTimestamp,
       })
     }
   })
@@ -246,21 +296,30 @@ async function restoreSessions() {
   for (const instanceId of dirs) {
     const credsFile = path.join(SESSIONS_DIR, instanceId, 'creds.json')
     if (fs.existsSync(credsFile)) {
-      try { await createSession(instanceId); console.log(`Restored: ${instanceId}`) }
-      catch (e) { console.error(`Failed to restore ${instanceId}:`, e.message) }
+      try {
+        await createSession(instanceId)
+        console.log(`Restored: ${instanceId}`)
+      } catch (e) {
+        console.error(`Failed to restore ${instanceId}:`, e.message)
+      }
     }
   }
 }
 
 // ─── API Routes ────────────────────────────────────────────
 
+// Health check (no auth)
 app.get('/health', (req, res) => {
   res.json({
-    ok: true, sessions: sessions.size,
-    instances: [...sessions.entries()].map(([id, s]) => ({ id, connected: s.connected, phoneNumber: s.phoneNumber, hasQR: !!s.qr })),
+    ok: true,
+    sessions: sessions.size,
+    instances: [...sessions.entries()].map(([id, s]) => ({
+      id, connected: s.connected, phoneNumber: s.phoneNumber, hasQR: !!s.qr,
+    })),
   })
 })
 
+// Create/start instance and get QR
 app.post('/instance/:id/qr', auth, async (req, res) => {
   const { id } = req.params
   if (!sessions.has(id)) {
@@ -269,14 +328,26 @@ app.post('/instance/:id/qr', auth, async (req, res) => {
   }
   const session = sessions.get(id)
   if (!session) return res.status(500).json({ error: 'Failed to create session' })
-  res.json({ instanceId: id, qrCode: session.qr || null, connected: session.connected, phoneNumber: session.phoneNumber, status: session.connected ? 'connected' : session.qr ? 'qr_pending' : 'initializing' })
+  res.json({
+    instanceId: id,
+    qrCode:     session.qr || null,
+    connected:  session.connected,
+    phoneNumber: session.phoneNumber,
+    status:     session.connected ? 'connected' : session.qr ? 'qr_pending' : 'initializing',
+  })
 })
 
-// ── Send message (text + ALL media types) ──────────────────
-// Supports: text, image, video, audio, ptt, document, sticker
-// The WABEK side calls this for everything (text AND media) since the
-// /send endpoint already existed and now handles all types.
-// Also keeps backward compatibility: `text` param alone → text message.
+// ── Send message (text OR any media type) ──────────────────
+// Params:
+//   to        - phone number or JID (required)
+//   text      - message text (required for text messages)
+//   mediaUrl  - public URL or data URI (required for media)
+//   mediaType - 'image'|'video'|'audio'|'ptt'|'document'|'sticker'
+//   caption   - optional caption (image/video/document only)
+//   filename  - optional filename (document only)
+//   mimetype  - optional mime type (helps WhatsApp render correctly)
+//
+// Backward compatible: existing {to, text} calls continue to work.
 app.post('/instance/:id/send', auth, async (req, res) => {
   const { id } = req.params
   const { to, text, mediaUrl, mediaType, caption, filename, mimetype } = req.body
@@ -293,12 +364,10 @@ app.post('/instance/:id/send', auth, async (req, res) => {
     let result
 
     if (mediaUrl && mediaType) {
-      // Media message — build correct Baileys payload per type
-      const payload = mediaTypeToPayload(mediaType, mediaUrl, caption || text || '', filename, mimetype)
+      const payload = buildMediaPayload(mediaType, mediaUrl, caption || text || '', filename, mimetype)
       console.log(`[${id}] Sending media type=${mediaType} to=${jid}`)
       result = await session.sock.sendMessage(jid, payload)
     } else {
-      // Plain text
       result = await session.sock.sendMessage(jid, { text })
     }
 
@@ -309,18 +378,15 @@ app.post('/instance/:id/send', auth, async (req, res) => {
   }
 })
 
-// ── /send-media alias (for future compatibility) ────────────
-// WABEK's sendWAWebMedia() calls /send-media — forward to /send
+// ── Send media (explicit route for WABEK's sendWAWebMedia) ─
+// Same logic as /send with mediaUrl, provided as a separate
+// route so the intent is unambiguous.
 app.post('/instance/:id/send-media', auth, async (req, res) => {
-  req.url = req.url.replace('/send-media', '/send')
-  req.params.id = req.params.id
-  // Re-map param names from WABEK's convention to /send convention
-  req.body.mediaType = req.body.mediaType
-  // Forward to the /send handler by re-calling the route
   const { id } = req.params
   const { to, mediaUrl, mediaType, caption, filename, mimetype } = req.body
 
   if (!to || !mediaUrl) return res.status(400).json({ error: 'to and mediaUrl required' })
+  if (!mediaType) return res.status(400).json({ error: 'mediaType required (image|video|audio|ptt|document|sticker)' })
 
   const session = sessions.get(id)
   if (!session) return res.status(404).json({ error: 'Instance not found' })
@@ -328,7 +394,7 @@ app.post('/instance/:id/send-media', auth, async (req, res) => {
 
   try {
     const jid = toJid(to)
-    const payload = mediaTypeToPayload(mediaType || 'document', mediaUrl, caption || '', filename, mimetype)
+    const payload = buildMediaPayload(mediaType, mediaUrl, caption || '', filename, mimetype)
     console.log(`[${id}] send-media type=${mediaType} to=${jid}`)
     const result = await session.sock.sendMessage(jid, payload)
     res.json({ success: true, messageId: result?.key?.id })
@@ -338,38 +404,63 @@ app.post('/instance/:id/send-media', auth, async (req, res) => {
   }
 })
 
+// Get instance status
 app.get('/instance/:id/status', auth, async (req, res) => {
   const { id } = req.params
   const session = sessions.get(id)
   if (!session) return res.json({ instanceId: id, status: 'not_found' })
-  res.json({ instanceId: id, connected: session.connected, phoneNumber: session.phoneNumber, hasQR: !!session.qr, qrCode: session.qr, status: session.connected ? 'connected' : session.qr ? 'qr_pending' : 'initializing' })
+  res.json({
+    instanceId:  id,
+    connected:   session.connected,
+    phoneNumber: session.phoneNumber,
+    hasQR:       !!session.qr,
+    qrCode:      session.qr,
+    status:      session.connected ? 'connected' : session.qr ? 'qr_pending' : 'initializing',
+  })
 })
 
+// Disconnect instance
 app.post('/instance/:id/disconnect', auth, async (req, res) => {
   const { id } = req.params
   const session = sessions.get(id)
-  if (session?.sock) { try { await session.sock.logout() } catch {} try { session.sock.end() } catch {} }
+  if (session?.sock) {
+    try { await session.sock.logout() } catch {}
+    try { session.sock.end() } catch {}
+  }
   sessions.delete(id)
   try { fs.rmSync(path.join(SESSIONS_DIR, id), { recursive: true, force: true }) } catch {}
   res.json({ success: true })
 })
 
+// Delete instance completely
 app.delete('/instance/:id', auth, async (req, res) => {
   const { id } = req.params
   const session = sessions.get(id)
-  if (session?.sock) { try { await session.sock.logout() } catch {} try { session.sock.end() } catch {} }
+  if (session?.sock) {
+    try { await session.sock.logout() } catch {}
+    try { session.sock.end() } catch {}
+  }
   sessions.delete(id)
   try { fs.rmSync(path.join(SESSIONS_DIR, id), { recursive: true, force: true }) } catch {}
   res.json({ success: true })
 })
 
+// List all instances
 app.get('/instances', auth, (req, res) => {
-  const list = [...sessions.entries()].map(([id, s]) => ({ id, connected: s.connected, phoneNumber: s.phoneNumber, status: s.connected ? 'connected' : s.qr ? 'qr_pending' : 'initializing' }))
+  const list = [...sessions.entries()].map(([id, s]) => ({
+    id, connected: s.connected, phoneNumber: s.phoneNumber,
+    status: s.connected ? 'connected' : s.qr ? 'qr_pending' : 'initializing',
+  }))
   res.json({ instances: list })
 })
 
+// ─── Start Server ──────────────────────────────────────────
 app.listen(PORT, async () => {
   console.log(`WABEK Baileys Server running on port ${PORT}`)
-  if (!WABEK_EVENTS_URL) console.warn('⚠️  WABEK_EVENTS_URL not set')
+  console.log(`Health: http://localhost:${PORT}/health`)
+  console.log(`Routes: /instance/:id/qr | /send | /send-media | /status | /disconnect`)
+  if (!WABEK_EVENTS_URL) {
+    console.warn('⚠️  WABEK_EVENTS_URL not set — events will only be logged locally')
+  }
   await restoreSessions()
 })
