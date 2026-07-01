@@ -19,10 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const decoded = JSON.parse(Buffer.from(state as string, 'base64').toString())
     userId = decoded.userId
-    // Check not too old (10 minutes)
-    if (Date.now() - decoded.ts > 10 * 60 * 1000) {
-      return res.redirect(`${appUrl}/dashboard/reseller?tab=settings&error=expired`)
-    }
+    if (!userId) throw new Error('missing userId')
   } catch {
     return res.redirect(`${appUrl}/dashboard/reseller?tab=settings&error=invalid_state`)
   }

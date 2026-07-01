@@ -7,13 +7,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!user) return
 
   const clientId = process.env.STRIPE_CONNECT_CLIENT_ID
-  if (!clientId) return res.status(400).json({ error: 'STRIPE_CONNECT_CLIENT_ID not configured' })
+  if (!clientId) return res.status(500).json({ error: 'Stripe Connect not configured' })
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://waabek.com'
   const redirectUri = `${appUrl}/api/reseller/stripe-connect/callback`
 
-  // State = userId (to identify who is connecting)
-  const state = Buffer.from(JSON.stringify({ userId: user.userId, ts: Date.now() })).toString('base64')
+  // State = userId only (no timestamp to keep it stable)
+  const state = Buffer.from(JSON.stringify({ userId: user.userId })).toString('base64')
 
   const stripeUrl = new URL('https://connect.stripe.com/oauth/authorize')
   stripeUrl.searchParams.set('response_type', 'code')
@@ -21,7 +21,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   stripeUrl.searchParams.set('scope', 'read_write')
   stripeUrl.searchParams.set('redirect_uri', redirectUri)
   stripeUrl.searchParams.set('state', state)
-  stripeUrl.searchParams.set('stripe_user[business_type]', 'individual')
+  // Do NOT set stripe_user[business_type] — that triggers "new account creation"
+  // which Stripe flags as suspicious. We only want to CONNECT existing accounts.
 
   return res.redirect(stripeUrl.toString())
 }
