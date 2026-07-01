@@ -77,21 +77,25 @@ BEGIN
     FROM conversation_assignments
     WHERE instance_id IS NULL
   LOOP
-    -- Find all distinct instances that have messages for this contact
-    SELECT COUNT(DISTINCT instance_id), MAX(instance_id)
-    INTO instance_count, found_instance_id
+    SELECT COUNT(DISTINCT instance_id)
+    INTO instance_count
     FROM messages
     WHERE user_id = conv.owner_id
       AND contact_id = conv.contact_id
       AND instance_id IS NOT NULL;
 
-    -- Only backfill if exactly one instance → unambiguous
-    IF instance_count = 1 AND found_instance_id IS NOT NULL THEN
+    IF instance_count = 1 THEN
+      SELECT instance_id INTO found_instance_id
+      FROM messages
+      WHERE user_id = conv.owner_id
+        AND contact_id = conv.contact_id
+        AND instance_id IS NOT NULL
+      LIMIT 1;
+
       UPDATE conversation_assignments
       SET instance_id = found_instance_id
       WHERE id = conv.id;
     END IF;
-    -- If 0 or >1 instances → leave as NULL (will show in All Inboxes only)
   END LOOP;
 END $$;
 
