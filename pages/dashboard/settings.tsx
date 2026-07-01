@@ -16,17 +16,20 @@ const TABS = [
 ]
 
 export default function SettingsPage() {
-  const { user, setUser } = useAuthStore()
+  const { user, setUser, fetchMe } = useAuthStore()
   const [tab, setTab] = useState('profile')
   const [profile, setProfile] = useState({ name: user?.name || '', phone: user?.phone || '', language: user?.language || 'en', timezone: user?.timezone || 'UTC' })
   
+  // Fetch fresh user data on mount to get accurate last_login, is_verified, otp_mode etc.
+  useEffect(() => { fetchMe() }, [])
+
   // Sync profile state when user loads/changes
   useEffect(() => {
     if (user) {
       setProfile({ name: user.name || '', phone: user.phone || '', language: user.language || 'en', timezone: user.timezone || 'UTC' })
       setOtp({ otp_mode: user.otp_mode || 'disabled' })
     }
-  }, [user?.id])
+  }, [user?.id, user?.phone, user?.otp_mode])
   const [passwords, setPasswords] = useState({ current: '', newPass: '', confirm: '' })
   const [otp, setOtp] = useState({ otp_mode: user?.otp_mode || 'disabled' })
 
@@ -37,10 +40,8 @@ export default function SettingsPage() {
   const profileMut = useMutation(
     (body) => axios.put('/api/settings/profile', body),
     { 
-      onSuccess: (r) => { 
-        const updated = { ...user, ...r.data.user }
-        setUser(updated)
-        setProfile({ name: updated.name, phone: updated.phone || '' })
+      onSuccess: async () => { 
+        await fetchMe()  // reload full user from DB including phone/otp_mode/last_login etc.
         toast.success('Profile updated ✅') 
       },
       onError: (e) => toast.error(e?.response?.data?.error || 'Failed') 
@@ -55,8 +56,14 @@ export default function SettingsPage() {
 
   const securityMut = useMutation(
     (body) => axios.put('/api/settings/security', body),
-    { onSuccess: () => toast.success('Security settings updated ✅'),
-      onError: (e) => toast.error(e?.response?.data?.error || 'Failed') }
+    { 
+      onSuccess: async (_, body) => {
+        // Update store immediately so UI reflects the new mode
+        setUser({ ...user, otp_mode: body.otp_mode })
+        toast.success('Security settings updated ✅')
+      },
+      onError: (e) => toast.error(e?.response?.data?.error || 'Failed') 
+    }
   )
 
   const removeDeviceMut = useMutation(
