@@ -71,7 +71,11 @@ function MediaBubbleContent({ msg }) {
   switch (msg.type) {
     case 'image':
       return (
-        <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
+        <a
+          href={msg.media_url?.startsWith('data:') ? undefined : msg.media_url}
+          onClick={msg.media_url?.startsWith('data:') ? (e) => { e.preventDefault(); window.open(msg.media_url) } : undefined}
+          target="_blank" rel="noopener noreferrer" style={{ cursor: 'pointer' }}
+        >
           <img src={msg.media_url} alt="image" className="rounded-lg mb-1 max-w-64 max-h-64 object-cover" />
         </a>
       )
@@ -97,14 +101,34 @@ function MediaBubbleContent({ msg }) {
       )
     case 'document':
       return (
-        <a href={msg.media_url} target="_blank" rel="noopener noreferrer"
-          className="flex items-center gap-2 mb-1 bg-black/5 rounded-lg px-3 py-2 hover:bg-black/10 transition-colors min-w-[200px]">
+        <button
+          onClick={() => {
+            const url = msg.media_url
+            if (!url) return
+            if (url.startsWith('data:')) {
+              // data URI — create blob and download (target=_blank fails for data URIs)
+              const [meta, b64] = url.split(',')
+              const mime = meta.split(':')[1]?.split(';')[0] || 'application/octet-stream'
+              const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0))
+              const blob  = new Blob([bytes], { type: mime })
+              const a = document.createElement('a')
+              a.href = URL.createObjectURL(blob)
+              a.download = msg.media_filename || 'file'
+              a.click()
+              URL.revokeObjectURL(a.href)
+            } else {
+              // Regular URL — open in new tab
+              window.open(url, '_blank', 'noopener,noreferrer')
+            }
+          }}
+          className="flex items-center gap-2 mb-1 bg-black/5 rounded-lg px-3 py-2 hover:bg-black/10 transition-colors min-w-[200px] text-left w-full"
+        >
           <span className="text-2xl flex-shrink-0">{docIconFor(msg.media_mime_type, msg.media_filename)}</span>
           <div className="min-w-0 flex-1">
             <p className="text-xs font-medium truncate">{msg.media_filename || 'Document'}</p>
             <p className="text-[10px] opacity-60">Open / Download</p>
           </div>
-        </a>
+        </button>
       )
     default:
       return null
