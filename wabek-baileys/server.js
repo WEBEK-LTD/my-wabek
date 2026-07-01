@@ -250,21 +250,43 @@ async function createSession(instanceId) {
   return session
 }
 
-// ─── restoreSessions — IDENTICAL TO V3 ────────────────────
+// ─── restoreSessions ──────────────────────────────────────
 async function restoreSessions() {
-  if (!fs.existsSync(SESSIONS_DIR)) return
-  const dirs = fs.readdirSync(SESSIONS_DIR)
-  console.log(`Restoring ${dirs.length} session(s)...`)
+  console.log(`[startup] Sessions dir: ${SESSIONS_DIR}`)
+  console.log(`[startup] Dir exists: ${fs.existsSync(SESSIONS_DIR)}`)
+
+  if (!fs.existsSync(SESSIONS_DIR)) {
+    console.log('[startup] Sessions dir does not exist — no sessions to restore')
+    return
+  }
+
+  const allEntries = fs.readdirSync(SESSIONS_DIR)
+  console.log(`[startup] Entries in sessions dir: [${allEntries.join(', ')}]`)
+
+  const dirs = allEntries.filter(d => {
+    const credsFile = path.join(SESSIONS_DIR, d, 'creds.json')
+    const hasCreds  = fs.existsSync(credsFile)
+    if (!hasCreds) console.log(`[startup] Skipping ${d} — no creds.json`)
+    return hasCreds
+  })
+
+  console.log(`[startup] Found ${dirs.length} session(s) with credentials: [${dirs.join(', ')}]`)
+
+  if (dirs.length === 0) {
+    console.log('[startup] ⚠️  No sessions found. This usually means:')
+    console.log('[startup]    1. First run — no sessions created yet')
+    console.log('[startup]    2. Railway redeployed without a Persistent Volume')
+    console.log('[startup]    3. Sessions dir was wiped. Solution: add a Railway Volume at /app/sessions')
+    return
+  }
+
   for (const instanceId of dirs) {
-    const authDir  = path.join(SESSIONS_DIR, instanceId)
-    const credsFile = path.join(authDir, 'creds.json')
-    if (fs.existsSync(credsFile)) {
-      try {
-        await createSession(instanceId)
-        console.log(`Restored: ${instanceId}`)
-      } catch (e) {
-        console.error(`Failed to restore ${instanceId}:`, e.message)
-      }
+    try {
+      console.log(`[startup] Restoring ${instanceId}...`)
+      await createSession(instanceId)
+      console.log(`[startup] ✅ Restored: ${instanceId}`)
+    } catch (e) {
+      console.error(`[startup] ❌ Failed to restore ${instanceId}:`, e.message)
     }
   }
 }
@@ -416,9 +438,10 @@ app.get('/instances', auth, (req, res) => {
 
 // ─── Start ─────────────────────────────────────────────────
 app.listen(PORT, async () => {
-  console.log(`WABEK Baileys Server — port ${PORT}`)
-  console.log(`Sessions dir: ${SESSIONS_DIR}`)
-  if (!WABEK_EVENTS_URL) console.warn('⚠️  WABEK_EVENTS_URL not set')
+  console.log(`[startup] WABEK Baileys Server — port ${PORT}`)
+  console.log(`[startup] NODE_ENV=${process.env.NODE_ENV || 'not set'}`)
+  console.log(`[startup] __dirname=${__dirname}`)
+  if (!WABEK_EVENTS_URL) console.warn('[startup] ⚠️  WABEK_EVENTS_URL not set')
   await restoreSessions()
-  console.log(`Startup complete. ${sessions.size} session(s) loaded.`)
+  console.log(`[startup] Complete. ${sessions.size} session(s) loaded: [${[...sessions.keys()].join(', ')}]`)
 })
