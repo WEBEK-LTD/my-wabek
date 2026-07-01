@@ -166,6 +166,20 @@ export default function ResellerPage() {
         ))}
       </div>
 
+      {/* ── Approval gate - disable functional tabs until approved */}
+      {profile && !profile.is_approved && tab !== 'overview' && tab !== 'settings' && (
+        <div className="card border-yellow-800/50 bg-yellow-900/10 mb-4">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">⏳</span>
+            <div>
+              <p className="font-semibold text-slate-900">Account pending approval</p>
+              <p className="text-sm text-slate-400 mt-0.5">This feature will be unlocked once your reseller account is approved by the admin.</p>
+            </div>
+            <button onClick={() => setTab('overview')} className="btn-secondary text-sm flex-shrink-0">Back to Overview</button>
+          </div>
+        </div>
+      )}
+
       {/* ── Overview ─────────────────────────────────────── */}
       {tab === 'overview' && (
         <div className="space-y-5">
@@ -228,7 +242,7 @@ export default function ResellerPage() {
               { label: 'Pending Balance', value: `$${(profile?.balance_pending || 0).toFixed(2)}`, icon: BanknotesIcon, color: 'text-blue-600' },
               { label: 'Total Earned', value: `$${(profile?.balance_total || 0).toFixed(2)}`, icon: CurrencyDollarIcon, color: 'text-yellow-400' },
               { label: 'Total Referrals', value: referrals.length, icon: UserGroupIcon, color: 'text-blue-400' },
-              { label: 'Active Invites', value: invites.filter(i => i.is_active).length, icon: LinkIcon, color: 'text-purple-400' },
+              { label: 'Commission Rate', value: profile?.referral_commission_pct ? `${profile.referral_commission_pct}%` : 'Set by admin', icon: LinkIcon, color: 'text-purple-400' },
             ].map(s => (
               <div key={s.label} className="stat-card">
                 <div className="flex items-center gap-2 mb-1">
@@ -718,6 +732,7 @@ export default function ResellerPage() {
                   <div className="space-y-3">
                     <div className="p-4 bg-[#F8FAFC] border border-slate-200 rounded-xl">
                       <p className="text-sm text-slate-700 mb-3">Connect your Stripe account so your customers pay you directly.</p>
+                      <p className="text-xs text-yellow-500 mb-3">⚠️ Make sure <strong>STRIPE_CONNECT_CLIENT_ID</strong> is set in your Netlify environment variables before connecting.</p>
                       <a href="/api/reseller/stripe-connect/authorize"
                         className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm text-slate-900 transition-colors"
                         style={{ backgroundColor: '#635BFF' }}>
@@ -755,11 +770,69 @@ export default function ResellerPage() {
               </div>
               <div>
                 <label className="label">Payout Details</label>
-                <textarea value={typeof profileForm?.payout_details === 'object' ? JSON.stringify(profileForm?.payout_details || {}, null, 2) : profileForm?.payout_details || ''}
-                  onChange={e => { try { setProfileForm(f => ({ ...f, payout_details: JSON.parse(e.target.value) })) } catch { setProfileForm(f => ({ ...f, payout_details: e.target.value })) } }}
-                  rows={4} className="input font-mono text-xs resize-none"
-                  placeholder={`{\n  "bank_name": "...",\n  "iban": "...",\n  "swift": "..."\n}`} />
-                <p className="text-xs text-slate-500 mt-1">Bank account, PayPal email, or wallet address</p>
+                {(() => {
+                  const method = profileForm?.payout_method || 'bank_transfer'
+                  const details = typeof profileForm?.payout_details === 'object'
+                    ? profileForm?.payout_details || {}
+                    : {}
+                  const setField = (k: string, v: string) =>
+                    setProfileForm(f => ({ ...f, payout_details: { ...(typeof f?.payout_details === 'object' ? f.payout_details : {}), [k]: v } }))
+
+                  if (method === 'bank_transfer') return (
+                    <div className="space-y-2">
+                      {[
+                        { k: 'bank_name', label: 'Bank Name', ph: 'e.g. HSBC' },
+                        { k: 'account_name', label: 'Account Name', ph: 'Full name on account' },
+                        { k: 'iban', label: 'IBAN / Account Number', ph: 'GB29 NWBK 6016 1331 9268 19' },
+                        { k: 'swift', label: 'SWIFT / BIC', ph: 'NWBKGB2L' },
+                        { k: 'country', label: 'Country', ph: 'United Kingdom' },
+                      ].map(f => (
+                        <div key={f.k}>
+                          <label className="text-xs text-slate-500 block mb-1">{f.label}</label>
+                          <input value={details[f.k] || ''} onChange={e => setField(f.k, e.target.value)}
+                            placeholder={f.ph} className="input text-sm" />
+                        </div>
+                      ))}
+                    </div>
+                  )
+                  if (method === 'paypal') return (
+                    <div>
+                      <label className="text-xs text-slate-500 block mb-1">PayPal Email</label>
+                      <input value={details['email'] || ''} onChange={e => setField('email', e.target.value)}
+                        placeholder="your@paypal.com" className="input text-sm" type="email" />
+                    </div>
+                  )
+                  if (method === 'wise') return (
+                    <div className="space-y-2">
+                      {[
+                        { k: 'email', label: 'Wise Email', ph: 'your@wise.com' },
+                        { k: 'account_id', label: 'Wise Account ID (optional)', ph: 'Pxxxx' },
+                      ].map(f => (
+                        <div key={f.k}>
+                          <label className="text-xs text-slate-500 block mb-1">{f.label}</label>
+                          <input value={details[f.k] || ''} onChange={e => setField(f.k, e.target.value)}
+                            placeholder={f.ph} className="input text-sm" />
+                        </div>
+                      ))}
+                    </div>
+                  )
+                  if (method === 'crypto') return (
+                    <div className="space-y-2">
+                      {[
+                        { k: 'network', label: 'Network', ph: 'TRC20 / ERC20 / BEP20' },
+                        { k: 'address', label: 'Wallet Address', ph: 'T...' },
+                        { k: 'currency', label: 'Currency', ph: 'USDT / BTC / ETH' },
+                      ].map(f => (
+                        <div key={f.k}>
+                          <label className="text-xs text-slate-500 block mb-1">{f.label}</label>
+                          <input value={details[f.k] || ''} onChange={e => setField(f.k, e.target.value)}
+                            placeholder={f.ph} className="input text-sm font-mono" />
+                        </div>
+                      ))}
+                    </div>
+                  )
+                  return null
+                })()}
               </div>
             </div>
           )}
