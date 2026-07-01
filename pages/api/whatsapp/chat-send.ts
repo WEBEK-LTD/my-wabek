@@ -54,7 +54,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           caption: text || undefined,
           filename: media_filename || undefined,
         })
-        if (r.error) return res.status(400).json({ error: r.error })
 
         await db.from('messages').insert({
           id: uuidv4(), user_id: instance.user_id, instance_id: instance.id, contact_id: contact_id || null,

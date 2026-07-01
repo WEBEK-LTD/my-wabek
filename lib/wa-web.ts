@@ -31,21 +31,44 @@ async function callWAServer(path: string, body?: object): Promise<unknown> {
   const waServerUrl = process.env.WA_WEB_SERVER_URL
   if (!waServerUrl) throw new Error('WA_WEB_SERVER_URL not configured')
 
-  const res = await fetch(`${waServerUrl}${path}`, {
-    method: body ? 'POST' : 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Secret': process.env.WA_WEB_SERVER_SECRET || '',
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  })
+  const fullUrl = `${waServerUrl}${path}`
+  const method  = body ? 'POST' : 'GET'
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error((err as { error?: string }).error || `Server error ${res.status}`)
+  // Detailed request log — omit X-Secret from output
+  console.log(`[wa-web] ${method} ${fullUrl}`, body ? JSON.stringify(body).slice(0, 800) : '')
+
+  let res: Response
+  try {
+    res = await fetch(fullUrl, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Secret': process.env.WA_WEB_SERVER_SECRET || '',
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    })
+  } catch (fetchErr) {
+    console.error(`[wa-web] FETCH ERROR ${fullUrl}:`, fetchErr instanceof Error ? fetchErr.message : fetchErr)
+    throw new Error(`WA Web server unreachable: ${fetchErr instanceof Error ? fetchErr.message : fetchErr}`)
   }
 
-  return res.json()
+  const rawText = await res.text()
+  console.log(`[wa-web] RESPONSE ${res.status} ${fullUrl}:`, rawText.slice(0, 500))
+
+  if (!res.ok) {
+    let errMsg = `Server error ${res.status}`
+    try {
+      const parsed = JSON.parse(rawText)
+      errMsg = parsed?.error || parsed?.message || errMsg
+    } catch {}
+    throw new Error(`[wa-web] ${method} ${path} failed (${res.status}): ${errMsg} | body=${rawText.slice(0, 300)}`)
+  }
+
+  try {
+    return JSON.parse(rawText)
+  } catch {
+    return { raw: rawText }
+  }
 }
 
 export async function requestQRCode(instanceId: string, userId: string): Promise<{ qrCode?: string; message: string }> {
@@ -84,33 +107,23 @@ export async function sendWAWebMessage(params: { instanceId: string; to: string;
 }
 
 // Send media (image/video/audio/document) via the Baileys server.
-// Uses a NEW route (/instance/:id/send-media) on the same Railway server,
-// following the exact same callWAServer() pattern as the existing /send
-// and /qr routes — does not modify or affect them in any way.
-//
-// NOTE: if this route doesn't exist yet on the Railway server, it needs
-// to be added there (see docs/baileys-server.md for the expected shape:
-// POST /instance/:id/send-media { to, mediaUrl, mediaType, caption?, filename? }
-// using sock.sendMessage(jid, { image/video/audio/document: { url }, caption, ... })).
+// Uses route /instance/:id/send-media on the Railway server.
+// Throws on failure (same pattern as sendWAWebMessage above) so callers
+// get the full detailed error from callWAServer's logging.
 export async function sendWAWebMedia(params: {
   instanceId: string
   to: string
   mediaUrl: string
-  mediaType: string // 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'ptt'
+  mediaType: string
   caption?: string
   filename?: string
-}): Promise<{ messageId?: string; error?: string }> {
-  try {
-    const data = await callWAServer(`/instance/${params.instanceId}/send-media`, {
-      to: params.to,
-      mediaUrl: params.mediaUrl,
-      mediaType: params.mediaType,
-      caption: params.caption,
-      filename: params.filename,
-    }) as { messageId: string }
-    return { messageId: data.messageId }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return { error: msg }
-  }
+}): Promise<{ messageId: string }> {
+  const data = await callWAServer(`/instance/${params.instanceId}/send-media`, {
+    to: params.to,
+    mediaUrl: params.mediaUrl,
+    mediaType: params.mediaType,
+    caption: params.caption,
+    filename: params.filename,
+  }) as { messageId: string }
+  return data
 }
