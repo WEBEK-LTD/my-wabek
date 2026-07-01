@@ -308,20 +308,44 @@ async function createSession(instanceId) {
     }
   })
 
-  // contacts.upsert fires after sync completes and contains the account's own name.
-  // We look for the entry matching our own JID and send it as a displayName update.
+  // contacts.upsert fires after sync — check if sock.user now has the name
   sock.ev.on('contacts.upsert', async (contacts) => {
     try {
-      const myJid  = sock.user?.id
-      if (!myJid) return
-      const myBase = myJid.split(':')[0] + '@s.whatsapp.net'
-      const me     = contacts.find(c => c.id === myJid || c.id === myBase)
-      const name   = me?.name || me?.notify || sock.user?.name || sock.user?.notify
+      // After contacts sync, sock.user.name is usually populated
+      const name = sock.user?.name || sock.user?.notify
       if (name) {
-        console.log(`[${instanceId}] contacts.upsert → displayName: ${name}`)
+        console.log(`[${instanceId}] contacts.upsert → displayName from sock.user: ${name}`)
         await notifyWabek('display_name_update', instanceId, { displayName: name })
+        return
+      }
+      // Fallback: look for own number in the contacts list
+      const myJid  = sock.user?.id || ''
+      const myNum  = myJid.split(':')[0].split('@')[0]
+      const me     = contacts.find(c => {
+        const cNum = c.id.split(':')[0].split('@')[0]
+        return cNum === myNum && myNum.length > 5
+      })
+      const fromList = me?.name || me?.notify || me?.pushName
+      if (fromList) {
+        console.log(`[${instanceId}] contacts.upsert → displayName from list: ${fromList}`)
+        await notifyWabek('display_name_update', instanceId, { displayName: fromList })
       }
     } catch (e) { /* non-fatal */ }
+  })
+
+  // Also try after a short delay — sock.user.name may not be set immediately at connection.open
+  sock.ev.on('connection.update', async (update) => {
+    if (update.connection === 'open') {
+      setTimeout(async () => {
+        try {
+          const name = sock.user?.name || sock.user?.notify
+          if (name) {
+            console.log(`[${instanceId}] delayed check → displayName: ${name}`)
+            await notifyWabek('display_name_update', instanceId, { displayName: name })
+          }
+        } catch {}
+      }, 5000)  // 5s after connection — usually enough for user info to populate
+    }
   })
 
   return session
