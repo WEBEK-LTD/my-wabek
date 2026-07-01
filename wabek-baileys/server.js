@@ -187,8 +187,13 @@ async function createSession(instanceId) {
     if (type !== 'notify') return
     for (const msg of messages) {
       if (msg.key.fromMe) continue
-      const from = msg.key.remoteJid || ''
-      if (!from) continue
+      // Strip JID suffix so WABEK gets a plain phone number (or @lid JID)
+      // @s.whatsapp.net → plain digits  |  @lid → keep as-is (special contact type)
+      const rawJid = msg.key.remoteJid || ''
+      if (!rawJid) continue
+      const from = rawJid.endsWith('@s.whatsapp.net')
+        ? rawJid.replace('@s.whatsapp.net', '')
+        : rawJid  // keep @lid, @g.us etc unchanged for WABEK to filter
 
       const m      = msg.message || {}
       const isPtt  = !!m.audioMessage?.ptt

@@ -50,7 +50,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       case 'message_received': {
-        console.log(`[WEBHOOK] message_received instanceId=${instanceId}`)
+        console.log(`[wa-web-events] message_received instanceId=${instanceId} from=${data.from} type=${data.type} text="${(data.text || '').slice(0, 50)}"`)
 
         // Filter newsletter/broadcast
         if (data.from && (
@@ -59,16 +59,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           data.from.includes('status@') ||
           data.from === 'status@broadcast'
         )) {
-          console.log(`[WEBHOOK] skip newsletter/broadcast from=${data.from}`)
+          console.log(`[wa-web-events] skip newsletter/broadcast from=${data.from}`)
           break
         }
 
         const { data: instance, error: instErr } = await db.from('whatsapp_instances').select('*').eq('id', instanceId).maybeSingle()
         if (!instance) {
-          console.log(`[WEBHOOK] instance not found instanceId=${instanceId} error=${instErr?.message}`)
+          console.log(`[wa-web-events] instance not found instanceId=${instanceId} error=${instErr?.message}`)
           break
         }
-        console.log(`[WEBHOOK] instance found userId=${instance.user_id} type=${instance.instance_type}`)
+        console.log(`[wa-web-events] instance found userId=${instance.user_id}`)
 
         // Find or create contact
         let contactId: string | null = null
@@ -83,9 +83,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
 
         const content = data.text || data.caption || `[${data.type}]`
+        console.log(`[wa-web-events] saving message contactId=${contactId} content="${content.slice(0, 50)}" mediaUrl=${data.mediaUrl ? 'yes' : 'no'}`)
 
         // Save message
-        await db.from('messages').insert({
+        const { error: msgErr } = await db.from('messages').insert({
           id: uuidv4(), user_id: instance.user_id, instance_id: instanceId, contact_id: contactId,
           wa_message_id: data.messageId, direction: 'inbound',
           type: data.type || 'text', content,
@@ -94,6 +95,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           media_filename: data.filename || null,
           status: 'delivered',
         })
+
+        if (msgErr) {
+          console.error(`[wa-web-events] ❌ message save failed:`, msgErr.message)
+        } else {
+          console.log(`[wa-web-events] ✅ message saved wa_message_id=${data.messageId}`)
+        }
 
         // Notification
         await notifyNewMessage(instance.user_id, data.pushName || data.from, content)

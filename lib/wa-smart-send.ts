@@ -300,27 +300,43 @@ export async function smartSendWAWeb(params: {
   try {
     const result = await sendWAWebMessage({ instanceId, to: cleanPhone, text })
     const messageId = result.messageId || null
+    console.log(`[smart-send] WA Web send result: messageId=${messageId}`)
 
+    // Save to DB regardless of messageId — if messageId is null we still
+    // need the message persisted so it survives a page refresh.
+    // Only skip if an identical wa_message_id already exists (dedup).
+    let shouldInsert = true
     if (messageId) {
       const { data: existing } = await db.from('messages').select('id').eq('wa_message_id', messageId).maybeSingle()
-      if (!existing) {
-        await db.from('messages').insert({
-          id: uuidv4(),
-          user_id: userId,
-          instance_id: instanceId,
-          contact_id: contactId || null,
-          wa_message_id: messageId,
-          direction: 'outbound',
-          type: 'text',
-          content: text,
-          status: 'sent',
-          meta: { method: 'text', source },
-        })
+      if (existing) {
+        console.log(`[smart-send] message ${messageId} already in DB, skipping insert`)
+        shouldInsert = false
+      }
+    }
+
+    if (shouldInsert) {
+      const { error: insertErr } = await db.from('messages').insert({
+        id: uuidv4(),
+        user_id: userId,
+        instance_id: instanceId,
+        contact_id: contactId || null,
+        wa_message_id: messageId,
+        direction: 'outbound',
+        type: 'text',
+        content: text,
+        status: 'sent',
+        meta: { method: 'text', source },
+      })
+      if (insertErr) {
+        console.error(`[smart-send] DB insert error:`, insertErr.message)
+      } else {
+        console.log(`[smart-send] ✅ message saved to DB wa_message_id=${messageId}`)
       }
     }
 
     return { messageId, method: 'wa_web', inWindow: true }
   } catch (e: any) {
+    console.error(`[smart-send] WA Web error:`, e.message)
     return { messageId: null, method: 'wa_web', inWindow: true, error: e.message }
   }
 }
