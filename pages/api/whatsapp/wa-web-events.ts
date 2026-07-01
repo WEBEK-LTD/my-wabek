@@ -29,15 +29,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       case 'connected': {
-        await db.from('whatsapp_instances').update({
+        // Build update — only include display_name if we actually received one
+        // (never overwrite existing name with null/empty)
+        const connUpdate: Record<string, unknown> = {
           status: 'connected',
           phone_number: data.phoneNumber || 'unknown',
-          display_name: data.displayName || data.pushName || null,
           qr_code: null,
           last_seen_at: new Date().toISOString(),
-        }).eq('id', instanceId)
+        }
+        if (data.displayName) connUpdate.display_name = data.displayName
 
-        // Notify owner
+        await db.from('whatsapp_instances').update(connUpdate).eq('id', instanceId)
+
         const { data: inst } = await db.from('whatsapp_instances').select('user_id, phone_number').eq('id', instanceId).maybeSingle()
         if (inst) await notifyInstanceConnected(inst.user_id, data.phoneNumber || inst.phone_number)
         break

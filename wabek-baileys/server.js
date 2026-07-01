@@ -221,10 +221,12 @@ async function createSession(instanceId) {
 
     if (connection === 'open') {
       const phoneNumber = sock.user?.id?.split(':')[0] || sock.user?.id?.split('@')[0]
+      // Priority: name → notify → undefined (don't send empty string — let backend keep existing DB value)
+      const displayName = sock.user?.name || sock.user?.notify || undefined
       const s = sessions.get(instanceId)
       if (s) { s.connected = true; s.phoneNumber = phoneNumber; s.qr = null }
-      console.log(`[${instanceId}] ✅ Connected! Phone: ${phoneNumber}`)
-      await notifyWabek('connected', instanceId, { phoneNumber, displayName: sock.user?.name || '' })
+      console.log(`[${instanceId}] ✅ Connected! Phone: ${phoneNumber} Name: ${displayName || '(none yet)'}`)
+      await notifyWabek('connected', instanceId, { phoneNumber, ...(displayName ? { displayName } : {}) })
     }
 
     if (connection === 'close') {
@@ -299,28 +301,45 @@ async function createSession(instanceId) {
 
 // ─── Restore sessions on startup ──────────────────────────
 async function restoreSessions() {
-  // 1. Try disk first (fast, works after restart)
+  // 1. Get IDs from disk
   const diskIds = fs.existsSync(SESSIONS_DIR)
     ? fs.readdirSync(SESSIONS_DIR).filter(d => fs.existsSync(path.join(SESSIONS_DIR, d, 'creds.json')))
     : []
 
-  // 2. Try Supabase (works after redeploy when disk is wiped)
+  // 2. Get IDs from Supabase backup
   let supabaseIds = []
   if (SUPABASE_URL && SUPABASE_KEY) {
     try {
-      const res  = await fetch(`${SUPABASE_URL}/rest/v1/wa_sessions?select=instance_id`, {
+      const res  = await fetch(`${SUPABASE_URL}/rest/v1/wa_sessions?select=instance_id&order=updated_at.desc`, {
         headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` },
       })
-      const rows = await res.json()
-      supabaseIds = (rows || []).map(r => r.instance_id)
+      supabaseIds = ((await res.json()) || []).map(r => r.instance_id)
     } catch (e) { console.error('[startup] Supabase session list error:', e.message) }
   }
 
-  const allIds = [...new Set([...diskIds, ...supabaseIds])]
-  console.log(`[startup] Sessions — disk: [${diskIds.join(',')}] supabase: [${supabaseIds.join(',')}]`)
-  console.log(`[startup] Restoring ${allIds.length} session(s): [${allIds.join(',')}]`)
+  // 3. Validate against WABEK DB — skip stale sessions not in whatsapp_instances
+  let validIds = [...new Set([...diskIds, ...supabaseIds])]
+  if (SUPABASE_URL && SUPABASE_KEY && validIds.length > 0) {
+    try {
+      const filter = validIds.map(id => `id.eq.${id}`).join(',')
+      const res    = await fetch(
+        `${SUPABASE_URL}/rest/v1/whatsapp_instances?select=id&or=(${filter})`,
+        { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
+      )
+      const rows = await res.json()
+      const valid = new Set((rows || []).map(r => r.id))
+      const before = validIds.length
+      validIds = validIds.filter(id => valid.has(id))
+      if (before !== validIds.length)
+        console.log(`[startup] Skipped ${before - validIds.length} stale session(s) not in WABEK DB`)
+    } catch (e) {
+      console.error('[startup] WABEK validation error (proceeding with all):', e.message)
+    }
+  }
 
-  for (const instanceId of allIds) {
+  console.log(`[startup] disk=[${diskIds.join(',')}] supabase=[${supabaseIds.join(',')}] restoring=[${validIds.join(',')}]`)
+
+  for (const instanceId of validIds) {
     try {
       await createSession(instanceId)
       console.log(`[startup] ✅ Restored: ${instanceId}`)
@@ -338,9 +357,9 @@ app.get('/health', (req, res) => {
   res.json({
     ok: true, sessions: sessions.size, instances: list,
     env: {
-      WABEK_EVENTS_URL:  WABEK_EVENTS_URL || '⚠️ NOT SET',
-      SUPABASE_URL:      SUPABASE_URL     ? '✅ set' : '⚠️ NOT SET',
-      SUPABASE_KEY:      SUPABASE_KEY     ? '✅ set' : '⚠️ NOT SET',
+      WABEK_EVENTS_URL: WABEK_EVENTS_URL || '⚠️ NOT SET',
+      // Supabase is optional — used for session backup across deploys
+      ...(SUPABASE_URL ? { SUPABASE_BACKUP: '✅ enabled' } : { SUPABASE_BACKUP: 'ℹ️ not configured (optional)' }),
     },
   })
 })
