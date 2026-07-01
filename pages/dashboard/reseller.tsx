@@ -732,7 +732,6 @@ export default function ResellerPage() {
                   <div className="space-y-3">
                     <div className="p-4 bg-[#F8FAFC] border border-slate-200 rounded-xl">
                       <p className="text-sm text-slate-700 mb-3">Connect your Stripe account so your customers pay you directly.</p>
-                      <p className="text-xs text-yellow-500 mb-3">⚠️ Make sure <strong>STRIPE_CONNECT_CLIENT_ID</strong> is set in your Netlify environment variables before connecting.</p>
                       <a href="/api/reseller/stripe-connect/authorize"
                         className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm text-slate-900 transition-colors"
                         style={{ backgroundColor: '#635BFF' }}>
