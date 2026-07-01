@@ -124,28 +124,58 @@ export default function TeamPage() {
         <div className="card">
           <div className="space-y-0">
             {members.map(member => (
-              <div key={member.id} className="flex items-center gap-4 py-3 border-b border-slate-200 last:border-0">
-                <div className="w-10 h-10 rounded-full bg-[#F8FAFC] flex items-center justify-center font-bold text-slate-700 flex-shrink-0">
-                  {member.name[0].toUpperCase()}
+              <div key={member.id} className="py-3 border-b border-slate-200 last:border-0">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-[#F8FAFC] flex items-center justify-center font-bold text-slate-700 flex-shrink-0">
+                    {member.name[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-900">{member.name}</p>
+                    <p className="text-xs text-slate-500">{member.email}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={ROLE_COLORS[member.role] || 'badge-gray'}>{member.role}</span>
+                    <span className={STATUS_COLORS[member.status] || 'badge-gray'}>{member.status}</span>
+                    <select value={member.role} onChange={e => updateMut.mutate({ id: member.id, role: e.target.value })}
+                      className="input text-xs py-1 px-2 w-24">
+                      <option value="agent">Agent</option>
+                      <option value="admin">Admin</option>
+                      <option value="viewer">Viewer</option>
+                    </select>
+                    <button onClick={() => { if(confirm('Remove member?')) deleteMut.mutate(member.id) }}
+                      className="p-1.5 text-slate-500 hover:text-red-400">
+                      <TrashIcon className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-900">{member.name}</p>
-                  <p className="text-xs text-slate-500">{member.email}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={ROLE_COLORS[member.role] || 'badge-gray'}>{member.role}</span>
-                  <span className={STATUS_COLORS[member.status] || 'badge-gray'}>{member.status}</span>
-                  <select value={member.role} onChange={e => updateMut.mutate({ id: member.id, role: e.target.value })}
-                    className="input text-xs py-1 px-2 w-24">
-                    <option value="agent">Agent</option>
-                    <option value="admin">Admin</option>
-                    <option value="viewer">Viewer</option>
-                  </select>
-                  <button onClick={() => { if(confirm('Remove member?')) deleteMut.mutate(member.id) }}
-                    className="p-1.5 text-slate-500 hover:text-red-400">
-                    <TrashIcon className="w-4 h-4" />
-                  </button>
-                </div>
+                {/* Inbox Permissions */}
+                {member.status === 'active' && data?.instances?.length > 0 && (
+                  <div className="mt-2 ml-14">
+                    <p className="text-[11px] text-slate-400 mb-1.5">Inbox Access <span className="text-slate-300">(no selection = all inboxes)</span></p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(data.instances || []).map(inst => {
+                        const allowed = (member.allowed_instances || []).includes(inst.id)
+                        return (
+                          <button
+                            key={inst.id}
+                            onClick={() => updateMut.mutate({
+                              id: member.id,
+                              toggle_instance: inst.id,
+                            })}
+                            className={clsx(
+                              'text-[11px] px-2 py-1 rounded-lg border transition-colors',
+                              allowed
+                                ? 'bg-brand-500 text-white border-brand-500'
+                                : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                            )}
+                          >
+                            {allowed ? '✓ ' : ''}{inst.display_name || inst.phone_number}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

@@ -166,10 +166,11 @@ function MessageBubble({ msg, showAvatar }) {
   )
 }
 
-function ConversationItem({ conv, active, onClick, unread }) {
+function ConversationItem({ conv, active, onClick, unread, showInboxBadge = false }) {
   const status = STATUS_CONFIG[conv.status]
   const lastMsg = conv.last_message
   const contact = conv.contacts
+  const inbox = conv.whatsapp_instances
 
   return (
     <button onClick={onClick} className={clsx(
@@ -208,6 +209,12 @@ function ConversationItem({ conv, active, onClick, unread }) {
             {conv.assigned_user && (
               <span className="text-[10px] text-slate-600">@{conv.assigned_user.name?.split(' ')[0]}</span>
             )}
+            {/* Inbox badge — shown in All Inboxes view so you know which number */}
+            {showInboxBadge && inbox && (
+              <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded truncate max-w-[80px]">
+                📱 {inbox.display_name || inbox.phone_number}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -235,7 +242,10 @@ export default function ChatPage() {
   const [quickReplies, setQuickReplies] = useState([])
   const [showEmoji, setShowEmoji] = useState(false)
   const [instances, setInstances] = useState([])
-  const [selectedInstance, setSelectedInstance] = useState('')
+  const [inboxes, setInboxes] = useState([])          // accessible inboxes for selector
+  const [canSeeAll, setCanSeeAll] = useState(true)    // owner = true
+  const [selectedInbox, setSelectedInbox] = useState<string | null>(null) // null = All Inboxes
+  const [selectedInstance, setSelectedInstance] = useState('')  // for send path (backward-compat)
   const [showDetails, setShowDetails] = useState(false)
   const [teamMembers, setTeamMembers] = useState([])
   const [unreadCounts, setUnreadCounts] = useState({})
@@ -244,10 +254,43 @@ export default function ChatPage() {
   const textareaRef = useRef(null)
   const realtimeRef = useRef(null)
 
+  // Load accessible inboxes + last selected
+  const loadInboxes = async () => {
+    try {
+      const { data } = await axios.get('/api/inbox/inboxes')
+      setInboxes(data.inboxes || [])
+      setCanSeeAll(data.can_see_all ?? true)
+      // Restore last selected inbox
+      const lastId = data.last_inbox_id || localStorage.getItem('last_inbox_id')
+      if (lastId && data.inboxes?.find(i => i.id === lastId)) {
+        setSelectedInbox(lastId)
+      } else if (!data.can_see_all && data.inboxes?.length > 0) {
+        // Team member with no preference → default to first allowed inbox
+        setSelectedInbox(data.inboxes[0].id)
+      }
+      // Also set selectedInstance for backward-compat send path
+      if (data.inboxes?.length === 1) setSelectedInstance(data.inboxes[0].id)
+    } catch {}
+  }
+
+  const switchInbox = async (inboxId: string | null) => {
+    setSelectedInbox(inboxId)
+    setActiveConv(null)
+    setMessages([])
+    if (inboxId) {
+      setSelectedInstance(inboxId)
+      localStorage.setItem('last_inbox_id', inboxId)
+    } else {
+      localStorage.removeItem('last_inbox_id')
+    }
+    // Persist to DB for cross-device sync
+    axios.post('/api/inbox/set-last-inbox', { inbox_id: inboxId }).catch(() => {})
+  }
+
   // Load initial data
   useEffect(() => {
     Promise.all([
-      loadConversations(),
+      loadInboxes(),
       axios.get('/api/whatsapp/instances').then(r => setInstances((r.data.instances || []).filter(i => i.status === 'connected'))),
       axios.get('/api/quick-replies').then(r => setQuickReplies(r.data.replies || [])),
       axios.get('/api/team').then(r => setTeamMembers(r.data.members || [])).catch(() => {}),
@@ -369,12 +412,15 @@ export default function ChatPage() {
 
   const loadConversations = async () => {
     try {
-      const { data } = await axios.get('/api/inbox', { params: { status: statusFilter } })
+      const params: Record<string, string> = { status: statusFilter }
+      if (selectedInbox) params.instance_id = selectedInbox
+      else if (canSeeAll) params.instance_id = 'all'
+      const { data } = await axios.get('/api/inbox', { params })
       setConversations(data.conversations || [])
     } catch {}
   }
 
-  useEffect(() => { loadConversations() }, [statusFilter])
+  useEffect(() => { loadConversations() }, [statusFilter, selectedInbox])
 
   const openConversation = async (conv) => {
     setActiveConv(conv)
@@ -555,6 +601,57 @@ export default function ChatPage() {
                 </div>
               </div>
 
+              {/* Inbox Selector — shown only when multiple inboxes exist */}
+              {inboxes.length > 1 && (
+                <div className="mb-3">
+                  <div className="flex flex-col gap-1 max-h-36 overflow-y-auto pr-1">
+                    {canSeeAll && (
+                      <button
+                        onClick={() => switchInbox(null)}
+                        className={clsx(
+                          'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left w-full',
+                          selectedInbox === null
+                            ? 'bg-brand-500 text-white'
+                            : 'text-slate-600 hover:bg-[#F8FAFC]'
+                        )}
+                      >
+                        <span className="text-base">📥</span>
+                        <span className="flex-1 truncate">All Inboxes</span>
+                        {Object.values(unreadCounts as Record<string, number>).reduce((a, b) => a + b, 0) > 0 && selectedInbox !== null && (
+                          <span className="bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0">
+                            {Object.values(unreadCounts as Record<string, number>).reduce((a, b) => a + b, 0)}
+                          </span>
+                        )}
+                      </button>
+                    )}
+                    {inboxes.map((inbox: any) => {
+                      const colors = ['🟢','🟡','🔵','🟠','🔴','🟣']
+                      const colorIdx = inboxes.indexOf(inbox) % colors.length
+                      return (
+                        <button
+                          key={inbox.id}
+                          onClick={() => switchInbox(inbox.id)}
+                          className={clsx(
+                            'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left w-full',
+                            selectedInbox === inbox.id
+                              ? 'bg-brand-500 text-white'
+                              : 'text-slate-600 hover:bg-[#F8FAFC]'
+                          )}
+                        >
+                          <span className="text-base flex-shrink-0">{colors[colorIdx]}</span>
+                          <span className="flex-1 truncate">{inbox.name}</span>
+                          {inbox.unread > 0 && (
+                            <span className="bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0">
+                              {inbox.unread}
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Search */}
               <div className="relative mb-3">
                 <MagnifyingGlassIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -579,16 +676,6 @@ export default function ChatPage() {
               </div>
             </div>
 
-            {/* Instance selector */}
-            {instances.length > 1 && (
-              <div className="px-3 py-2 border-b border-slate-200">
-                <select value={selectedInstance} onChange={e => setSelectedInstance(e.target.value)} className="input text-xs py-1.5">
-                  <option value="">All instances</option>
-                  {instances.map(i => <option key={i.id} value={i.id}>{i.display_name || i.phone_number}</option>)}
-                </select>
-              </div>
-            )}
-
             {/* Conversations */}
             <div className="flex-1 overflow-y-auto">
               {loading ? (
@@ -606,6 +693,7 @@ export default function ChatPage() {
                   conv={conv}
                   active={activeConv?.id === conv.id}
                   unread={unreadCounts[conv.contact_id] || 0}
+                  showInboxBadge={selectedInbox === null && inboxes.length > 1}
                   onClick={() => openConversation(conv)}
                 />
               ))}

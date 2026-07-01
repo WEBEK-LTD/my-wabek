@@ -115,16 +115,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Notification for new message
       await notifyNewMessage(instance.user_id, msg.contactName || msg.from, content)
 
-      // Auto-create inbox conversation
+      // Auto-create inbox conversation — scoped to this instance (inbox)
       try {
         await db.from('conversation_assignments').upsert({
-          owner_id: instance.user_id,
-          contact_id: contactId,
-          status: 'open',
-          priority: 'normal',
+          owner_id:        instance.user_id,
+          contact_id:      contactId,
+          instance_id:     instance.id,   // ← ties conversation to specific inbox
+          status:          'open',
+          priority:        'normal',
           last_message_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'owner_id,contact_id', ignoreDuplicates: false })
+          updated_at:      new Date().toISOString(),
+        }, { onConflict: 'owner_id,contact_id,instance_id', ignoreDuplicates: false })
       } catch {}
 
       await executeAutomationFlow({

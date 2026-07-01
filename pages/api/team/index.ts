@@ -10,8 +10,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const db = supabaseAdmin()
 
   if (req.method === 'GET') {
-    const { data } = await db.from('team_members').select('*').eq('owner_id', user.userId).order('created_at')
-    return res.status(200).json({ members: data || [] })
+    const { data: members } = await db.from('team_members').select('*').eq('owner_id', user.userId).order('created_at')
+
+    // Get allowed instances for each member
+    const memberIds = (members || []).map(m => m.user_id).filter(Boolean)
+    let permsMap: Record<string, string[]> = {}
+    if (memberIds.length > 0) {
+      const { data: perms } = await db.from('team_member_instances')
+        .select('member_user_id, instance_id')
+        .in('member_user_id', memberIds)
+      for (const p of perms || []) {
+        if (!permsMap[p.member_user_id]) permsMap[p.member_user_id] = []
+        permsMap[p.member_user_id].push(p.instance_id)
+      }
+    }
+
+    // Get owner's instances for the inbox permissions UI
+    const { data: instances } = await db.from('whatsapp_instances')
+      .select('id, phone_number, display_name, status')
+      .eq('user_id', user.userId)
+      .in('status', ['connected', 'active'])
+
+    const enriched = (members || []).map(m => ({
+      ...m,
+      allowed_instances: m.user_id ? (permsMap[m.user_id] || []) : [],
+    }))
+
+    return res.status(200).json({ members: enriched, instances: instances || [] })
   }
 
   if (req.method === 'POST') {
