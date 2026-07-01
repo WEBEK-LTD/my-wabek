@@ -228,19 +228,30 @@ export default function SettingsPage() {
           <div className="card">
             <h3 className="font-display font-semibold text-slate-900 mb-1">📱 Trusted Devices</h3>
             <p className="text-sm text-slate-400 mb-4">Devices that don't require OTP verification</p>
-            {!devicesData?.devices?.length ? (
-              <p className="text-slate-500 text-sm text-center py-8">No trusted devices yet</p>
-            ) : devicesData.devices.map(d => (
-              <div key={d.id} className="flex items-center justify-between py-3 border-b border-slate-200/50 last:border-0">
-                <div>
-                  <p className="text-sm font-medium text-slate-900">{d.device_name || 'Unknown Device'}</p>
-                  <p className="text-xs text-slate-500">{d.ip_address} • Expires {new Date(d.expires_at).toLocaleDateString()}</p>
-                </div>
-                <button onClick={() => removeDeviceMut.mutate(d.id)} className="p-1.5 text-slate-500 hover:text-red-400">
-                  <TrashIcon className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
+            {(() => {
+              const activeDevices = (devicesData?.devices || []).filter(d => new Date(d.expires_at) > new Date())
+              if (!activeDevices.length) return <p className="text-slate-500 text-sm text-center py-8">No trusted devices yet</p>
+              return activeDevices.map(d => {
+                const expiresDate = new Date(d.expires_at)
+                const formattedExpiry = expiresDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                const lastUsed = d.last_used_at ? new Date(d.last_used_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null
+                return (
+                  <div key={d.id} className="flex items-center justify-between py-3 border-b border-slate-200/50 last:border-0">
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">{d.device_name || 'Unknown Device'}</p>
+                      <p className="text-xs text-slate-500">
+                        {d.ip_address && <span>{d.ip_address} • </span>}
+                        {lastUsed && <span>Last used {lastUsed} • </span>}
+                        Expires {formattedExpiry}
+                      </p>
+                    </div>
+                    <button onClick={() => removeDeviceMut.mutate(d.id)} className="p-1.5 text-slate-500 hover:text-red-400">
+                      <TrashIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                )
+              })
+            })()}
           </div>
         )}
       </div>

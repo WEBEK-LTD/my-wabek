@@ -8,7 +8,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const db = supabaseAdmin()
 
   if (req.method === 'GET') {
-    const { data } = await db.from('trusted_devices').select('*').eq('user_id', user.userId).order('last_used_at', { ascending: false })
+    // Auto-delete expired devices
+    await db.from('trusted_devices')
+      .delete()
+      .eq('user_id', user.userId)
+      .lt('expires_at', new Date().toISOString())
+
+    const { data } = await db.from('trusted_devices')
+      .select('*')
+      .eq('user_id', user.userId)
+      .order('last_used_at', { ascending: false })
     return res.status(200).json({ devices: data || [] })
   }
 
