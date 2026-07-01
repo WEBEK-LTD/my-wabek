@@ -229,6 +229,7 @@ export default function ChatPage() {
   // State
   const [conversations, setConversations] = useState([])
   const [activeConv, setActiveConv] = useState(null)
+  const activeConvRef = useRef(null)  // keeps realtime handler in sync without re-subscribing
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
@@ -311,13 +312,13 @@ export default function ChatPage() {
     ]).finally(() => setLoading(false))
   }, [])
 
-  // Realtime subscription
+  // Keep ref in sync so realtime handler always reads current value
+  useEffect(() => { activeConvRef.current = activeConv }, [activeConv])
   useEffect(() => {
     if (!user?.id) return
 
     const channel = supabase
       .channel('inbox-realtime')
-      // Listen for new messages (INSERT)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
@@ -325,40 +326,47 @@ export default function ChatPage() {
         filter: `user_id=eq.${user.id}`,
       }, (payload) => {
         const newMsg = payload.new
-        setMessages(prev => {
-          if (activeConv && newMsg.contact_id === activeConv.contact_id) {
-            // Skip if already in list (by id or wa_message_id)
+        const conv = activeConvRef.current  // always current — no stale closure
+
+        // ── Add to open conversation ──────────────────────────
+        if (conv && newMsg.contact_id === conv.contact_id) {
+          setMessages(prev => {
             if (prev.find(m => m.id === newMsg.id)) return prev
             if (newMsg.wa_message_id && prev.find(m => m.wa_message_id === newMsg.wa_message_id)) return prev
-            // Replace temp message if same wa_message_id
-            const hasTempWithSameWaId = prev.find(m =>
-              m.id?.startsWith('temp-') && m.wa_message_id === newMsg.wa_message_id
-            )
-            if (hasTempWithSameWaId) {
-              return prev.map(m => m.wa_message_id === newMsg.wa_message_id ? newMsg : m)
-            }
-            // For outbound messages from realtime, skip if we already have a temp
+            const hasTempWaId = prev.find(m => m.id?.startsWith('temp-') && m.wa_message_id === newMsg.wa_message_id)
+            if (hasTempWaId) return prev.map(m => m.wa_message_id === newMsg.wa_message_id ? newMsg : m)
             if (newMsg.direction === 'outbound') {
-              const hasTempOutbound = prev.find(m => m.id?.startsWith('temp-') && m.content === newMsg.content)
-              if (hasTempOutbound) {
-                return prev.map(m => (m.id?.startsWith('temp-') && m.content === newMsg.content) ? newMsg : m)
-              }
+              const hasTempOut = prev.find(m => m.id?.startsWith('temp-') && m.content === newMsg.content)
+              if (hasTempOut) return prev.map(m => (m.id?.startsWith('temp-') && m.content === newMsg.content) ? newMsg : m)
             }
             return [...prev, newMsg]
-          }
-          return prev
-        })
+          })
+        }
+
+        // ── Update conversations list ─────────────────────────
         if (newMsg.direction === 'inbound') {
           setUnreadCounts(prev => ({
             ...prev,
             [newMsg.contact_id]: (prev[newMsg.contact_id] || 0) + 1,
           }))
-          setConversations(prev => prev.map(c =>
-            c.contact_id === newMsg.contact_id
-              ? { ...c, last_message: newMsg, last_message_at: newMsg.created_at }
-              : c
-          ).sort((a, b) => new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime()))
-          // Update unread count in inbox selector badge
+          setConversations(prev => {
+            const exists = prev.find(c =>
+              c.contact_id === newMsg.contact_id &&
+              (!newMsg.instance_id || c.instance_id === newMsg.instance_id)
+            )
+            if (exists) {
+              return prev
+                .map(c => c.contact_id === newMsg.contact_id &&
+                  (!newMsg.instance_id || c.instance_id === newMsg.instance_id)
+                    ? { ...c, last_message: newMsg, last_message_at: newMsg.created_at }
+                    : c
+                )
+                .sort((a, b) => new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime())
+            }
+            // New contact — reload conversations to get full contact details
+            setTimeout(() => loadConversations(newMsg.instance_id || null), 300)
+            return prev
+          })
           if (newMsg.instance_id) {
             setInboxes(prev => prev.map((inbox: any) =>
               inbox.id === newMsg.instance_id
@@ -368,29 +376,24 @@ export default function ChatPage() {
           }
         }
       })
-      // Listen for status updates (UPDATE) — fixes Waiting → Sent/Delivered/Read
-      // Note: no filter on UPDATE — Supabase realtime filter only fully works on INSERT
-      // We filter client-side instead
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
         table: 'messages',
       }, (payload) => {
         const updated = payload.new
-        // Only update if this message belongs to current user
         if (updated.user_id !== user?.id) return
         setMessages(prev => prev.map(m =>
           m.id === updated.id ? { ...m, status: updated.status } : m
         ))
       })
-      .subscribe()
+      .subscribe((status) => {
+        console.log('[realtime] subscription:', status)
+      })
 
     realtimeRef.current = channel
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [user?.id, activeConv?.contact_id])
+    return () => { supabase.removeChannel(channel) }
+  }, [user?.id])  // ← no activeConv dep — using ref to avoid stale closure
 
   // Poll for message status updates every 4 seconds
   useEffect(() => {

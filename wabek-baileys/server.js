@@ -49,7 +49,7 @@ function auth(req, res, next) {
 // ─── Notify WABEK ─────────────────────────────────────────
 async function notifyWabek(event, instanceId, data) {
   if (!WABEK_EVENTS_URL) {
-    console.log(`[${instanceId}] ${event}:`, JSON.stringify(data).slice(0, 200))
+    console.log(`[${instanceId}] ${event} (no WABEK_EVENTS_URL):`, JSON.stringify(data).slice(0, 200))
     return
   }
   try {
@@ -58,7 +58,12 @@ async function notifyWabek(event, instanceId, data) {
       headers: { 'Content-Type': 'application/json', 'X-Secret': WABEK_EVENTS_SECRET },
       body: JSON.stringify({ event, instanceId, data }),
     })
-    if (!r.ok) console.error(`[${instanceId}] notify ${event} failed: ${r.status}`)
+    if (!r.ok) {
+      const body = await r.text().catch(() => '')
+      console.error(`[${instanceId}] notify ${event} failed: ${r.status} ${body.slice(0, 200)}`)
+    } else {
+      console.log(`[${instanceId}] notify ${event} → ${r.status} OK`)
+    }
   } catch (e) {
     console.error(`[${instanceId}] notify error:`, e.message)
   }
@@ -301,7 +306,16 @@ async function restoreSessions() {
 app.get('/health', (req, res) => {
   const list = [...sessions.entries()].map(([id, s]) => ({ id, connected: s.connected, phoneNumber: s.phoneNumber, hasQR: !!s.qr }))
   console.log(`[health] sessions=${sessions.size} instances=${list.map(i => i.id).join(',')}`)
-  res.json({ ok: true, sessions: sessions.size, instances: list })
+  res.json({
+    ok: true,
+    sessions: sessions.size,
+    instances: list,
+    env: {
+      WABEK_EVENTS_URL: WABEK_EVENTS_URL || 'NOT SET ⚠️',
+      WA_WEB_SERVER_SECRET: SERVER_SECRET ? '✅ set' : 'NOT SET ⚠️',
+      WABEK_EVENTS_SECRET: WABEK_EVENTS_SECRET ? '✅ set' : 'NOT SET ⚠️',
+    }
+  })
 })
 
 // QR — IDENTICAL TO V3
