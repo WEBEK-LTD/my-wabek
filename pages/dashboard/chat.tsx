@@ -255,21 +255,33 @@ export default function ChatPage() {
   const realtimeRef = useRef(null)
 
   // Load accessible inboxes + last selected
-  const loadInboxes = async () => {
+  const loadInboxes = async (currentStatus?: string) => {
     try {
       const { data } = await axios.get('/api/inbox/inboxes')
-      setInboxes(data.inboxes || [])
+      const inboxList = data.inboxes || []
+      setInboxes(inboxList)
       setCanSeeAll(data.can_see_all ?? true)
-      // Restore last selected inbox
+
+      // Resolve which inbox to select
       const lastId = data.last_inbox_id || localStorage.getItem('last_inbox_id')
-      if (lastId && data.inboxes?.find(i => i.id === lastId)) {
-        setSelectedInbox(lastId)
-      } else if (!data.can_see_all && data.inboxes?.length > 0) {
-        // Team member with no preference → default to first allowed inbox
-        setSelectedInbox(data.inboxes[0].id)
+      let resolvedInbox: string | null = null
+      if (lastId && inboxList.find((i: any) => i.id === lastId)) {
+        resolvedInbox = lastId
+      } else if (!data.can_see_all && inboxList.length > 0) {
+        resolvedInbox = inboxList[0].id
       }
-      // Also set selectedInstance for backward-compat send path
-      if (data.inboxes?.length === 1) setSelectedInstance(data.inboxes[0].id)
+
+      setSelectedInbox(resolvedInbox)
+      if (resolvedInbox) setSelectedInstance(resolvedInbox)
+      else if (inboxList.length === 1) setSelectedInstance(inboxList[0].id)
+
+      // Load conversations immediately with resolved inbox (fixes race condition
+      // where useEffect[selectedInbox] fires before setSelectedInbox propagates)
+      const params: Record<string, string> = { status: currentStatus || statusFilter }
+      if (resolvedInbox) params.instance_id = resolvedInbox
+      else if (data.can_see_all) params.instance_id = 'all'
+      const { data: convData } = await axios.get('/api/inbox', { params })
+      setConversations(convData.conversations || [])
     } catch {}
   }
 
@@ -283,15 +295,17 @@ export default function ChatPage() {
     } else {
       localStorage.removeItem('last_inbox_id')
     }
-    // Persist to DB for cross-device sync
     axios.post('/api/inbox/set-last-inbox', { inbox_id: inboxId }).catch(() => {})
+    // Load conversations for the newly selected inbox immediately
+    // (pass inboxId directly — don't rely on selectedInbox state which hasn't updated yet)
+    loadConversations(inboxId)
   }
 
   // Load initial data
   useEffect(() => {
     Promise.all([
-      loadInboxes(),
-      axios.get('/api/whatsapp/instances').then(r => setInstances((r.data.instances || []).filter(i => i.status === 'connected'))),
+      loadInboxes(), // also loads conversations with correct inbox (no race condition)
+      axios.get('/api/whatsapp/instances').then(r => setInstances((r.data.instances || []).filter((i: any) => i.status === 'connected'))),
       axios.get('/api/quick-replies').then(r => setQuickReplies(r.data.replies || [])),
       axios.get('/api/team').then(r => setTeamMembers(r.data.members || [])).catch(() => {}),
     ]).finally(() => setLoading(false))
@@ -344,6 +358,14 @@ export default function ChatPage() {
               ? { ...c, last_message: newMsg, last_message_at: newMsg.created_at }
               : c
           ).sort((a, b) => new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime()))
+          // Update unread count in inbox selector badge
+          if (newMsg.instance_id) {
+            setInboxes(prev => prev.map((inbox: any) =>
+              inbox.id === newMsg.instance_id
+                ? { ...inbox, unread: (inbox.unread || 0) + 1 }
+                : inbox
+            ))
+          }
         }
       })
       // Listen for status updates (UPDATE) — fixes Waiting → Sent/Delivered/Read
@@ -410,17 +432,21 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const loadConversations = async () => {
+  const loadConversations = async (inboxId?: string | null, status?: string) => {
     try {
-      const params: Record<string, string> = { status: statusFilter }
-      if (selectedInbox) params.instance_id = selectedInbox
+      const resolvedInbox = inboxId !== undefined ? inboxId : selectedInbox
+      const resolvedStatus = status || statusFilter
+      const params: Record<string, string> = { status: resolvedStatus }
+      if (resolvedInbox) params.instance_id = resolvedInbox
       else if (canSeeAll) params.instance_id = 'all'
       const { data } = await axios.get('/api/inbox', { params })
       setConversations(data.conversations || [])
     } catch {}
   }
 
-  useEffect(() => { loadConversations() }, [statusFilter, selectedInbox])
+  // Reload when status filter changes (inbox is handled inside loadInboxes on mount,
+  // and by switchInbox on user selection — this handles only statusFilter changes)
+  useEffect(() => { loadConversations(selectedInbox, statusFilter) }, [statusFilter])
 
   const openConversation = async (conv) => {
     setActiveConv(conv)
@@ -625,9 +651,7 @@ export default function ChatPage() {
                       </button>
                     )}
                     {inboxes.map((inbox: any) => {
-                      const colors = ['🟢','🟡','🔵','🟠','🔴','🟣']
-                      const colorIdx = inboxes.indexOf(inbox) % colors.length
-                      return (
+                        return (
                         <button
                           key={inbox.id}
                           onClick={() => switchInbox(inbox.id)}
@@ -638,7 +662,11 @@ export default function ChatPage() {
                               : 'text-slate-600 hover:bg-[#F8FAFC]'
                           )}
                         >
-                          <span className="text-base flex-shrink-0">{colors[colorIdx]}</span>
+                          <img
+                            src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg"
+                            alt="WhatsApp"
+                            className="w-4 h-4 flex-shrink-0"
+                          />
                           <span className="flex-1 truncate">{inbox.name}</span>
                           {inbox.unread > 0 && (
                             <span className="bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0">
@@ -646,8 +674,8 @@ export default function ChatPage() {
                             </span>
                           )}
                         </button>
-                      )
-                    })}
+                        )
+                      })}
                   </div>
                 </div>
               )}
