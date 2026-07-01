@@ -67,7 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const db = supabaseAdmin()
 
   if (req.method === 'GET') {
-    const { data } = await db.from('white_label_settings').select('*').eq('user_id', user.userId).single()
+    const { data } = await db.from('white_label_settings').select('*').eq('user_id', user.userId).maybeSingle()
     return res.status(200).json({ settings: data || {} })
   }
 
@@ -78,20 +78,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       hide_powered_by, custom_css, custom_footer,
     } = req.body
 
+    // Sanitize custom_css — strip </style> injection attempts
+    const safeCss = (custom_css || '').replace(/<\/style>/gi, '').replace(/<script/gi, '')
+
     // Get old domain to remove if changed
-    const { data: existing } = await db.from('white_label_settings').select('custom_domain').eq('user_id', user.userId).single()
+    const { data: existing } = await db.from('white_label_settings').select('custom_domain').eq('user_id', user.userId).maybeSingle()
     const oldDomain = existing?.custom_domain
 
     // Save settings
     const { data, error } = await db.from('white_label_settings').upsert({
       id: uuidv4(),
       user_id: user.userId,
-      brand_name, brand_logo, brand_color, brand_secondary_color,
-      custom_domain: custom_domain?.trim().toLowerCase() || null,
-      favicon_url, support_email, support_whatsapp,
-      hide_powered_by: hide_powered_by || false,
-      custom_css, custom_footer,
-      updated_at: new Date().toISOString(),
+      brand_name:            brand_name || null,
+      brand_logo:            brand_logo || null,
+      brand_color:           brand_color || '#00D46A',
+      brand_secondary_color: brand_secondary_color || '#F8FAFC',
+      custom_domain:         custom_domain?.trim().toLowerCase() || null,
+      favicon_url:           favicon_url || null,
+      brand_favicon:         favicon_url || null,  // keep old column in sync
+      support_email:         support_email || null,
+      support_whatsapp:      support_whatsapp || null,
+      hide_powered_by:       hide_powered_by || false,
+      custom_css:            safeCss || null,
+      custom_footer:         custom_footer || null,
+      updated_at:            new Date().toISOString(),
     }, { onConflict: 'user_id' }).select().single()
 
     if (error) return res.status(500).json({ error: error.message })
@@ -122,7 +132,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       netlifyStatus.removed = true
     }
 
-    return res.status(200).json({ settings: data, netlify: netlifyStatus })
+    return res.status(200).json({
+      settings: data,
+      netlify: netlifyStatus,
+      domain_status: custom_domain?.trim()
+        ? netlifyStatus.configured
+          ? 'configured'
+          : netlifyStatus.error
+            ? 'netlify_error'
+            : 'pending'
+        : 'none',
+    })
   }
 
   return res.status(405).json({ error: 'Method not allowed' })

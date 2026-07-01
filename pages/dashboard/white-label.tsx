@@ -46,12 +46,13 @@ export default function WhiteLabelPage() {
     (body) => axios.put('/api/white-label', body),
     {
       onSuccess: (r) => {
-        if (r.data.netlify?.configured) {
+        if (r.data.domain_status === 'configured') {
+          toast.success('✅ Settings saved — domain added to server')
+        } else if (r.data.domain_status === 'netlify_error') {
           toast.success('✅ Settings saved')
-        } else if (r.data.netlify?.error) {
-          toast.success('✅ Settings saved')
+          // Don't expose internal infra error to user
         } else {
-          toast.success('White label settings saved ✅')
+          toast.success('✅ White label settings saved')
         }
       },
       onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
