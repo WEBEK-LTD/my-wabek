@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import AdminLayout from '@/components/layout/AdminLayout'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import axios from 'axios'
@@ -8,13 +8,27 @@ import { MagnifyingGlassIcon, PencilIcon, NoSymbolIcon, CheckCircleIcon, XMarkIc
 import { format } from 'date-fns'
 import clsx from 'clsx'
 
+// Simple debounce hook
+function useDebounce(value: string, delay = 400) {
+  const [debounced, setDebounced] = useState(value)
+  const timerRef = { current: null as any }
+  const update = useCallback((v: string) => {
+    clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => setDebounced(v), delay)
+  }, [delay])
+  return [debounced, update] as const
+}
+
 export default function AdminUsersPage() {
   const qc = useQueryClient()
-  const [search, setSearch] = useState('')
+  const [rawSearch, setRawSearch] = useState('')
+  const [search, updateSearch] = useDebounce('')
   const [page, setPage] = useState(1)
   const [editUser, setEditUser] = useState(null)
   const [viewUser, setViewUser] = useState(null)
   const [editData, setEditData] = useState({ is_active: true, role: 'user', plan_id: '', plan_expires_at: '' })
+
+  const handleSearch = (v: string) => { setRawSearch(v); updateSearch(v); setPage(1) }
 
   const { data, isLoading } = useQuery(
     ['admin-users', search, page],
@@ -32,19 +46,31 @@ export default function AdminUsersPage() {
   const plans = plansData?.plans || []
 
   const updateMut = useMutation(
-    ({ id, body }) => axios.put(`/api/admin/users/${id}`, body),
-    { onSuccess: () => { qc.invalidateQueries('admin-users'); setEditUser(null); toast.success('User updated ✅') }, onError: e => toast.error(e?.response?.data?.error || 'Failed') }
-  )
-  const suspendMut = useMutation(
-    id => axios.delete(`/api/admin/users/${id}`),
-    { onSuccess: () => { qc.invalidateQueries('admin-users'); toast.success('User suspended') } }
-  )
-  const activateMut = useMutation(
-    id => axios.put(`/api/admin/users/${id}`, { is_active: true }),
-    { onSuccess: () => { qc.invalidateQueries('admin-users'); toast.success('User activated') } }
+    ({ id, body }: any) => axios.put(`/api/admin/users/${id}`, body),
+    {
+      onSuccess: () => { qc.invalidateQueries('admin-users'); setEditUser(null); toast.success('User updated ✅') },
+      onError: (e: any) => toast.error(e?.response?.data?.error || 'Update failed'),
+    }
   )
 
-  const openEdit = (user) => {
+  // Suspend: PUT with is_active: false (not DELETE — cleaner and consistent)
+  const suspendMut = useMutation(
+    (id: string) => axios.put(`/api/admin/users/${id}`, { is_active: false }),
+    {
+      onSuccess: () => { qc.invalidateQueries('admin-users'); toast.success('User suspended') },
+      onError: (e: any) => toast.error(e?.response?.data?.error || 'Suspend failed'),
+    }
+  )
+
+  const activateMut = useMutation(
+    (id: string) => axios.put(`/api/admin/users/${id}`, { is_active: true }),
+    {
+      onSuccess: () => { qc.invalidateQueries('admin-users'); toast.success('User activated') },
+      onError: (e: any) => toast.error(e?.response?.data?.error || 'Activate failed'),
+    }
+  )
+
+  const openEdit = (user: any) => {
     setEditUser(user)
     setEditData({
       is_active: user.is_active,
@@ -59,7 +85,12 @@ export default function AdminUsersPage() {
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
         <div className="relative flex-1 max-w-sm">
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="Search by name or email…" className="input pl-9" />
+          <input
+            value={rawSearch}
+            onChange={e => handleSearch(e.target.value)}
+            placeholder="Search by name or email…"
+            className="input pl-9"
+          />
         </div>
         <div className="text-sm text-slate-400 flex items-center">{data?.total || 0} total users</div>
       </div>
@@ -75,13 +106,15 @@ export default function AdminUsersPage() {
                 <th className="table-head">Role</th>
                 <th className="table-head">Status</th>
                 <th className="table-head">Joined</th>
-                <th className="table-head w-24">Actions</th>
+                <th className="table-head w-28">Actions</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? Array.from({ length: 8 }).map((_, i) => (
                 <tr key={i} className="border-b border-slate-200">
-                  {Array.from({ length: 7 }).map((_, j) => <td key={j} className="table-cell"><div className="h-4 skeleton rounded w-20" /></td>)}
+                  {Array.from({ length: 7 }).map((_, j) => (
+                    <td key={j} className="table-cell"><div className="h-4 skeleton rounded w-20" /></td>
+                  ))}
                 </tr>
               )) : users.length === 0 ? (
                 <tr><td colSpan={7} className="text-center py-12 text-slate-500">No users found</td></tr>
@@ -124,10 +157,20 @@ export default function AdminUsersPage() {
                         <PencilIcon className="w-4 h-4" />
                       </button>
                       {u.is_active
-                        ? <button onClick={() => { if (confirm('Suspend this user?')) suspendMut.mutate(u.id) }} className="p-1.5 text-slate-400 hover:text-red-400" title="Suspend">
+                        ? <button
+                            onClick={() => { if (confirm('Suspend this user?')) suspendMut.mutate(u.id) }}
+                            disabled={suspendMut.isLoading}
+                            className="p-1.5 text-slate-400 hover:text-red-400 disabled:opacity-50"
+                            title="Suspend"
+                          >
                             <NoSymbolIcon className="w-4 h-4" />
                           </button>
-                        : <button onClick={() => activateMut.mutate(u.id)} className="p-1.5 text-slate-400 hover:text-blue-600" title="Activate">
+                        : <button
+                            onClick={() => activateMut.mutate(u.id)}
+                            disabled={activateMut.isLoading}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 disabled:opacity-50"
+                            title="Activate"
+                          >
                             <CheckCircleIcon className="w-4 h-4" />
                           </button>
                       }
@@ -138,6 +181,8 @@ export default function AdminUsersPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
         {(data?.total || 0) > 20 && (
           <div className="px-4 py-3 border-t border-slate-200 flex items-center justify-between">
             <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="btn-secondary text-sm py-1.5 px-3 disabled:opacity-50">← Previous</button>
@@ -147,7 +192,7 @@ export default function AdminUsersPage() {
         )}
       </div>
 
-      {/* View User Details Modal */}
+      {/* View User Modal */}
       {viewUser && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewUser(null)}>
           <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
@@ -163,17 +208,19 @@ export default function AdminUsersPage() {
                 <div>
                   <p className="font-bold text-slate-900">{viewUser.name}</p>
                   <p className="text-slate-400 text-sm">{viewUser.email}</p>
+                  {viewUser.referred_by && <p className="text-xs text-blue-500 mt-0.5">👥 Referred user</p>}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 {[
                   { label: 'Plan', value: userDetail?.user?.plans?.name || viewUser.plans?.name || 'Free' },
-                  { label: 'Plan Expires', value: viewUser.plan_expires_at ? format(new Date(viewUser.plan_expires_at), 'MMM d, yyyy') : 'Never' },
-                  { label: 'Reseller', value: userDetail?.subscription ? '—' : (userDetail?.user?.referred_by ? '👥 Referred' : '—') },
+                  { label: 'Plan Expires', value: viewUser.plan_expires_at ? format(new Date(viewUser.plan_expires_at), 'MMM d, yyyy') : 'No expiry' },
                   { label: 'Messages', value: (userDetail?.stats?.messages || 0).toLocaleString() },
                   { label: 'Contacts', value: (userDetail?.stats?.contacts || 0).toLocaleString() },
-                  { label: 'Instances', value: (userDetail?.instances?.length || 0) },
+                  { label: 'WA Instances', value: userDetail?.instances?.length || 0 },
                   { label: 'Joined', value: format(new Date(viewUser.created_at), 'MMM d, yyyy') },
+                  { label: 'Role', value: viewUser.role },
+                  { label: 'Status', value: viewUser.is_active ? '✅ Active' : '🚫 Suspended' },
                 ].map(s => (
                   <div key={s.label} className="bg-[#F8FAFC] rounded-xl p-3 border border-slate-200">
                     <p className="text-xs text-slate-500">{s.label}</p>
@@ -185,24 +232,16 @@ export default function AdminUsersPage() {
                 <div>
                   <p className="text-xs text-slate-500 mb-2">WhatsApp Instances</p>
                   {userDetail.instances.map(inst => (
-                    <div key={inst.id} className="flex items-center gap-2 text-sm py-1">
-                      <div className={clsx('w-2 h-2 rounded-full', inst.status === 'connected' ? 'bg-brand-500' : 'bg-slate-200')} />
-                      <span className="text-slate-700">{inst.phone_number || 'No number'}</span>
-                      <span className="text-xs text-slate-500 ml-auto">{inst.status}</span>
+                    <div key={inst.id} className="flex items-center gap-2 text-sm py-1.5 border-b border-slate-100 last:border-0">
+                      <div className={clsx('w-2 h-2 rounded-full flex-shrink-0', inst.status === 'connected' ? 'bg-brand-500' : 'bg-slate-200')} />
+                      <span className="text-slate-700 flex-1">{inst.display_name || inst.phone_number || 'No number'}</span>
+                      <span className="text-xs text-slate-400 capitalize">{inst.instance_type || inst.type}</span>
+                      <span className="text-xs text-slate-400">{inst.status}</span>
                     </div>
                   ))}
                 </div>
               )}
               <div className="flex gap-3 pt-2">
-                <button onClick={async () => {
-                  try {
-                    await axios.patch('/api/admin/payouts', { user_id: viewUser.id, is_approved: true, commission_pct: 10 })
-                    toast.success('Reseller approved! ✅')
-                    qc.invalidateQueries('admin-payouts')
-                  } catch(e) { toast.error('Failed') }
-                }} className="btn-secondary flex-1 justify-center text-sm text-blue-600">
-                  ✅ Approve Reseller
-                </button>
                 <button onClick={() => { setViewUser(null); openEdit(viewUser) }} className="btn-secondary flex-1 justify-center text-sm">
                   <PencilIcon className="w-4 h-4" /> Edit User
                 </button>
@@ -249,16 +288,28 @@ export default function AdminUsersPage() {
               {editData.plan_id && (
                 <div>
                   <label className="label">Plan Expires At</label>
-                  <input type="date" value={editData.plan_expires_at}
-                    onChange={e => setEditData(d => ({ ...d, plan_expires_at: e.target.value }))} className="input" />
-                  <p className="text-xs text-slate-500 mt-1">Leave empty for no expiry</p>
+                  <input
+                    type="date"
+                    value={editData.plan_expires_at}
+                    onChange={e => setEditData(d => ({ ...d, plan_expires_at: e.target.value }))}
+                    className="input"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Leave empty for no expiry (permanent)</p>
                 </div>
               )}
               <div className="flex justify-end gap-3 pt-2">
                 <button onClick={() => setEditUser(null)} className="btn-secondary">Cancel</button>
                 <button
-                  onClick={() => updateMut.mutate({ id: editUser.id, body: { ...editData, plan_expires_at: editData.plan_expires_at ? new Date(editData.plan_expires_at).toISOString() : null } })}
-                  disabled={updateMut.isLoading} className="btn-primary">
+                  onClick={() => updateMut.mutate({
+                    id: editUser.id,
+                    body: {
+                      ...editData,
+                      plan_expires_at: editData.plan_expires_at ? new Date(editData.plan_expires_at).toISOString() : null,
+                    },
+                  })}
+                  disabled={updateMut.isLoading}
+                  className="btn-primary"
+                >
                   {updateMut.isLoading ? 'Saving…' : 'Save Changes'}
                 </button>
               </div>
