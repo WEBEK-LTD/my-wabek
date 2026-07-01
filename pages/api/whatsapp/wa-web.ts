@@ -72,7 +72,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         id: newId,
         user_id: user.userId,
         phone_number: 'pending',
-        display_name: display_name || 'WhatsApp Web',
+        display_name: display_name || null,  // null → UI shows phone_number once connected
         instance_type: 'wa_web',
         status: 'initializing',
         webhook_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/whatsapp/webhook`,

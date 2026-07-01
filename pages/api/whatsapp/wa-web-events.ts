@@ -28,6 +28,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         break
       }
 
+      case 'display_name_update': {
+        if (data.displayName) {
+          await db.from('whatsapp_instances')
+            .update({ display_name: data.displayName })
+            .eq('id', instanceId)
+          console.log(`[wa-web-events] display_name updated: ${data.displayName} for ${instanceId}`)
+        }
+        break
+      }
+
       case 'connected': {
         // Build update — only include display_name if we actually received one
         // (never overwrite existing name with null/empty)

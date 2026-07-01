@@ -192,10 +192,16 @@ async function createSession(instanceId) {
   const sock = makeWASocket({
     version, auth: state, logger,
     printQRInTerminal: false,
+    // Use the same browser fingerprint every time — prevents WhatsApp from
+    // seeing restarts as "new device" and avoids requiring re-auth
     browser: ['WABEK', 'Chrome', '126.0'],
     connectTimeoutMs: 60000,
-    keepAliveIntervalMs: 30000,
+    keepAliveIntervalMs: 25000,   // more frequent pings = faster reconnect detection
     retryRequestDelayMs: 2000,
+    // Provide getMessage so Baileys can retry failed message sends after reconnect
+    getMessage: async (key) => {
+      return { conversation: '' }
+    },
   })
 
   const session = { sock, qr: null, connected: false, phoneNumber: null }
@@ -224,7 +230,7 @@ async function createSession(instanceId) {
       // Priority: name → notify → undefined (don't send empty string — let backend keep existing DB value)
       const displayName = sock.user?.name || sock.user?.notify || undefined
       const s = sessions.get(instanceId)
-      if (s) { s.connected = true; s.phoneNumber = phoneNumber; s.qr = null }
+      if (s) { s.connected = true; s.phoneNumber = phoneNumber; s.qr = null; s._reconnectAttempt = 0 }
       console.log(`[${instanceId}] ✅ Connected! Phone: ${phoneNumber} Name: ${displayName || '(none yet)'}`)
       await notifyWabek('connected', instanceId, { phoneNumber, ...(displayName ? { displayName } : {}) })
     }
@@ -237,7 +243,13 @@ async function createSession(instanceId) {
       console.log(`[${instanceId}] Disconnected. Code: ${statusCode}, Reconnect: ${shouldReconnect}`)
       await notifyWabek('disconnected', instanceId, { shouldReconnect, statusCode, loggedOut: !shouldReconnect })
       if (shouldReconnect) {
-        setTimeout(() => createSession(instanceId).catch(e => console.error(`[${instanceId}] reconnect error:`, e.message)), 5000)
+        // Exponential backoff: 5s, 10s, 20s, 40s, max 60s
+        const s = sessions.get(instanceId)
+        const attempt = (s?._reconnectAttempt || 0) + 1
+        if (s) s._reconnectAttempt = attempt
+        const delay = Math.min(5000 * Math.pow(2, attempt - 1), 60000)
+        console.log(`[${instanceId}] Reconnecting in ${delay}ms (attempt ${attempt})`)
+        setTimeout(() => createSession(instanceId).catch(e => console.error(`[${instanceId}] reconnect error:`, e.message)), delay)
       } else {
         sessions.delete(instanceId)
         try { fs.rmSync(authDir, { recursive: true, force: true }) } catch {}
@@ -294,6 +306,22 @@ async function createSession(instanceId) {
       const statusMap = { 1: 'sent', 2: 'delivered', 3: 'read', 4: 'played' }
       await notifyWabek('message_status', instanceId, { messageId: u.key.id, status: statusMap[u.update.status] || 'sent' })
     }
+  })
+
+  // contacts.upsert fires after sync completes and contains the account's own name.
+  // We look for the entry matching our own JID and send it as a displayName update.
+  sock.ev.on('contacts.upsert', async (contacts) => {
+    try {
+      const myJid  = sock.user?.id
+      if (!myJid) return
+      const myBase = myJid.split(':')[0] + '@s.whatsapp.net'
+      const me     = contacts.find(c => c.id === myJid || c.id === myBase)
+      const name   = me?.name || me?.notify || sock.user?.name || sock.user?.notify
+      if (name) {
+        console.log(`[${instanceId}] contacts.upsert → displayName: ${name}`)
+        await notifyWabek('display_name_update', instanceId, { displayName: name })
+      }
+    } catch (e) { /* non-fatal */ }
   })
 
   return session

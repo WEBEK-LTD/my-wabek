@@ -183,7 +183,7 @@ toast.success('Cloud API instance connected!')
   )
 
   const createWebMut = useMutation(
-    () => axios.post('/api/whatsapp/wa-web', { action: 'create', display_name: 'WhatsApp Web' }),
+    () => axios.post('/api/whatsapp/wa-web', { action: 'create' }),
     {
       onSuccess: (res) => {
         qc.invalidateQueries('instances')
@@ -438,7 +438,7 @@ toast.success('Cloud API instance connected!')
                         <DevicePhoneMobileIcon className="w-5 h-5" />
                       </div>
                       <div>
-                        <h3 className="font-display font-semibold text-slate-900">{inst.display_name || 'WhatsApp Web'}</h3>
+                        <h3 className="font-display font-semibold text-slate-900">{inst.display_name || inst.phone_number || 'WhatsApp Web'}</h3>
                         <p className="text-xs text-slate-400">{inst.phone_number !== 'pending' ? inst.phone_number : 'Not connected yet'}</p>
                       </div>
                     </div>
