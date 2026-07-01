@@ -323,9 +323,12 @@ export default function ChatPage() {
         event: 'INSERT',
         schema: 'public',
         table: 'messages',
-        filter: `user_id=eq.${user.id}`,
+        // No server-side filter — filter client-side to avoid RLS/publication issues
+        // (server filter requires exact column match; client filter is more reliable)
       }, (payload) => {
         const newMsg = payload.new
+        // Client-side filter: only handle messages belonging to this user
+        if (newMsg.user_id !== user.id) return
         const conv = activeConvRef.current  // always current — no stale closure
 
         // ── Add to open conversation ──────────────────────────

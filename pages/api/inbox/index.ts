@@ -53,10 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .select(`
         *,
         contacts(id, name, phone, tags),
-        assigned_user:assigned_to(id, name, email),
-        whatsapp_instances!conversation_assignments_instance_id_fkey(
-          id, phone_number, display_name, instance_type, type
-        )
+        assigned_user:assigned_to(id, name, email)
       `, { count: 'exact' })
       .eq('owner_id', ownerId)
       .order('last_message_at', { ascending: false, nullsFirst: false })
@@ -109,11 +106,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
+    // Enrich with instance data (separate query — no FK dependency required)
+    const instanceIds = [...new Set((data || []).map(c => c.instance_id).filter(Boolean))]
+    let instanceMap: Record<string, unknown> = {}
+    if (instanceIds.length > 0) {
+      const { data: instances } = await db.from('whatsapp_instances')
+        .select('id, phone_number, display_name, instance_type, type')
+        .in('id', instanceIds)
+      for (const inst of instances || []) {
+        instanceMap[inst.id] = inst
+      }
+    }
+
     const conversations = (data || []).map(conv => {
       const key = `${conv.contact_id}:${conv.instance_id}`
       return {
         ...conv,
-        last_message: lastMessages[key] || lastMessages[conv.contact_id] || null,
+        last_message:         lastMessages[key] || lastMessages[conv.contact_id] || null,
+        whatsapp_instances:   conv.instance_id ? (instanceMap[conv.instance_id] || null) : null,
       }
     })
 
