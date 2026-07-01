@@ -185,7 +185,7 @@ export default function AdminLogsPage() {
               <tr>
                 <th className="table-head">Time</th>
                 <th className="table-head">Action</th>
-                {mode === 'system' && <th className="table-head">User</th>}
+                <th className="table-head">User</th>
                 <th className="table-head">Resource</th>
                 <th className="table-head">IP</th>
                 <th className="table-head w-8"></th>
@@ -194,12 +194,12 @@ export default function AdminLogsPage() {
             <tbody>
               {isLoading ? Array.from({ length: 10 }).map((_, i) => (
                 <tr key={i} className="border-b border-slate-200">
-                  {Array.from({ length: mode === 'system' ? 6 : 5 }).map((_, j) => (
+                  {Array.from({ length: 6 }).map((_, j) => (
                     <td key={j} className="table-cell"><div className="h-4 skeleton rounded w-24" /></td>
                   ))}
                 </tr>
               )) : logs.length === 0 ? (
-                <tr><td colSpan={mode === 'system' ? 6 : 5} className="text-center py-12 text-slate-500">
+                <tr><td colSpan={6} className="text-center py-12 text-slate-500">
                   {mode === 'user' && !selectedUser ? 'Search for a user to see their activity' : 'No logs found'}
                 </td></tr>
               ) : logs.map(log => (
@@ -214,16 +214,14 @@ export default function AdminLogsPage() {
                         {log.action}
                       </span>
                     </td>
-                    {mode === 'system' && (
-                      <td className="table-cell">
-                        {log.users ? (
-                          <div className="min-w-0">
-                            <p className="text-xs font-medium text-slate-700 truncate max-w-28">{log.users.name || '—'}</p>
-                            <p className="text-[10px] text-slate-400 truncate max-w-28">{log.users.email}</p>
-                          </div>
-                        ) : <span className="text-xs text-slate-300">System</span>}
-                      </td>
-                    )}
+                    <td className="table-cell">
+                      {log.users ? (
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-slate-700 truncate max-w-28">{log.users.name || '—'}</p>
+                          <p className="text-[10px] text-slate-400 truncate max-w-28">{log.users.email}</p>
+                        </div>
+                      ) : <span className="text-xs text-slate-300">System</span>}
+                    </td>
                     <td className="table-cell text-xs text-slate-500">
                       {log.resource
                         ? <span>{log.resource}{log.resource_id ? <span className="text-slate-300 font-mono"> :{log.resource_id.slice(0, 8)}</span> : ''}</span>
@@ -235,7 +233,7 @@ export default function AdminLogsPage() {
                   {/* Expanded details row */}
                   {expandedLog === log.id && log.details && (
                     <tr key={log.id + '-detail'} className="bg-slate-50 border-b border-slate-200">
-                      <td colSpan={mode === 'system' ? 6 : 5} className="px-4 py-3">
+                      <td colSpan={6} className="px-4 py-3">
                         <pre className="text-xs text-slate-600 font-mono whitespace-pre-wrap break-all bg-white border border-slate-200 rounded-lg p-3 max-h-40 overflow-y-auto">
                           {JSON.stringify(log.details, null, 2)}
                         </pre>
