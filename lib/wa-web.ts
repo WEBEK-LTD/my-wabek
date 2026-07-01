@@ -117,6 +117,7 @@ export async function sendWAWebMedia(params: {
   mediaType: string
   caption?: string
   filename?: string
+  mimetype?: string
 }): Promise<{ messageId: string }> {
   const data = await callWAServer(`/instance/${params.instanceId}/send-media`, {
     to: params.to,
@@ -124,6 +125,7 @@ export async function sendWAWebMedia(params: {
     mediaType: params.mediaType,
     caption: params.caption,
     filename: params.filename,
+    mimetype: params.mimetype,
   }) as { messageId: string }
   return data
 }

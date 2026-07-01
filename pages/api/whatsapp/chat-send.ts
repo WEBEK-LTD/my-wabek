@@ -53,6 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           mediaType: media_type || 'document',
           caption: text || undefined,
           filename: media_filename || undefined,
+          mimetype: media_mime_type || undefined,
         })
 
         await db.from('messages').insert({
