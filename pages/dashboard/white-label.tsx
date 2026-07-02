@@ -145,7 +145,7 @@ export default function WhiteLabelPage() {
                 <p>2. Go to DNS Settings → Add new record</p>
                 <p>3. Type: <code className="bg-[#F8FAFC] px-1 rounded text-blue-600">CNAME</code></p>
                 <p>4. Name: <code className="bg-[#F8FAFC] px-1 rounded text-blue-600">{form.custom_domain?.split('.').slice(0, -2).join('.') || 'app'}</code></p>
-                <p>5. Value: <code className="bg-[#F8FAFC] px-1 rounded text-blue-600">{(process.env.NEXT_PUBLIC_NETLIFY_URL || process.env.NEXT_PUBLIC_APP_URL || 'wabek.netlify.app').replace(/^https?:\/\//, '')}</code></p>
+                <p>5. Value: <code className="bg-[#F8FAFC] px-1 rounded text-blue-600">wabek.netlify.app</code></p>
                 <p>6. Save and wait 15 min – 48 hours for propagation</p>
                 <div className="mt-2 pt-2 border-t border-slate-200 text-yellow-600">
                   ⚠️ <strong>Cloudflare users:</strong> Set the proxy to <strong>DNS only</strong> (grey cloud 🔘), not Proxied (orange ☁️). Proxied mode breaks SSL with Netlify.
