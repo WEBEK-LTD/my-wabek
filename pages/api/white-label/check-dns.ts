@@ -21,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     // Try CNAME lookup
     const cnames = await resolveCname(clean)
-    const appHost = (process.env.NEXT_PUBLIC_APP_URL || 'waabek.com').replace(/^https?:\/\//, '').split('/')[0]
+    const appHost = (process.env.NEXT_PUBLIC_NETLIFY_URL || process.env.NEXT_PUBLIC_APP_URL || 'wabek.netlify.app').replace(/^https?:\/\//, '').split('/')[0]
     const pointsToUs = cnames.some(c =>
       c === appHost ||
       c.endsWith('.' + appHost) ||
