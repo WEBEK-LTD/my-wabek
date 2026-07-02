@@ -144,8 +144,8 @@ export default function WhiteLabelPage() {
                 <p>1. Login to your domain registrar (GoDaddy, Namecheap, Cloudflare…)</p>
                 <p>2. Go to DNS Settings → Add new record</p>
                 <p>3. Type: <code className="bg-[#F8FAFC] px-1 rounded text-blue-600">CNAME</code></p>
-                <p>4. Name: <code className="bg-[#F8FAFC] px-1 rounded text-blue-600">{form.custom_domain?.split('.')[0] || 'app'}</code></p>
-                <p>5. Value: <code className="bg-[#F8FAFC] px-1 rounded text-blue-600">waabek.com</code></p>
+                <p>4. Name: <code className="bg-[#F8FAFC] px-1 rounded text-blue-600">{form.custom_domain?.split('.').slice(0, -2).join('.') || 'app'}</code></p>
+                <p>5. Value: <code className="bg-[#F8FAFC] px-1 rounded text-blue-600">{(process.env.NEXT_PUBLIC_APP_URL || 'waabek.com').replace(/^https?:\/\//, '')}</code></p>
                 <p>6. Save and wait 15 min – 48 hours for propagation</p>
               </div>
             </div>

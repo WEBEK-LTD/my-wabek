@@ -21,15 +21,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     // Try CNAME lookup
     const cnames = await resolveCname(clean)
+    const appHost = (process.env.NEXT_PUBLIC_APP_URL || 'waabek.com').replace(/^https?:\/\//, '').split('/')[0]
     const pointsToUs = cnames.some(c =>
-      c.includes('waabek.com') ||
+      c === appHost ||
+      c.endsWith('.' + appHost) ||
       c.includes('netlify') ||
       c.includes('waabek')
     )
     if (pointsToUs) {
       return res.status(200).json({ status: 'ok', cname: cnames[0] })
     }
-    // CNAME exists but points elsewhere
     return res.status(200).json({ status: 'pending', cname: cnames[0] })
   } catch {
     // No CNAME — try A record
