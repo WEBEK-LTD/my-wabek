@@ -1008,7 +1008,7 @@ London, WC2H 9JQ, United Kingdom
 | Phone | 9AM–6PM GMT |`,
       },
     ],
-  },,
+  },
   {
     id: 'webhooks', title: '🔔 Webhooks',
     items: [
