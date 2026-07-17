@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { useState } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
-import { ClipboardIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 
 const sections = [
@@ -1009,6 +1008,665 @@ London, WC2H 9JQ, United Kingdom
 | Phone | 9AM–6PM GMT |`,
       },
     ],
+  },,
+  {
+    id: 'webhooks', title: '🔔 Webhooks',
+    items: [
+      {
+        title: 'Overview & Setup',
+        content: `Webhooks let your server receive real-time notifications whenever something happens in WABEK — a message arrives, a campaign is delivered, an OTP is sent, and more.
+
+## How Webhooks Work
+1. You provide a **Webhook URL** (your server endpoint)
+2. WABEK sends an **HTTP POST** to your URL whenever an event occurs
+3. Your server processes the payload and responds with **HTTP 200**
+4. If your server does not respond with 200, WABEK retries up to **3 times** with exponential backoff (5s, 30s, 5min)
+
+## Setting Up Your Webhook
+Go to **Dashboard → Settings → Webhook** and enter:
+
+| Field | Description |
+|---|---|
+| Webhook URL | Your server endpoint (must be HTTPS in production) |
+| Secret Key | Optional secret to verify the request came from WABEK |
+
+## Verifying Webhook Authenticity
+Every webhook request includes a signature header:
+
+\`\`\`
+X-WABEK-Signature: sha256=<hmac_signature>
+\`\`\`
+
+Verify it on your server:
+
+\`\`\`javascript
+const crypto = require('crypto')
+
+function verifyWebhook(payload, signature, secret) {
+  const expected = 'sha256=' + crypto
+    .createHmac('sha256', secret)
+    .update(JSON.stringify(payload))
+    .digest('hex')
+  return crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expected)
+  )
+}
+\`\`\`
+
+\`\`\`python
+import hmac, hashlib, json
+
+def verify_webhook(payload: dict, signature: str, secret: str) -> bool:
+    expected = 'sha256=' + hmac.new(
+        secret.encode(),
+        json.dumps(payload).encode(),
+        hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(signature, expected)
+\`\`\`
+
+## Webhook Request Format
+All webhooks are sent as **HTTP POST** with:
+
+\`\`\`
+Content-Type: application/json
+X-WABEK-Signature: sha256=...
+X-WABEK-Event: message.inbound
+\`\`\`
+
+Every payload includes a common envelope:
+
+\`\`\`json
+{
+  "event": "message.inbound",
+  "timestamp": "2025-07-01T14:30:00.000Z",
+  "instance_id": "inst_abc123",
+  "account_id": "usr_xyz789",
+  "data": { ... }
+}
+\`\`\`
+
+> **Tip:** Always respond with HTTP 200 immediately, then process the event asynchronously to avoid timeouts.`,
+      },
+      {
+        title: 'message.inbound — Incoming Message',
+        content: `Fired when a contact sends a message to your WhatsApp number.
+
+## When It Fires
+- Contact sends a text, image, video, audio, document, sticker, or location message
+- Works for both **WhatsApp Web** and **Cloud API** instances
+
+## Payload
+
+\`\`\`json
+{
+  "event": "message.inbound",
+  "timestamp": "2025-07-01T14:30:00.000Z",
+  "instance_id": "inst_abc123",
+  "account_id": "usr_xyz789",
+  "data": {
+    "message_id": "wamid.HBgNMjAxMjM0NTY3ODkwFQIAERgSM...",
+    "from": "201234567890",
+    "from_name": "Ahmed Mohamed",
+    "type": "text",
+    "text": "Hello, I need help with my order",
+    "timestamp": "2025-07-01T14:30:00.000Z",
+    "instance_type": "wa_web",
+    "phone_number": "447878704062",
+    "media": null
+  }
+}
+\`\`\`
+
+## Media Message Example (type = image/video/audio/document)
+
+\`\`\`json
+{
+  "event": "message.inbound",
+  "data": {
+    "message_id": "wamid.HBgN...",
+    "from": "201234567890",
+    "from_name": "Sara Ali",
+    "type": "image",
+    "text": "Check this out",
+    "timestamp": "2025-07-01T14:31:00.000Z",
+    "media": {
+      "url": "https://cdn.waabek.com/media/abc123.jpg",
+      "mime_type": "image/jpeg",
+      "filename": null,
+      "size": 204800
+    }
+  }
+}
+\`\`\`
+
+## Message Types
+
+| type | Description |
+|---|---|
+| text | Plain text message |
+| image | Image (JPEG, PNG, WebP) |
+| video | Video (MP4, 3GP) |
+| audio | Audio / Voice note |
+| document | File (PDF, DOCX, XLSX…) |
+| sticker | WhatsApp sticker |
+| location | GPS coordinates |
+| reaction | Emoji reaction to a message |
+
+## Example Handler
+
+\`\`\`javascript
+app.post('/webhook', (req, res) => {
+  res.sendStatus(200) // respond immediately
+  const { event, data } = req.body
+  if (event === 'message.inbound') {
+    console.log(\`New message from \${data.from_name}: \${data.text}\`)
+    // save to DB, trigger chatbot, notify agent...
+  }
+})
+\`\`\``,
+      },
+      {
+        title: 'message.outbound — Sent Message',
+        content: `Fired when a message is successfully sent from your WhatsApp number.
+
+## When It Fires
+- You send a message via the API (\`/api/v1/send\`)
+- A team member sends a message from the Live Chat
+- A campaign sends a message to a contact
+- The chatbot auto-replies
+
+## Payload
+
+\`\`\`json
+{
+  "event": "message.outbound",
+  "timestamp": "2025-07-01T14:31:00.000Z",
+  "instance_id": "inst_abc123",
+  "account_id": "usr_xyz789",
+  "data": {
+    "message_id": "wamid.HBgNMjAxMjM0NTY3ODkwFQIAERgS...",
+    "to": "201234567890",
+    "type": "text",
+    "text": "Hello! How can I help you today?",
+    "timestamp": "2025-07-01T14:31:00.000Z",
+    "source": "live_chat",
+    "sent_by": "usr_agent123",
+    "instance_type": "wa_web",
+    "status": "sent"
+  }
+}
+\`\`\`
+
+## Source Values
+
+| source | Description |
+|---|---|
+| api | Sent via REST API |
+| live_chat | Sent from Live Chat inbox by a team member |
+| campaign | Sent as part of a campaign |
+| chatbot | Sent by chatbot auto-reply |
+| otp | Sent as an OTP verification code |`,
+      },
+      {
+        title: 'message.delivered — Message Delivered',
+        content: `Fired when WhatsApp confirms the message was delivered to the recipient's device.
+
+> Only available for **Cloud API** instances. WhatsApp Web does not provide delivery receipts.
+
+## Payload
+
+\`\`\`json
+{
+  "event": "message.delivered",
+  "timestamp": "2025-07-01T14:31:05.000Z",
+  "instance_id": "inst_abc123",
+  "account_id": "usr_xyz789",
+  "data": {
+    "message_id": "wamid.HBgNMjAxMjM0NTY3ODkwFQIAERgS...",
+    "to": "201234567890",
+    "delivered_at": "2025-07-01T14:31:05.000Z",
+    "instance_type": "cloud_api"
+  }
+}
+\`\`\``,
+      },
+      {
+        title: 'message.read — Message Read',
+        content: `Fired when the recipient opens and reads the message.
+
+> Only available for **Cloud API** instances. Requires the recipient to have read receipts enabled.
+
+## Payload
+
+\`\`\`json
+{
+  "event": "message.read",
+  "timestamp": "2025-07-01T14:32:00.000Z",
+  "instance_id": "inst_abc123",
+  "account_id": "usr_xyz789",
+  "data": {
+    "message_id": "wamid.HBgNMjAxMjM0NTY3ODkwFQIAERgS...",
+    "to": "201234567890",
+    "read_at": "2025-07-01T14:32:00.000Z",
+    "instance_type": "cloud_api"
+  }
+}
+\`\`\``,
+      },
+      {
+        title: 'message.failed — Message Failed',
+        content: `Fired when a message fails to send.
+
+## When It Fires
+- Number does not exist on WhatsApp
+- Template rejected or not approved
+- Cloud API rate limit exceeded
+- WhatsApp Web session disconnected during send
+
+## Payload
+
+\`\`\`json
+{
+  "event": "message.failed",
+  "timestamp": "2025-07-01T14:31:02.000Z",
+  "instance_id": "inst_abc123",
+  "account_id": "usr_xyz789",
+  "data": {
+    "message_id": null,
+    "to": "201234567890",
+    "error_code": "131026",
+    "error_message": "Message undeliverable — number not on WhatsApp",
+    "source": "api",
+    "instance_type": "cloud_api"
+  }
+}
+\`\`\`
+
+## Common Error Codes
+
+| error_code | Meaning |
+|---|---|
+| 131026 | Number not on WhatsApp |
+| 131047 | Re-engagement message outside 24h window |
+| 131051 | Template not approved |
+| 131052 | Template parameters mismatch |
+| wa_web_disconnected | WA Web session not connected |
+| rate_limited | Too many messages in short period |`,
+      },
+      {
+        title: 'instance.connected — WhatsApp Connected',
+        content: `Fired when a WhatsApp instance successfully connects.
+
+## When It Fires
+- QR code scanned and WhatsApp Web session established
+- Cloud API instance verified and active
+
+## Payload
+
+\`\`\`json
+{
+  "event": "instance.connected",
+  "timestamp": "2025-07-01T12:00:00.000Z",
+  "instance_id": "inst_abc123",
+  "account_id": "usr_xyz789",
+  "data": {
+    "instance_id": "inst_abc123",
+    "instance_type": "wa_web",
+    "phone_number": "201234567890",
+    "display_name": "Ahmed Business",
+    "connected_at": "2025-07-01T12:00:00.000Z"
+  }
+}
+\`\`\``,
+      },
+      {
+        title: 'instance.disconnected — WhatsApp Disconnected',
+        content: `Fired when a WhatsApp instance loses connection.
+
+## When It Fires
+- Phone logs out of linked devices
+- WhatsApp Web session expires
+- Network interruption that could not be recovered
+
+## Payload
+
+\`\`\`json
+{
+  "event": "instance.disconnected",
+  "timestamp": "2025-07-01T18:00:00.000Z",
+  "instance_id": "inst_abc123",
+  "account_id": "usr_xyz789",
+  "data": {
+    "instance_id": "inst_abc123",
+    "instance_type": "wa_web",
+    "phone_number": "201234567890",
+    "reason": "logged_out",
+    "disconnected_at": "2025-07-01T18:00:00.000Z"
+  }
+}
+\`\`\`
+
+## Disconnect Reasons
+
+| reason | Description |
+|---|---|
+| logged_out | User logged out from phone |
+| session_expired | Session token expired |
+| conflict | WhatsApp opened on another device |
+| network_error | Unrecoverable network failure |`,
+      },
+      {
+        title: 'campaign.sent — Campaign Message Sent',
+        content: `Fired for each message sent as part of a campaign.
+
+## Payload
+
+\`\`\`json
+{
+  "event": "campaign.sent",
+  "timestamp": "2025-07-01T10:05:00.000Z",
+  "instance_id": "inst_abc123",
+  "account_id": "usr_xyz789",
+  "data": {
+    "campaign_id": "camp_xyz456",
+    "campaign_name": "July Promotion",
+    "message_id": "wamid.HBgN...",
+    "to": "201234567890",
+    "contact_name": "Ahmed",
+    "template_key": "july_promo",
+    "status": "sent",
+    "sent_at": "2025-07-01T10:05:00.000Z"
+  }
+}
+\`\`\``,
+      },
+      {
+        title: 'campaign.completed — Campaign Finished',
+        content: `Fired when all messages in a campaign have been processed.
+
+## Payload
+
+\`\`\`json
+{
+  "event": "campaign.completed",
+  "timestamp": "2025-07-01T10:30:00.000Z",
+  "instance_id": "inst_abc123",
+  "account_id": "usr_xyz789",
+  "data": {
+    "campaign_id": "camp_xyz456",
+    "campaign_name": "July Promotion",
+    "total": 500,
+    "sent": 487,
+    "failed": 13,
+    "completed_at": "2025-07-01T10:30:00.000Z"
+  }
+}
+\`\`\``,
+      },
+      {
+        title: 'otp.sent — OTP Sent',
+        content: `Fired when an OTP code is sent to a user for verification.
+
+## When It Fires
+- Your website triggers OTP login via the WABEK OTP API
+- The WAABEK WordPress plugin sends an OTP
+
+## Payload
+
+\`\`\`json
+{
+  "event": "otp.sent",
+  "timestamp": "2025-07-01T14:00:00.000Z",
+  "instance_id": "inst_abc123",
+  "account_id": "usr_xyz789",
+  "data": {
+    "phone": "201234567890",
+    "otp_length": 6,
+    "expires_in": 300,
+    "sent_at": "2025-07-01T14:00:00.000Z",
+    "source": "wordpress_plugin"
+  }
+}
+\`\`\`
+
+> **Security:** The OTP code itself is **never** included in the webhook payload.`,
+      },
+      {
+        title: 'otp.verified — OTP Verified',
+        content: `Fired when a user successfully verifies their OTP code.
+
+## Payload
+
+\`\`\`json
+{
+  "event": "otp.verified",
+  "timestamp": "2025-07-01T14:01:30.000Z",
+  "instance_id": "inst_abc123",
+  "account_id": "usr_xyz789",
+  "data": {
+    "phone": "201234567890",
+    "verified_at": "2025-07-01T14:01:30.000Z",
+    "source": "wordpress_plugin",
+    "attempts": 1
+  }
+}
+\`\`\``,
+      },
+      {
+        title: 'contact.created — New Contact',
+        content: `Fired when a new contact is created — either automatically when an unknown number messages you, or manually via the API.
+
+## Payload
+
+\`\`\`json
+{
+  "event": "contact.created",
+  "timestamp": "2025-07-01T14:30:00.000Z",
+  "instance_id": "inst_abc123",
+  "account_id": "usr_xyz789",
+  "data": {
+    "contact_id": "cont_abc123",
+    "phone": "201234567890",
+    "name": "Ahmed Mohamed",
+    "source": "inbound_message",
+    "created_at": "2025-07-01T14:30:00.000Z"
+  }
+}
+\`\`\`
+
+## Source Values
+
+| source | Description |
+|---|---|
+| inbound_message | Contact messaged you first |
+| api | Created via REST API |
+| import | Imported via CSV |
+| manual | Created manually in dashboard |`,
+      },
+      {
+        title: 'contact.opted_out — Contact Unsubscribed',
+        content: `Fired when a contact sends a stop/unsubscribe keyword and is opted out of campaigns.
+
+## Stop Keywords
+By default: \`STOP\`, \`UNSUBSCRIBE\`, \`OPT OUT\`, \`إلغاء\`
+
+## Payload
+
+\`\`\`json
+{
+  "event": "contact.opted_out",
+  "timestamp": "2025-07-01T15:00:00.000Z",
+  "instance_id": "inst_abc123",
+  "account_id": "usr_xyz789",
+  "data": {
+    "contact_id": "cont_abc123",
+    "phone": "201234567890",
+    "name": "Ahmed Mohamed",
+    "keyword": "STOP",
+    "opted_out_at": "2025-07-01T15:00:00.000Z"
+  }
+}
+\`\`\``,
+      },
+      {
+        title: 'chatbot.triggered — Chatbot Activated',
+        content: `Fired when the chatbot processes an inbound message and sends an auto-reply.
+
+## Payload
+
+\`\`\`json
+{
+  "event": "chatbot.triggered",
+  "timestamp": "2025-07-01T14:30:05.000Z",
+  "instance_id": "inst_abc123",
+  "account_id": "usr_xyz789",
+  "data": {
+    "contact_id": "cont_abc123",
+    "phone": "201234567890",
+    "trigger_keyword": "price",
+    "node_id": "node_pricing",
+    "node_name": "Pricing Info",
+    "reply_sent": true,
+    "triggered_at": "2025-07-01T14:30:05.000Z"
+  }
+}
+\`\`\``,
+      },
+      {
+        title: 'All Events Reference',
+        content: `Quick reference of all webhook events.
+
+## Event List
+
+| Event | Trigger |
+|---|---|
+| message.inbound | Contact sends you a message |
+| message.outbound | You send a message (API/chat/campaign/bot) |
+| message.delivered | Message delivered to device (Cloud API only) |
+| message.read | Message read by recipient (Cloud API only) |
+| message.failed | Message failed to send |
+| instance.connected | WhatsApp instance connected |
+| instance.disconnected | WhatsApp instance disconnected |
+| campaign.sent | Single campaign message sent |
+| campaign.completed | Entire campaign finished |
+| otp.sent | OTP code sent to user |
+| otp.verified | OTP successfully verified |
+| contact.created | New contact added |
+| contact.opted_out | Contact unsubscribed |
+| chatbot.triggered | Chatbot auto-replied |
+
+## Full Integration Example (Node.js / Express)
+
+\`\`\`javascript
+const express = require('express')
+const crypto = require('crypto')
+const app = express()
+app.use(express.json())
+
+const WEBHOOK_SECRET = process.env.WABEK_WEBHOOK_SECRET
+
+function verify(req) {
+  if (!WEBHOOK_SECRET) return true
+  const sig = req.headers['x-wabek-signature'] || ''
+  const expected = 'sha256=' + crypto
+    .createHmac('sha256', WEBHOOK_SECRET)
+    .update(JSON.stringify(req.body))
+    .digest('hex')
+  return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
+}
+
+app.post('/wabek-webhook', (req, res) => {
+  if (!verify(req)) return res.status(401).json({ error: 'Invalid signature' })
+  res.sendStatus(200) // always respond fast
+
+  const { event, data, instance_id, timestamp } = req.body
+
+  switch (event) {
+    case 'message.inbound':
+      handleInbound(data)
+      break
+    case 'message.delivered':
+      markDelivered(data.message_id)
+      break
+    case 'message.read':
+      markRead(data.message_id)
+      break
+    case 'message.failed':
+      logFailure(data)
+      break
+    case 'instance.disconnected':
+      alertAdmin(instance_id, data.reason)
+      break
+    case 'campaign.completed':
+      saveCampaignReport(data)
+      break
+    case 'otp.verified':
+      loginUser(data.phone)
+      break
+    case 'contact.opted_out':
+      removeFromLists(data.phone)
+      break
+  }
+})
+
+async function handleInbound(data) {
+  // Save message to your DB
+  await db.messages.create({
+    from: data.from,
+    name: data.from_name,
+    text: data.text,
+    media: data.media,
+    received_at: data.timestamp,
+  })
+  // Notify your team via Slack, email, etc.
+}
+
+app.listen(3000)
+\`\`\`
+
+## Full Integration Example (Python / FastAPI)
+
+\`\`\`python
+from fastapi import FastAPI, Request, HTTPException
+import hmac, hashlib, json, os
+
+app = FastAPI()
+SECRET = os.getenv("WABEK_WEBHOOK_SECRET", "")
+
+def verify(body: bytes, signature: str) -> bool:
+    if not SECRET:
+        return True
+    expected = "sha256=" + hmac.new(
+        SECRET.encode(), body, hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(signature, expected)
+
+@app.post("/wabek-webhook")
+async def webhook(request: Request):
+    body = await request.body()
+    sig = request.headers.get("x-wabek-signature", "")
+    if not verify(body, sig):
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
+    payload = json.loads(body)
+    event = payload.get("event")
+    data  = payload.get("data", {})
+
+    if event == "message.inbound":
+        print(f"New message from {data['from_name']}: {data['text']}")
+    elif event == "instance.disconnected":
+        print(f"Instance disconnected: {data['reason']}")
+    elif event == "otp.verified":
+        print(f"OTP verified for {data['phone']}")
+
+    return {"ok": True}
+\`\`\`
+
+> **Retry Policy:** If your server returns non-200, WABEK retries 3 times: after 5 seconds, 30 seconds, and 5 minutes. After 3 failures the event is dropped and logged in your Dashboard → Logs.`,
+      },
+    ],
   },
 ]
 
@@ -1026,7 +1684,9 @@ function CodeBlock({ code }: { code: string }) {
       </pre>
       <button onClick={copy}
         className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg p-1.5">
-        {copied ? <CheckIcon className="w-3.5 h-3.5 text-green-400" /> : <ClipboardIcon className="w-3.5 h-3.5" />}
+        {copied
+          ? <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-green-400" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          : <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>}
       </button>
     </div>
   )
@@ -1209,8 +1869,8 @@ export default function DocsPage() {
                       className="w-full flex items-center justify-between p-4 text-left hover:bg-slate-500 transition-colors">
                       <span className="font-semibold text-slate-900 text-sm">{item.title}</span>
                       {openItems[item.title]
-                        ? <ChevronDownIcon className="w-4 h-4 text-slate-400" />
-                        : <ChevronRightIcon className="w-4 h-4 text-slate-400" />}
+                        ? <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
+                        : <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg>}
                     </button>
                     {openItems[item.title] && (
                       <div className="px-4 pb-5 border-t border-slate-200">
