@@ -287,10 +287,11 @@ export async function smartSendWAWeb(params: {
   text: string
   contactId?: string | null
   source?: string
+  sentBy?: string  // actualUserId of the team member who sent (for performance tracking)
 }): Promise<SmartSendResult> {
   // WA Web — no templates, no 24h window restriction
   const db = supabaseAdmin()
-  const { userId, instanceId, to, text, contactId, source = 'api' } = params
+  const { userId, instanceId, to, text, contactId, source = 'api', sentBy } = params
   // Preserve full JID for @lid/@g.us/@s.whatsapp.net contacts — stripping
   // to digits-only and re-appending the default suffix server-side sends
   // to the WRONG (non-existent) JID for @lid contacts, causing send errors.
@@ -325,7 +326,7 @@ export async function smartSendWAWeb(params: {
         type: 'text',
         content: text,
         status: 'sent',
-        meta: { method: 'text', source },
+        meta: { method: 'text', source, ...(sentBy ? { sent_by: sentBy } : {}) },
       })
       if (insertErr) {
         console.error(`[smart-send] DB insert error:`, insertErr)

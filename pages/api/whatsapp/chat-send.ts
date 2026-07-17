@@ -62,7 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           wa_message_id: r.messageId || null, direction: 'outbound',
           type: media_type || 'document', content: text || '',
           media_url, media_mime_type: media_mime_type || null, media_filename: media_filename || null,
-          status: 'sent', meta: { source: 'live_chat' },
+          status: 'sent', meta: { source: 'live_chat', sent_by: user.actualUserId || user.userId },
         })
         return res.status(200).json({ success: true, wa_message_id: r.messageId, method: 'media' })
       } catch (err: any) {
@@ -102,7 +102,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         wa_message_id: waMessageId, direction: 'outbound',
         type: media_type || 'document', content: text || '',
         media_url, media_mime_type: media_mime_type || null, media_filename: media_filename || null,
-        status: 'sent', meta: { source: 'live_chat' },
+        status: 'sent', meta: { source: 'live_chat', sent_by: user.actualUserId || user.userId },
       })
       return res.status(200).json({ success: true, wa_message_id: waMessageId, method: 'media', inWindow: true })
     } catch (err: any) {
@@ -122,6 +122,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       to: cleanPhone,
       text,
       contactId: contact_id || null,
+      sentBy: user.actualUserId || user.userId,
     })
     console.log(`[live_chat] WA_WEB result: msgId=${r.messageId} error=${r.error || 'none'}`)
     if (r.error) return res.status(400).json({ error: r.error })

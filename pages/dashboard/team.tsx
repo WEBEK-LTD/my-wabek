@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import axios from 'axios'
@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 import { PlusIcon, TrashIcon, ClipboardIcon, UserGroupIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { useAuthStore } from '@/lib/store'
 import clsx from 'clsx'
-import { format, formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow } from 'date-fns'
 
 const ROLE_COLORS = {
   admin: 'badge-red',
@@ -23,21 +23,27 @@ const STATUS_COLORS = {
 
 export default function TeamPage() {
   const qc = useQueryClient()
-  const { user } = useAuthStore()
-  const isOwner = !user?.sub_account_of
+  const { user, fetchMe } = useAuthStore()
+  const isOwner = !user?.sub_account_of  // owner has no parent account
   const [tab, setTab]           = useState<'members' | 'performance'>('members')
   const [range, setRange]       = useState<'1d' | '7d' | '30d'>('7d')
   const [showInvite, setShowInvite] = useState(false)
   const [form, setForm] = useState({ name: '', email: '', role: 'agent' })
   const [inviteUrl, setInviteUrl] = useState('')
 
+  // Refresh user on mount so isOwner is accurate after login
+  useEffect(() => { fetchMe() }, [])
+
+  // Close invite form when switching away from members tab
+  useEffect(() => { if (tab !== 'members') closeInvite() }, [tab])
+
   const { data, isLoading } = useQuery('team', () => axios.get('/api/team').then(r => r.data))
   const members = data?.members || []
 
-  const { data: perfData, isLoading: perfLoading, refetch: refetchPerf } = useQuery(
+  const { data: perfData, isLoading: perfLoading, isFetching: perfFetching, refetch: refetchPerf } = useQuery(
     ['team-performance', range],
     () => axios.get(`/api/team/performance?range=${range}`).then(r => r.data),
-    { enabled: tab === 'performance' }
+    { enabled: tab === 'performance', staleTime: 0 }  // always fresh when range changes
   )
   const inviteMut = useMutation(
     (body) => axios.post('/api/team', body),
@@ -54,15 +60,24 @@ export default function TeamPage() {
 
   const updateMut = useMutation(
     ({ id, ...body }) => axios.put(`/api/team/${id}`, body),
-    { onSuccess: () => { qc.invalidateQueries('team'); toast.success('Updated') } }
+    {
+      onSuccess: () => { qc.invalidateQueries('team'); qc.invalidateQueries('team-performance'); toast.success('Updated') },
+      onError: (e: any) => toast.error(e?.response?.data?.error || 'Update failed'),
+    }
   )
 
   const deleteMut = useMutation(
     (id) => axios.delete(`/api/team/${id}`),
-    { onSuccess: () => { qc.invalidateQueries('team'); toast.success('Removed') } }
+    {
+      onSuccess: () => { qc.invalidateQueries('team'); qc.invalidateQueries('team-performance'); toast.success('Member removed') },
+      onError: (e: any) => toast.error(e?.response?.data?.error || 'Remove failed'),
+    }
   )
 
-  const copy = (text) => { navigator.clipboard.writeText(text); toast.success('Copied!') }
+  const copy = (text: string) => { navigator.clipboard.writeText(text); toast.success('Copied!') }
+
+  const openInvite = () => { setShowInvite(true); setInviteUrl(''); setForm({ name: '', email: '', role: 'agent' }) }
+  const closeInvite = () => { setShowInvite(false); setInviteUrl('') }
 
   return (
     <DashboardLayout title="Team">
@@ -91,7 +106,7 @@ export default function TeamPage() {
           </button>
         </div>
         {tab === 'members' && isOwner && (
-          <button onClick={() => setShowInvite(v => !v)} className="btn-primary">
+          <button onClick={openInvite} className="btn-primary">
             <PlusIcon className="w-4 h-4" /> Invite Member
           </button>
         )}
@@ -136,7 +151,7 @@ export default function TeamPage() {
             <button onClick={() => inviteMut.mutate(form)} disabled={inviteMut.isLoading || !form.name || !form.email} className="btn-primary">
               {inviteMut.isLoading ? <><ArrowPathIcon className="w-4 h-4 animate-spin" /> Creating...</> : 'Create Invite Link'}
             </button>
-            <button onClick={() => setShowInvite(false)} className="btn-secondary">Cancel</button>
+            <button onClick={closeInvite} className="btn-secondary">Cancel</button>
           </div>
 
           {/* Invite URL */}
@@ -155,6 +170,11 @@ export default function TeamPage() {
       )}
 
       {/* Members list */}
+      {!isOwner && (
+        <div className="mb-4 px-4 py-2.5 bg-[#F8FAFC] border border-slate-200 rounded-xl">
+          <p className="text-xs text-slate-400">You are viewing the team as a member. Contact your account owner to make changes.</p>
+        </div>
+      )}
       {isLoading ? (
         <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="skeleton h-16 rounded-xl" />)}</div>
       ) : members.length === 0 ? (
@@ -162,9 +182,11 @@ export default function TeamPage() {
           <UserGroupIcon className="w-12 h-12 text-slate-600 mx-auto mb-3" />
           <h3 className="font-display font-semibold text-slate-900 mb-2">No team members yet</h3>
           <p className="text-slate-400 text-sm mb-4">Invite your team to collaborate on conversations</p>
-          <button onClick={() => setShowInvite(true)} className="btn-primary mx-auto">
-            <PlusIcon className="w-4 h-4" /> Invite First Member
-          </button>
+          {isOwner && (
+            <button onClick={openInvite} className="btn-primary mx-auto">
+              <PlusIcon className="w-4 h-4" /> Invite First Member
+            </button>
+          )}
         </div>
       ) : (
         <div className="card">
@@ -173,29 +195,46 @@ export default function TeamPage() {
               <div key={member.id} className="py-3 border-b border-slate-200 last:border-0">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-full bg-[#F8FAFC] flex items-center justify-center font-bold text-slate-700 flex-shrink-0">
-                    {member.name[0].toUpperCase()}
+                    {(member.name || member.email || "?")[0].toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-900">{member.name}</p>
+                    <p className="text-sm font-medium text-slate-900">{member.name || '—'}</p>
                     <p className="text-xs text-slate-500">{member.email}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={ROLE_COLORS[member.role] || 'badge-gray'}>{member.role}</span>
                     <span className={STATUS_COLORS[member.status] || 'badge-gray'}>{member.status}</span>
-                    <select value={member.role} onChange={e => updateMut.mutate({ id: member.id, role: e.target.value })}
-                      className="input text-xs py-1 px-2 w-24">
-                      <option value="agent">Agent</option>
-                      <option value="admin">Admin</option>
-                      <option value="viewer">Viewer</option>
-                    </select>
-                    <button onClick={() => { if(confirm('Remove member?')) deleteMut.mutate(member.id) }}
-                      className="p-1.5 text-slate-500 hover:text-red-400">
-                      <TrashIcon className="w-4 h-4" />
-                    </button>
+                    {isOwner && member.status === 'active' && (
+                      <select
+                        value={member.role}
+                        onChange={e => {
+                          const newRole = e.target.value
+                          if (newRole !== member.role) {
+                            if (confirm(`Change role to "${newRole}"?`)) {
+                              updateMut.mutate({ id: member.id, role: newRole })
+                            } else {
+                              // Reset visual state — browser changed it before confirm
+                              e.target.value = member.role
+                            }
+                          }
+                        }}
+                        className="input text-xs py-1 px-2 w-24"
+                      >
+                        <option value="agent">Agent</option>
+                        <option value="admin">Admin</option>
+                        <option value="viewer">Viewer</option>
+                      </select>
+                    )}
+                    {isOwner && member.id && (
+                      <button onClick={() => { if(confirm('Remove this member?')) deleteMut.mutate(member.id) }}
+                        className="p-1.5 text-slate-500 hover:text-red-400" title="Remove member">
+                        <TrashIcon className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
-                {/* Inbox Permissions */}
-                {member.status === 'active' && data?.instances?.length > 0 && (
+                {/* Inbox Permissions — owner only */}
+                {isOwner && member.status === 'active' && data?.instances?.length > 0 && (
                   <div className="mt-2 ml-14">
                     <p className="text-[11px] text-slate-400 mb-1.5">Inbox Access <span className="text-slate-300">(no selection = all inboxes)</span></p>
                     <div className="flex flex-wrap gap-1.5">
@@ -256,6 +295,17 @@ export default function TeamPage() {
             <div className="card space-y-3">
               {[1,2,3].map(i => <div key={i} className="h-16 skeleton rounded-xl" />)}
             </div>
+          ) : !perfData ? (
+            <div className="card text-center py-8">
+              <p className="text-slate-400 text-sm">Failed to load performance data.</p>
+              <button onClick={() => refetchPerf()} className="btn-secondary text-sm mt-3">Try again</button>
+            </div>
+          ) : perfData?.mode !== 'team' && perfData?.mode !== 'self' ? (
+            // Unknown mode - show error
+            <div className="card text-center py-8">
+              <p className="text-slate-400 text-sm">Unable to load performance data.</p>
+              <button onClick={() => refetchPerf()} className="btn-secondary text-sm mt-3">Try again</button>
+            </div>
           ) : perfData?.mode === 'self' ? (
             // Member viewing own stats
             <div className="space-y-4">
@@ -270,8 +320,8 @@ export default function TeamPage() {
                       {range === '1d' ? 'Today' : range === '7d' ? 'Last 7 days' : 'Last 30 days'}
                     </p>
                   </div>
-                  <button onClick={() => refetchPerf()} className="ml-auto p-1.5 text-slate-400 hover:text-slate-900">
-                    <ArrowPathIcon className="w-4 h-4" />
+                  <button onClick={() => refetchPerf()} disabled={perfFetching} className="ml-auto p-1.5 text-slate-400 hover:text-slate-900 disabled:opacity-50">
+                    <ArrowPathIcon className={clsx("w-4 h-4", perfFetching && "animate-spin")} />
                   </button>
                 </div>
                 <StatCards stats={perfData.stats} />
@@ -281,9 +331,13 @@ export default function TeamPage() {
             // Owner viewing team stats
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-400">{(perfData?.members || []).length} active members</p>
-                <button onClick={() => refetchPerf()} className="p-1.5 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-[#F8FAFC]">
-                  <ArrowPathIcon className="w-4 h-4" />
+                <p className="text-sm text-slate-400">
+                  {(perfData?.members || []).length === 0
+                    ? 'No active team members yet — showing your own activity only'
+                    : `${(perfData?.members || []).length} active member${(perfData?.members || []).length !== 1 ? 's' : ''} + you`}
+                </p>
+                <button onClick={() => refetchPerf()} disabled={perfFetching} className="p-1.5 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-[#F8FAFC] disabled:opacity-50">
+                  <ArrowPathIcon className={clsx("w-4 h-4", perfFetching && "animate-spin")} />
                 </button>
               </div>
 
@@ -325,7 +379,14 @@ export default function TeamPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {[...(perfData?.members || []), perfData?.owner].filter(Boolean).map((m, i) => (
+                    {(() => {
+                      const rows = [...(perfData?.members || []), perfData?.owner]
+                        .filter(m => m && m.id)
+                        .filter((m, idx, arr) => arr.findIndex(x => x.id === m.id) === idx)
+                      if (rows.length === 0) return (
+                        <tr><td colSpan={6} className="table-cell text-center text-slate-400 text-sm py-8">No activity data yet for the selected period.</td></tr>
+                      )
+                      return rows.map((m, i) => (
                       <tr key={m.id || i} className="table-row">
                         <td className="table-cell">
                           <div className="flex items-center gap-2">
@@ -334,7 +395,7 @@ export default function TeamPage() {
                             </div>
                             <div className="min-w-0">
                               <p className="text-sm font-medium text-slate-900 truncate max-w-28">{m.name || 'Unknown'}</p>
-                              <p className="text-[10px] text-slate-400 truncate max-w-28">{m.email || ''}</p>
+                              <p className="text-[10px] text-slate-400 truncate max-w-28">{m.email || (m.name === 'You (Owner)' ? 'Account owner' : '')}</p>
                             </div>
                           </div>
                         </td>
@@ -367,12 +428,15 @@ export default function TeamPage() {
                           ) : <span className="text-slate-300 text-xs">—</span>}
                         </td>
                         <td className="table-cell text-xs text-slate-400">
-                          {m.last_active
-                            ? formatDistanceToNow(new Date(m.last_active), { addSuffix: true })
-                            : '—'}
+                          {m.last_active ? (
+                            <span title={new Date(m.last_active).toLocaleString()}>
+                              {formatDistanceToNow(new Date(m.last_active), { addSuffix: true })}
+                            </span>
+                          ) : '—'}
                         </td>
                       </tr>
-                    ))}
+                      ))
+                    })()}
                   </tbody>
                 </table>
               </div>

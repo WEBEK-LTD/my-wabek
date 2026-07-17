@@ -10,7 +10,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const db = supabaseAdmin()
 
   if (req.method === 'GET') {
-    const { data: members } = await db.from('team_members').select('*').eq('owner_id', user.userId).order('created_at')
+    // Exclude invite_token from response — it's a secret
+    const { data: members } = await db.from('team_members')
+      .select('id, owner_id, user_id, name, email, role, status, created_at, updated_at')
+      .eq('owner_id', user.userId).order('created_at')
 
     // Get allowed instances for each member
     const memberIds = (members || []).map(m => m.user_id).filter(Boolean)
@@ -40,8 +43,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    const { email, name, role = 'agent' } = req.body
-    if (!email || !name) return res.status(400).json({ error: 'email and name required' })
+    const { email, name: rawName, role: rawRole = 'agent' } = req.body
+    if (!email || !rawName) return res.status(400).json({ error: 'email and name required' })
+    const VALID_ROLES = ['agent', 'admin', 'viewer']
+    const role = VALID_ROLES.includes(rawRole) ? rawRole : 'agent'
+    const name = rawName.trim()
 
     const inviteToken = crypto.randomBytes(32).toString('hex')
 
@@ -63,16 +69,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Send invite email
     try {
       const { sendEmail, teamInviteEmail } = await import('@/lib/email')
-      const ownerInfo = await db.from('users').select('name, email').eq('id', user.userId).maybeSingle()
+      const { data: ownerData } = await db.from('users').select('name, email').eq('id', user.userId).maybeSingle()
+      const { data: wl } = await db.from('white_label_settings').select('brand_name').eq('user_id', user.userId).maybeSingle()
+      const platformName = wl?.brand_name || process.env.NEXT_PUBLIC_APP_NAME || 'WABEK'
       const html = teamInviteEmail(
-        ownerInfo?.data?.name || 'Your team',
-        ownerInfo?.data?.name || 'WABEK',
+        ownerData?.name || platformName,
+        platformName,
         inviteUrl
       )
-      await sendEmail({ to: email, subject: `You've been invited to join WABEK`, html })
+      await sendEmail({ to: email, subject: `You've been invited to join ${platformName}`, html })
     } catch (emailErr: any) {
       console.error('[team invite] email send failed:', emailErr?.message)
-      // Non-fatal — return invite URL anyway
     }
 
     return res.status(201).json({ member: data, inviteUrl })
