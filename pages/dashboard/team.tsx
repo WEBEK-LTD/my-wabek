@@ -4,7 +4,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { PlusIcon, TrashIcon, ClipboardIcon, UserGroupIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, TrashIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { useAuthStore } from '@/lib/store'
 import clsx from 'clsx'
 import { formatDistanceToNow } from 'date-fns'
@@ -161,7 +161,7 @@ export default function TeamPage() {
               <div className="flex items-center gap-2">
                 <code className="flex-1 text-xs text-blue-600 bg-[#F8FAFC] px-3 py-2 rounded-lg truncate">{inviteUrl}</code>
                 <button onClick={() => copy(inviteUrl)} className="btn-secondary text-xs py-2">
-                  <ClipboardIcon className="w-4 h-4" /> Copy
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> Copy
                 </button>
               </div>
             </div>
@@ -179,7 +179,7 @@ export default function TeamPage() {
         <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="skeleton h-16 rounded-xl" />)}</div>
       ) : members.length === 0 ? (
         <div className="card text-center py-16">
-          <UserGroupIcon className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 text-slate-600 mx-auto mb-3" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
           <h3 className="font-display font-semibold text-slate-900 mb-2">No team members yet</h3>
           <p className="text-slate-400 text-sm mb-4">Invite your team to collaborate on conversations</p>
           {isOwner && (

@@ -43,19 +43,16 @@ interface SmartSendParams {
   text: string
   contactId?: string | null
   templateKey?: TemplateKey
-  // Explicit Meta template name to use, bypassing TEMPLATES/wa_templates
-  // override lookup entirely. Use this when the caller (e.g. a campaign)
-  // already knows the exact approved template name to send.
   templateNameOverride?: string
   templateComponents?: unknown[]
   templateLanguage?: string
   forceTemplate?: boolean
   messageType?: string
-  // Source tracking — mandatory for debugging
-  source?: 'support_reply' | 'campaign' | 'ai_assistant' | 'chatbot' | 'flow' | 'automation' | 'api' | 'notification'
+  source?: 'support_reply' | 'campaign' | 'ai_assistant' | 'chatbot' | 'flow' | 'automation' | 'api' | 'notification' | 'live_chat'
   campaignId?: string
   ticketId?: string
   flowId?: string
+  sentBy?: string  // actualUserId of the team member who sent (for performance tracking)
 }
 
 export interface SmartSendResult {
@@ -138,7 +135,7 @@ export async function smartSend(params: SmartSendParams): Promise<SmartSendResul
   const {
     userId, instanceId, phoneNumberId, accessToken, to, text,
     contactId, templateKey, templateNameOverride, templateComponents: templateComponentsInput = [], templateLanguage = 'en',
-    forceTemplate = false, messageType = 'text'
+    forceTemplate = false, messageType = 'text', sentBy
   } = params
   let templateComponents: unknown[] = templateComponentsInput
 
@@ -266,7 +263,7 @@ export async function smartSend(params: SmartSendParams): Promise<SmartSendResul
         content: text,
         status: 'sent',
         campaign_id: campaignId || null,
-        meta: { method, source, ...(templateUsed ? { template: templateUsed } : {}) },
+        meta: { method, source, ...(templateUsed ? { template: templateUsed } : {}), ...(sentBy ? { sent_by: sentBy } : {}) },
       })
       if (insertErr) {
         console.error(`[smart-send] DB insert error: ${insertErr.message}`)

@@ -146,6 +146,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       contactId: contact_id || null,
       source: 'live_chat' as any,
       forceTemplate: false,
+      sentBy: user.actualUserId || user.userId,
     })
     console.log(`[live_chat] IN_WINDOW result: method=${r.method} msgId=${r.messageId}`)
     if (r.error) return res.status(400).json({ error: r.error, inWindow: true })
