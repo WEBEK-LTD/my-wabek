@@ -37,7 +37,9 @@ export default function TeamPage() {
   // Close invite form when switching away from members tab
   useEffect(() => { if (tab !== 'members') closeInvite() }, [tab])
 
-  const { data, isLoading } = useQuery('team', () => axios.get('/api/team').then(r => r.data))
+  const { data, isLoading, error: teamError } = useQuery('team', () => axios.get('/api/team').then(r => r.data), {
+    onError: (e: any) => toast.error(e?.response?.data?.error || 'Failed to load team'),
+  })
   const members = data?.members || []
 
   const { data: perfData, isLoading: perfLoading, isFetching: perfFetching, refetch: refetchPerf } = useQuery(
@@ -177,6 +179,11 @@ export default function TeamPage() {
       )}
       {isLoading ? (
         <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="skeleton h-16 rounded-xl" />)}</div>
+      ) : teamError ? (
+        <div className="card text-center py-8">
+          <p className="text-red-400 text-sm mb-2">Failed to load team members</p>
+          <p className="text-xs text-slate-400">{(teamError as any)?.response?.data?.error || 'Unknown error'}</p>
+        </div>
       ) : members.length === 0 ? (
         <div className="card text-center py-16">
           <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 text-slate-600 mx-auto mb-3" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
