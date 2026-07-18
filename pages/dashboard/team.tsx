@@ -23,7 +23,7 @@ const STATUS_COLORS = {
 
 export default function TeamPage() {
   const qc = useQueryClient()
-  const { user, fetchMe } = useAuthStore()
+  const { user } = useAuthStore()
   const isOwner = !user?.sub_account_of  // owner has no parent account
   const [tab, setTab]           = useState<'members' | 'performance'>('members')
   const [range, setRange]       = useState<'1d' | '7d' | '30d'>('7d')
@@ -31,19 +31,17 @@ export default function TeamPage() {
   const [form, setForm] = useState({ name: '', email: '', role: 'agent' })
   const [inviteUrl, setInviteUrl] = useState('')
 
-  // Refresh user on mount so isOwner is accurate after login
-  useEffect(() => { fetchMe() }, [])
-
   // Close invite form when switching away from members tab
   useEffect(() => { if (tab !== 'members') closeInvite() }, [tab])
 
-  const { data, isLoading, error: teamError } = useQuery('team', () => axios.get('/api/team').then(r => r.data), {
+  const { data, isLoading, error: teamError } = useQuery(['team', user?.id], () => axios.get('/api/team').then(r => r.data), {
+    enabled: !!user?.id,
     onError: (e: any) => toast.error(e?.response?.data?.error || 'Failed to load team'),
   })
   const members = data?.members || []
 
   const { data: perfData, isLoading: perfLoading, isFetching: perfFetching, refetch: refetchPerf } = useQuery(
-    ['team-performance', range],
+    ['team-performance', user?.id, range],
     () => axios.get(`/api/team/performance?range=${range}`).then(r => r.data),
     { enabled: tab === 'performance', staleTime: 0 }  // always fresh when range changes
   )
@@ -51,7 +49,7 @@ export default function TeamPage() {
     (body) => axios.post('/api/team', body),
     {
       onSuccess: (r) => {
-        qc.invalidateQueries('team')
+        qc.invalidateQueries(['team', user?.id])
         setInviteUrl(r.data.inviteUrl)
         setForm({ name: '', email: '', role: 'agent' })
         toast.success('Invite created! Share the link.')
@@ -63,7 +61,7 @@ export default function TeamPage() {
   const updateMut = useMutation(
     ({ id, ...body }) => axios.put(`/api/team/${id}`, body),
     {
-      onSuccess: () => { qc.invalidateQueries('team'); qc.invalidateQueries('team-performance'); toast.success('Updated') },
+      onSuccess: () => { qc.invalidateQueries(['team', user?.id]); qc.invalidateQueries(['team-performance', user?.id]); toast.success('Updated') },
       onError: (e: any) => toast.error(e?.response?.data?.error || 'Update failed'),
     }
   )
@@ -71,7 +69,7 @@ export default function TeamPage() {
   const deleteMut = useMutation(
     (id) => axios.delete(`/api/team/${id}`),
     {
-      onSuccess: () => { qc.invalidateQueries('team'); qc.invalidateQueries('team-performance'); toast.success('Member removed') },
+      onSuccess: () => { qc.invalidateQueries(['team', user?.id]); qc.invalidateQueries(['team-performance', user?.id]); toast.success('Member removed') },
       onError: (e: any) => toast.error(e?.response?.data?.error || 'Remove failed'),
     }
   )
