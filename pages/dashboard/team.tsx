@@ -34,14 +34,15 @@ export default function TeamPage() {
   // Close invite form when switching away from members tab
   useEffect(() => { if (tab !== 'members') closeInvite() }, [tab])
 
-  const { data, isLoading, error: teamError } = useQuery(['team', user?.id], () => axios.get('/api/team').then(r => r.data), {
-    enabled: !!user?.id,
-    onError: (e: any) => toast.error(e?.response?.data?.error || 'Failed to load team'),
-  })
+  const { data, isLoading, error: teamError } = useQuery(
+    'team',
+    () => axios.get('/api/team').then(r => r.data),
+    { onError: (e: any) => toast.error(e?.response?.data?.error || 'Failed to load team') }
+  )
   const members = data?.members || []
 
   const { data: perfData, isLoading: perfLoading, isFetching: perfFetching, refetch: refetchPerf } = useQuery(
-    ['team-performance', user?.id, range],
+    ['team-performance', range],
     () => axios.get(`/api/team/performance?range=${range}`).then(r => r.data),
     { enabled: tab === 'performance', staleTime: 0 }  // always fresh when range changes
   )
@@ -49,7 +50,7 @@ export default function TeamPage() {
     (body) => axios.post('/api/team', body),
     {
       onSuccess: (r) => {
-        qc.invalidateQueries(['team', user?.id])
+        qc.invalidateQueries('team')
         setInviteUrl(r.data.inviteUrl)
         setForm({ name: '', email: '', role: 'agent' })
         toast.success('Invite created! Share the link.')
@@ -61,7 +62,7 @@ export default function TeamPage() {
   const updateMut = useMutation(
     ({ id, ...body }) => axios.put(`/api/team/${id}`, body),
     {
-      onSuccess: () => { qc.invalidateQueries(['team', user?.id]); qc.invalidateQueries(['team-performance', user?.id]); toast.success('Updated') },
+      onSuccess: () => { qc.invalidateQueries('team'); qc.invalidateQueries('team-performance'); toast.success('Updated') },
       onError: (e: any) => toast.error(e?.response?.data?.error || 'Update failed'),
     }
   )
@@ -69,7 +70,7 @@ export default function TeamPage() {
   const deleteMut = useMutation(
     (id) => axios.delete(`/api/team/${id}`),
     {
-      onSuccess: () => { qc.invalidateQueries(['team', user?.id]); qc.invalidateQueries(['team-performance', user?.id]); toast.success('Member removed') },
+      onSuccess: () => { qc.invalidateQueries('team'); qc.invalidateQueries('team-performance'); toast.success('Member removed') },
       onError: (e: any) => toast.error(e?.response?.data?.error || 'Remove failed'),
     }
   )
