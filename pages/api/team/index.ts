@@ -11,9 +11,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'GET') {
     // Exclude invite_token from response — it's a secret
-    const { data: members } = await db.from('team_members')
+    const { data: members, error: membersErr } = await db.from('team_members')
       .select('id, owner_id, user_id, name, email, role, status, created_at, updated_at')
-      .eq('owner_id', user.userId).order('created_at')
+      .eq('owner_id', user.userId)
+      .order('created_at')
+
+    // Debug: log what we got
+    console.log('[team GET] userId:', user.userId, 'members count:', members?.length, 'error:', membersErr?.message)
 
     // Get allowed instances for each member
     const memberIds = (members || []).map(m => m.user_id).filter(Boolean)

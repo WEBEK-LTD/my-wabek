@@ -23,7 +23,7 @@ const STATUS_COLORS = {
 
 export default function TeamPage() {
   const qc = useQueryClient()
-  const { user } = useAuthStore()
+  const { user, token, fetchMe } = useAuthStore()
   const isOwner = !user?.sub_account_of  // owner has no parent account
   const [tab, setTab]           = useState<'members' | 'performance'>('members')
   const [range, setRange]       = useState<'1d' | '7d' | '30d'>('7d')
