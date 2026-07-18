@@ -1023,12 +1023,28 @@ London, WC2H 9JQ, United Kingdom
 4. If your server does not respond with 200, WABEK retries up to **3 times** with exponential backoff (5s, 30s, 5min)
 
 ## Setting Up Your Webhook
-Go to **Dashboard → Settings → Webhook** and enter:
+Go to **Dashboard → Settings → Webhook** and enter your Webhook URL.
 
 | Field | Description |
 |---|---|
 | Webhook URL | Your server endpoint (must be HTTPS in production) |
 | Secret Key | Optional secret to verify the request came from WABEK |
+
+## Where to Get Your Webhook URL
+
+Depending on how you want to use WABEK webhooks, get your URL from one of these platforms:
+
+| Platform | How to get the URL |
+|---|---|
+| **Zapier** | Create a Zap → Trigger: Webhooks by Zapier → Catch Hook → copy the URL |
+| **Make (Integromat)** | Create a scenario → Add module: Webhooks → Custom webhook → copy the URL |
+| **n8n** | Add node: Webhook → copy the Production URL |
+| **Pabbly Connect** | Create workflow → Trigger: Webhook → copy the URL |
+| **Your own server** | Create an HTTPS endpoint that accepts POST requests (see examples below) |
+| **webhook.site** | Go to webhook.site → copy your unique URL (for testing only) |
+| **Pipedream** | Create a workflow → Trigger: HTTP / Webhook → copy the URL |
+
+> **Testing locally?** Use ngrok (ngrok.com) to expose your local server — run "ngrok http 3000" and use the HTTPS URL it gives you.
 
 ## Verifying Webhook Authenticity
 Every webhook request includes a signature header:
