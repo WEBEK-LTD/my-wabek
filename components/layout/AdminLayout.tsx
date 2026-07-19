@@ -24,6 +24,7 @@ const adminNav = [
   { href: '/admin/payouts', icon: BanknotesIcon, label: 'Payouts' },
   { href: '/admin/seo', icon: MagnifyingGlassIcon, label: 'SEO Manager' },
   { href: '/admin/settings', icon: Cog6ToothIcon, label: 'Settings' },
+  { href: '/admin/ai-settings', icon: Cog6ToothIcon, label: '🤖 AI Settings' },
   { href: '/admin/service-status', icon: Cog6ToothIcon, label: '🟢 Service Status' },
   { href: '/admin/support', icon: Cog6ToothIcon, label: '🎫 Support Tickets' },
   { href: '/admin/wa-templates', icon: Cog6ToothIcon, label: '📋 WA Templates' },

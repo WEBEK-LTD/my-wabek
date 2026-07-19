@@ -527,4 +527,34 @@ app.listen(PORT, async () => {
   if (!WABEK_EVENTS_URL) console.warn('⚠️  WABEK_EVENTS_URL not set')
   await restoreSessions()
   console.log(`[startup] Done. ${sessions.size} session(s) loaded.`)
+
+  // ── AI Quality Review Scheduler ─────────────────────────
+  // Runs every hour to analyze inactive conversations
+  const NETLIFY_URL   = process.env.NETLIFY_URL   || process.env.WABEK_EVENTS_URL?.replace('/api/whatsapp/wa-web-events', '')
+  const REVIEW_SECRET = process.env.SERVER_SECRET || SERVER_SECRET
+
+  async function runAIReviews() {
+    if (!NETLIFY_URL) {
+      console.log('[ai-review-cron] NETLIFY_URL not set, skipping')
+      return
+    }
+    try {
+      console.log('[ai-review-cron] Starting scheduled review run...')
+      const r = await fetch(`${NETLIFY_URL}/api/ai/review-scheduler`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-cron-secret': REVIEW_SECRET,
+        },
+      })
+      const data = await r.json().catch(() => ({}))
+      console.log(`[ai-review-cron] Done:`, data)
+    } catch (err) {
+      console.error('[ai-review-cron] Error:', err?.message)
+    }
+  }
+
+  // Run once on startup after 30s delay, then every hour
+  setTimeout(runAIReviews, 30 * 1000)
+  setInterval(runAIReviews, 60 * 60 * 1000)
 })

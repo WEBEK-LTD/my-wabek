@@ -134,6 +134,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             priority:        'normal',
             last_message_at: new Date().toISOString(),
             updated_at:      new Date().toISOString(),
+            last_activity:   new Date().toISOString(),
+            review_status:   'active',
           }, { onConflict: 'owner_id,contact_id,instance_id', ignoreDuplicates: false })
         } catch (e: any) {
           console.error('[wa-web-events] conversation upsert error:', e?.message)

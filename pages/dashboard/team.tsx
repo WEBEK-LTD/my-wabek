@@ -25,7 +25,7 @@ export default function TeamPage() {
   const qc = useQueryClient()
   const { user, token, fetchMe } = useAuthStore()
   const isOwner = !user?.sub_account_of  // owner has no parent account
-  const [tab, setTab]           = useState<'members' | 'performance'>('members')
+  const [tab, setTab]           = useState<'members' | 'performance' | 'reviews'>('members')
   const [range, setRange]       = useState<'1d' | '7d' | '30d'>('7d')
   const [showInvite, setShowInvite] = useState(false)
   const [form, setForm] = useState({ name: '', email: '', role: 'agent' })
@@ -40,6 +40,27 @@ export default function TeamPage() {
     { onError: (e: any) => toast.error(e?.response?.data?.error || 'Failed to load team') }
   )
   const members = data?.members || []
+
+  const { data: reviewsData, isLoading: reviewsLoading, refetch: refetchReviews } = useQuery(
+    ['ai-reviews', isOwner ? 'owner' : 'member'],
+    () => axios.get('/api/ai/reviews').then(r => r.data),
+    { enabled: tab === 'reviews', staleTime: 5 * 60 * 1000 }
+  )
+
+  const [commentModal, setCommentModal] = useState<{ itemId: string; current: string } | null>(null)
+  const [commentText, setCommentText] = useState('')
+
+  const commentMut = useMutation(
+    ({ item_id, manual_comment }: any) => axios.put('/api/ai/reviews', { item_id, manual_comment }),
+    {
+      onSuccess: () => {
+        qc.invalidateQueries(['ai-reviews', 'owner'])
+        setCommentModal(null)
+        toast.success('Comment saved')
+      },
+      onError: (e: any) => toast.error(e?.response?.data?.error || 'Failed'),
+    }
+  )
 
   const { data: perfData, isLoading: perfLoading, isFetching: perfFetching, refetch: refetchPerf } = useQuery(
     ['team-performance', range],
@@ -99,11 +120,19 @@ export default function TeamPage() {
             className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2',
               tab === 'performance' ? 'bg-white text-slate-900 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-900'
             )}>
-            {/* Google Material: bar chart icon */}
             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
               <path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/>
             </svg>
             Performance
+          </button>
+          <button onClick={() => setTab('reviews')}
+            className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2',
+              tab === 'reviews' ? 'bg-white text-slate-900 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-900'
+            )}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm2-7h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z"/>
+            </svg>
+            AI Reviews
           </button>
         </div>
         {tab === 'members' && isOwner && (
@@ -452,6 +481,304 @@ export default function TeamPage() {
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-brand-500" />≥80% response rate or ≤5min</span>
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-400" />50–79% or 5–30min</span>
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-400" />Below 50% or &gt;30min</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {/* ── AI Reviews Tab ───────────────────────────────── */}
+      {tab === 'reviews' && (
+        <div className="space-y-4">
+          {/* Info note */}
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-blue-50/30 border border-blue-200/50 rounded-xl text-xs text-slate-500">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-blue-400 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+            Reviews are automatically updated every 1 hour. Conversations are analyzed after 2 hours of inactivity.
+          </div>
+
+          {reviewsLoading ? (
+            <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-32 skeleton rounded-xl" />)}</div>
+          ) : isOwner ? (
+            // ── Owner View ──────────────────────────────────
+            <div className="space-y-4">
+              {/* Member Summary Cards */}
+              {(reviewsData?.member_summary || []).length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {(reviewsData?.member_summary || []).map((m: any) => (
+                    <div key={m.member_user_id} className="card">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-9 h-9 rounded-full bg-[#F8FAFC] border border-slate-200 flex items-center justify-center font-bold text-slate-700 text-sm flex-shrink-0">
+                          {(m.member_name || '?')[0].toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-slate-900 text-sm truncate">{m.member_name}</p>
+                          <p className="text-xs text-slate-400">{m.review_count} reviews</p>
+                        </div>
+                        <div className={clsx('text-xl font-bold',
+                          m.avg_score >= 8 ? 'text-brand-500' : m.avg_score >= 6 ? 'text-yellow-400' : 'text-red-400'
+                        )}>
+                          {m.avg_score ?? '—'}
+                        </div>
+                      </div>
+                      {m.top_issues?.slice(0,2).map((issue: any) => (
+                        <p key={issue.text} className="text-[11px] text-red-400 flex items-center gap-1">
+                          <span>↓</span> {issue.text}
+                        </p>
+                      ))}
+                      {m.top_strengths?.slice(0,2).map((s: any) => (
+                        <p key={s.text} className="text-[11px] text-brand-500 flex items-center gap-1">
+                          <span>↑</span> {s.text}
+                        </p>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Reviews List */}
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-slate-400">{reviewsData?.total || 0} completed reviews</p>
+                <button onClick={() => refetchReviews()} className="p-1.5 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-[#F8FAFC]">
+                  <ArrowPathIcon className="w-4 h-4" />
+                </button>
+              </div>
+
+              {(reviewsData?.reviews || []).length === 0 ? (
+                <div className="card text-center py-12">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10 text-slate-300 mx-auto mb-3" viewBox="0 0 24 24" fill="currentColor"><path d="M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm2-7h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z"/></svg>
+                  <p className="text-slate-400 text-sm">No reviews yet. Reviews appear after conversations become inactive for 2 hours.</p>
+                </div>
+              ) : (reviewsData?.reviews || []).map((review: any) => (
+                <div key={review.id} className="card space-y-4">
+                  {/* Review header */}
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-semibold text-slate-900">
+                        {review.contacts?.name || review.contacts?.phone || 'Unknown Contact'}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {review.message_count} messages · Review #{review.review_version} ·{' '}
+                        {review.reviewed_at ? new Date(review.reviewed_at).toLocaleDateString() : ''}
+                      </p>
+                    </div>
+                    {review.overall_score && (
+                      <div className={clsx('text-2xl font-bold',
+                        review.overall_score >= 8 ? 'text-brand-500' : review.overall_score >= 6 ? 'text-yellow-400' : 'text-red-400'
+                      )}>
+                        {Number(review.overall_score).toFixed(1)}
+                      </div>
+                    )}
+                  </div>
+
+                  {review.overall_summary && (
+                    <p className="text-sm text-slate-500 bg-[#F8FAFC] rounded-lg px-3 py-2">{review.overall_summary}</p>
+                  )}
+
+                  {/* Per-member items */}
+                  <div className="space-y-3">
+                    {(review.ai_review_items || []).map((item: any) => (
+                      <div key={item.id} className="border border-slate-200 rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-[#F8FAFC] border border-slate-200 flex items-center justify-center text-xs font-bold text-slate-700">
+                              {(item.member_name || '?')[0].toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-slate-900">{item.member_name}</p>
+                              <p className="text-[10px] text-slate-400">{item.messages_count} messages</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={clsx('text-lg font-bold',
+                              item.score_overall >= 8 ? 'text-brand-500' : item.score_overall >= 6 ? 'text-yellow-400' : 'text-red-400'
+                            )}>
+                              {item.score_overall ? `${Number(item.score_overall).toFixed(1)}/10` : '—'}
+                            </span>
+                            <button onClick={() => { setCommentModal({ itemId: item.id, current: item.manual_comment || '' }); setCommentText(item.manual_comment || '') }}
+                              className="btn-secondary text-xs py-1 px-2">
+                              {item.manual_comment ? 'Edit note' : '+ Add note'}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Score breakdown */}
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {[
+                            ['Accuracy', item.score_accuracy],
+                            ['Professional', item.score_professionalism],
+                            ['Clarity', item.score_clarity],
+                            ['Empathy', item.score_empathy],
+                            ['Helpfulness', item.score_helpfulness],
+                            ['Grammar', item.score_grammar],
+                          ].map(([label, score]) => (
+                            <div key={label as string} className="bg-[#F8FAFC] rounded-lg px-2 py-1.5 text-center">
+                              <p className="text-[10px] text-slate-400">{label}</p>
+                              <p className={clsx('text-xs font-bold',
+                                (score as number) >= 8 ? 'text-brand-500' : (score as number) >= 6 ? 'text-yellow-400' : 'text-red-400'
+                              )}>{score ? Number(score).toFixed(1) : '—'}</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Strengths & Issues */}
+                        {item.strengths?.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-brand-500 mb-1">✓ Strengths</p>
+                            {item.strengths.map((s: string) => <p key={s} className="text-xs text-slate-500 ml-3">• {s}</p>)}
+                          </div>
+                        )}
+                        {item.issues?.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-red-400 mb-1">✗ Issues</p>
+                            {item.issues.map((s: string) => <p key={s} className="text-xs text-slate-500 ml-3">• {s}</p>)}
+                          </div>
+                        )}
+                        {item.suggested_reply && (
+                          <div className="bg-blue-50/30 border border-blue-200/50 rounded-lg px-3 py-2">
+                            <p className="text-xs font-medium text-blue-500 mb-1">💡 Suggested Better Reply</p>
+                            <p className="text-xs text-slate-600">{item.suggested_reply}</p>
+                          </div>
+                        )}
+                        {item.manual_comment && (
+                          <div className="bg-yellow-50/30 border border-yellow-200/50 rounded-lg px-3 py-2">
+                            <p className="text-xs font-medium text-yellow-600 mb-1">📝 Manager Note</p>
+                            <p className="text-xs text-slate-600">{item.manual_comment}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            // ── Member View ─────────────────────────────────
+            <div className="space-y-4">
+              {/* Stats */}
+              {reviewsData?.stats && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="card text-center">
+                    <p className={clsx('text-3xl font-bold mb-1',
+                      (reviewsData.stats.avg_score || 0) >= 8 ? 'text-brand-500' : (reviewsData.stats.avg_score || 0) >= 6 ? 'text-yellow-400' : 'text-red-400'
+                    )}>
+                      {reviewsData.stats.avg_score ?? '—'}
+                    </p>
+                    <p className="text-xs text-slate-400">Average Score</p>
+                  </div>
+                  <div className="card text-center">
+                    <p className="text-3xl font-bold text-slate-900 mb-1">{reviewsData.stats.review_count}</p>
+                    <p className="text-xs text-slate-400">Total Reviews</p>
+                  </div>
+                  {reviewsData.stats.top_strengths?.slice(0,3).map((s: any) => (
+                    <div key={s.text} className="px-3 py-2 bg-brand-50/30 border border-brand-200/30 rounded-xl">
+                      <p className="text-xs text-brand-500">✓ {s.text}</p>
+                    </div>
+                  ))}
+                  {reviewsData.stats.top_issues?.slice(0,3).map((s: any) => (
+                    <div key={s.text} className="px-3 py-2 bg-red-50/30 border border-red-200/30 rounded-xl">
+                      <p className="text-xs text-red-400">↓ {s.text}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Review items */}
+              {(reviewsData?.items || []).length === 0 ? (
+                <div className="card text-center py-12">
+                  <p className="text-slate-400 text-sm">No reviews yet. Keep up the good work!</p>
+                </div>
+              ) : (reviewsData?.items || []).map((item: any) => (
+                <div key={item.id} className="card space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-slate-900 text-sm">
+                        {item.ai_reviews?.contacts?.name || item.ai_reviews?.contacts?.phone || 'Customer'}
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        {item.ai_reviews?.reviewed_at ? new Date(item.ai_reviews.reviewed_at).toLocaleDateString() : ''} · {item.messages_count} messages
+                      </p>
+                    </div>
+                    <span className={clsx('text-xl font-bold',
+                      item.score_overall >= 8 ? 'text-brand-500' : item.score_overall >= 6 ? 'text-yellow-400' : 'text-red-400'
+                    )}>
+                      {item.score_overall ? `${Number(item.score_overall).toFixed(1)}/10` : '—'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      ['Accuracy', item.score_accuracy],
+                      ['Professional', item.score_professionalism],
+                      ['Clarity', item.score_clarity],
+                      ['Empathy', item.score_empathy],
+                      ['Helpfulness', item.score_helpfulness],
+                      ['Grammar', item.score_grammar],
+                    ].map(([label, score]) => (
+                      <div key={label as string} className="bg-[#F8FAFC] rounded-lg px-2 py-1.5 text-center">
+                        <p className="text-[10px] text-slate-400">{label}</p>
+                        <p className={clsx('text-xs font-bold',
+                          (score as number) >= 8 ? 'text-brand-500' : (score as number) >= 6 ? 'text-yellow-400' : 'text-red-400'
+                        )}>{score ? Number(score).toFixed(1) : '—'}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {item.strengths?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-brand-500 mb-1">✓ Strengths</p>
+                      {item.strengths.map((s: string) => <p key={s} className="text-xs text-slate-500 ml-3">• {s}</p>)}
+                    </div>
+                  )}
+                  {item.issues?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-red-400 mb-1">Areas to Improve</p>
+                      {item.issues.map((s: string) => <p key={s} className="text-xs text-slate-500 ml-3">• {s}</p>)}
+                    </div>
+                  )}
+                  {item.suggested_reply && (
+                    <div className="bg-blue-50/30 border border-blue-200/50 rounded-lg px-3 py-2">
+                      <p className="text-xs font-medium text-blue-500 mb-1">💡 Better Reply Suggestion</p>
+                      <p className="text-xs text-slate-600">{item.suggested_reply}</p>
+                    </div>
+                  )}
+                  {item.coaching_notes && (
+                    <div className="bg-purple-50/30 border border-purple-200/30 rounded-lg px-3 py-2">
+                      <p className="text-xs font-medium text-purple-500 mb-1">🎯 Coaching</p>
+                      <p className="text-xs text-slate-600">{item.coaching_notes}</p>
+                    </div>
+                  )}
+                  {item.manual_comment && (
+                    <div className="bg-yellow-50/30 border border-yellow-200/50 rounded-lg px-3 py-2">
+                      <p className="text-xs font-medium text-yellow-600 mb-1">📝 Manager Note</p>
+                      <p className="text-xs text-slate-600">{item.manual_comment}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Manual Comment Modal */}
+          {commentModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
+                <h3 className="font-display font-semibold text-slate-900 mb-3">Add Manager Note</h3>
+                <textarea
+                  value={commentText}
+                  onChange={e => setCommentText(e.target.value)}
+                  rows={4}
+                  className="input resize-none w-full mb-4"
+                  placeholder="Add coaching feedback, praise, or improvement notes..."
+                />
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => commentMut.mutate({ item_id: commentModal.itemId, manual_comment: commentText })}
+                    disabled={commentMut.isLoading}
+                    className="btn-primary flex-1"
+                  >
+                    {commentMut.isLoading ? 'Saving...' : 'Save Note'}
+                  </button>
+                  <button onClick={() => setCommentModal(null)} className="btn-secondary">Cancel</button>
+                </div>
               </div>
             </div>
           )}
