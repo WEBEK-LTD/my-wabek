@@ -57,8 +57,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { data: provRow } = await db.from('system_settings')
       .select('value').eq('key', 'ai_provider').maybeSingle()
 
-    const apiKey  = keyRow?.value
-    const provider = provRow?.value || 'deepseek'
+    const apiKey  = jsonVal(keyRow?.value)
+    const provider = jsonVal(provRow?.value) || 'deepseek'
 
     if (!apiKey) return res.status(400).json({ error: 'No API key configured' })
 
