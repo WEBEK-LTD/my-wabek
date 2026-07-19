@@ -7,6 +7,12 @@
 import { supabaseAdmin } from './supabase'
 import { v4 as uuidv4 } from 'uuid'
 
+// JSONB values come back as JSON strings — strip outer quotes
+function jsonVal(v: string | undefined): string {
+  if (!v) return ''
+  try { return JSON.parse(v) } catch { return v }
+}
+
 interface AISettings {
   provider: string
   apiKey: string
@@ -24,13 +30,13 @@ async function getAISettings(): Promise<AISettings | null> {
   const s: Record<string, string> = {}
   for (const row of data || []) s[row.key] = row.value
 
-  if (s['ai_reviews_enabled'] !== 'true') return null
-  if (!s['ai_deepseek_api_key']) return null
+  if (jsonVal(s['ai_reviews_enabled']) !== 'true') return null
+  if (!jsonVal(s['ai_deepseek_api_key'])) return null
 
   return {
-    provider:    s['ai_provider'] || 'deepseek',
-    apiKey:      s['ai_deepseek_api_key'],
-    maxMessages: parseInt(s['ai_max_messages'] || '100'),
+    provider:    jsonVal(s['ai_provider']) || 'deepseek',
+    apiKey:      jsonVal(s['ai_deepseek_api_key']),
+    maxMessages: parseInt(jsonVal(s['ai_max_messages']) || '100'),
     enabled:     true,
   }
 }
@@ -249,8 +255,8 @@ Be specific, constructive, and fair. Base everything ONLY on what appears in the
     const today = new Date().toISOString().split('T')[0]
     const usageKey = `ai_usage_${today}`
     const { data: usage } = await db.from('system_settings').select('value').eq('key', usageKey).maybeSingle()
-    const newCount = parseInt(usage?.value || '0') + 1
-    await db.from('system_settings').upsert({ key: usageKey, value: String(newCount) })
+    const newCount = parseInt(jsonVal(usage?.value) || '0') + 1
+    await db.from('system_settings').upsert({ key: usageKey, value: JSON.stringify(String(newCount)) })
 
     console.log(`[ai-review] ✅ Review completed for contact ${contactId}, version ${reviewVersion}`)
   } catch (err: any) {
@@ -274,8 +280,8 @@ export async function runScheduledReviews(): Promise<void> {
     .select('value').eq('key', `ai_usage_${today}`).maybeSingle()
   const { data: limitRow } = await db.from('system_settings')
     .select('value').eq('key', 'ai_daily_limit').maybeSingle()
-  const dailyUsage = parseInt(usageRow?.value || '0')
-  const dailyLimit = parseInt(limitRow?.value || '500')
+  const dailyUsage = parseInt(jsonVal(usageRow?.value) || '0')
+  const dailyLimit = parseInt(jsonVal(limitRow?.value) || '500')
   if (dailyUsage >= dailyLimit) {
     console.log(`[ai-review] Daily limit reached (${dailyUsage}/${dailyLimit})`)
     return
@@ -284,7 +290,7 @@ export async function runScheduledReviews(): Promise<void> {
   // Get inactivity threshold
   const { data: inactivityRow } = await db.from('system_settings')
     .select('value').eq('key', 'ai_inactivity_hours').maybeSingle()
-  const inactivityHours = parseFloat(inactivityRow?.value || '2')
+  const inactivityHours = parseFloat(jsonVal(inactivityRow?.value) || '2')
   const cutoff = new Date(Date.now() - inactivityHours * 60 * 60 * 1000).toISOString()
 
   // Find conversations ready for review

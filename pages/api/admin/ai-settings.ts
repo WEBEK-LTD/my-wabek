@@ -2,6 +2,11 @@ import { NextApiRequest, NextApiResponse } from 'next'
 import { requireAdmin } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 
+function jsonVal(v: string | undefined): string {
+  if (!v) return ''
+  try { return JSON.parse(v) } catch { return v }
+}
+
 const AI_KEYS = [
   'ai_provider', 'ai_deepseek_api_key', 'ai_reviews_enabled',
   'ai_review_interval_hours', 'ai_inactivity_hours',
@@ -18,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .select('key, value').in('key', [...AI_KEYS, ...getUsageKeys()])
 
     const settings: Record<string, string> = {}
-    for (const row of data || []) settings[row.key] = row.value
+    for (const row of data || []) settings[row.key] = jsonVal(row.value)
 
     // Mask API key
     if (settings['ai_deepseek_api_key']) {
@@ -39,7 +44,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     for (const [key, value] of Object.entries(updates)) {
       if (!allowed.has(key)) continue
-      await db.from('system_settings').upsert({ key, value: String(value) })
+      // Store as JSON string since value column is JSONB
+      await db.from('system_settings').upsert({ key, value: JSON.stringify(String(value)) })
     }
     return res.status(200).json({ success: true })
   }

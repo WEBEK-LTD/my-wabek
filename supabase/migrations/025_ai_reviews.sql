@@ -62,21 +62,16 @@ CREATE TABLE IF NOT EXISTS ai_review_items (
 CREATE INDEX IF NOT EXISTS idx_ai_reviews_owner    ON ai_reviews(owner_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ai_review_items_member ON ai_review_items(owner_id, member_user_id, created_at DESC);
 
--- system_settings table for AI config (admin only)
-CREATE TABLE IF NOT EXISTS system_settings (
-  key   TEXT PRIMARY KEY,
-  value TEXT
-);
-
--- Default AI settings
+-- system_settings already exists with value JSONB — just insert AI config keys
+-- Using JSON string format (quoted) since value column is JSONB
 INSERT INTO system_settings (key, value) VALUES
-  ('ai_provider',              'deepseek'),
-  ('ai_reviews_enabled',       'true'),
-  ('ai_review_interval_hours', '1'),
-  ('ai_inactivity_hours',      '2'),
-  ('ai_max_messages',          '100'),
-  ('ai_daily_limit',           '500'),
-  ('ai_deepseek_api_key',      '')
+  ('ai_provider',              '"deepseek"'),
+  ('ai_reviews_enabled',       '"true"'),
+  ('ai_review_interval_hours', '"1"'),
+  ('ai_inactivity_hours',      '"2"'),
+  ('ai_max_messages',          '"100"'),
+  ('ai_daily_limit',           '"500"'),
+  ('ai_deepseek_api_key',      '""')
 ON CONFLICT (key) DO NOTHING;
 
 ALTER TABLE ai_reviews        DISABLE ROW LEVEL SECURITY;
