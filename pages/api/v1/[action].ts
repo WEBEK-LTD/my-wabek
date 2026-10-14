@@ -42,6 +42,21 @@ async function authenticateApiKey(req: NextApiRequest): Promise<{ userId: string
   return null
 }
 
+/**
+ * The verification code of an OTP send: the `code` field (4-8 digits), or
+ * the code found in `message` when the caller says `type: "otp"`. Null for
+ * every other message.
+ */
+function otpCode(body: Record<string, any>): string | null {
+  const explicit = typeof body.code === 'string' || typeof body.code === 'number' ? String(body.code).trim() : ''
+  if (/^\d{4,8}$/.test(explicit)) return explicit
+  if (body.type === 'otp' && typeof body.message === 'string') {
+    const match = body.message.match(/\b(\d{4,8})\b/)
+    if (match) return match[1]
+  }
+  return null
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (handleCors(req, res)) return
   if (!apiRateLimit(req, res)) return
@@ -101,6 +116,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const { sendWAWebMessage } = await import('@/lib/wa-web')
         const webResult = await sendWAWebMessage({ instanceId: instance.id, to, text: message })
         result = { messages: [{ id: webResult.messageId }] }
+      } else if (otpCode(body)) {
+        // A sign-in code (`type: "otp"` or a `code` field): always through the
+        // approved Authentication template, which WhatsApp delivers inside or
+        // outside the 24h window. Plain text is only a fallback inside the
+        // window, when no Authentication template works on this account.
+        const code = otpCode(body) as string
+        const { sendOtpTemplate } = await import('@/lib/otp-template')
+        const { getSetting } = await import('@/lib/settings')
+        const otpTemplateName = await getSetting('otp_template_name', 'wabek_otp') as string
+        const otpResult = await sendOtpTemplate({
+          phoneNumberId: instance.phone_number_id,
+          accessToken:   instance.access_token,
+          to,
+          templateName:  otpTemplateName,
+          code,
+        })
+        if (otpResult.sent) {
+          result = { messageId: otpResult.messageId }
+        } else {
+          const inWindow = await isInWindow((instance as any)?.user_id || (instance as any)?.userId || '', to, (instance as any)?.id || '')
+          if (!inWindow) {
+            const lastAttempt = otpResult.attempts[otpResult.attempts.length - 1]
+            return res.status(422).json({
+              error: 'Failed to deliver the verification code',
+              detail: `Tried the Authentication template(s), but all attempts failed. Last error: ${lastAttempt?.error || 'Unknown error'}. Configure "OTP Template Name" in Settings → Security & OTP to match an Approved Authentication template in Meta Business Manager.`,
+              attempts: otpResult.attempts,
+            })
+          }
+          console.error('[v1/send] OTP template failed, sending text inside the 24h window:', JSON.stringify(otpResult.attempts))
+          result = await smartSend({ userId: (instance as any)?.user_id || (instance as any)?.userId || '', instanceId: (instance as any)?.id || '', phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: to, text: message, source: 'api' as any })
+        }
       } else {
         // Outside the 24h customer-service window, WhatsApp requires an
         // approved TEMPLATE message — plain text cannot be delivered.

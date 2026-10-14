@@ -68,6 +68,13 @@ export async function isInWindow(userId: string, phone: string, instanceId?: str
   const db = supabaseAdmin()
   const cleanPhone = phone.replace(/[^0-9]/g, '')
 
+  // WhatsApp's 24-hour window belongs to one business number: only a message
+  // the customer sent TO the sending instance opens it. When we know the
+  // instance, count only its inbound messages and never the account-wide
+  // contact.last_seen (a message to another number, or a WA Web chat, would
+  // make us send plain text that Meta later rejects with 131047).
+  const scoped = Boolean(instanceId)
+
   // Find contact by phone
   const { data: contact } = await db
     .from('contacts')
@@ -81,12 +88,14 @@ export async function isInWindow(userId: string, phone: string, instanceId?: str
   let lastInbound: string | null = null
 
   if (contact?.id) {
-    const { data: msg } = await db
+    let query = db
       .from('messages')
       .select('created_at')
       .eq('user_id', userId)
       .eq('contact_id', contact.id)
       .eq('direction', 'inbound')
+    if (scoped) query = query.eq('instance_id', instanceId as string)
+    const { data: msg } = await query
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -95,20 +104,22 @@ export async function isInWindow(userId: string, phone: string, instanceId?: str
 
   // Fallback: check wa_from column if it exists
   if (!lastInbound) {
-    const { data: msg } = await db
+    let query = db
       .from('messages')
       .select('created_at')
       .eq('user_id', userId)
       .eq('direction', 'inbound')
       .eq('wa_from', cleanPhone)
+    if (scoped) query = query.eq('instance_id', instanceId as string)
+    const { data: msg } = await query
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
     if (msg?.created_at) lastInbound = msg.created_at
   }
 
-  // Last resort: contact last_seen
-  const lastActivity = lastInbound || contact?.last_seen || null
+  // Last resort (only when the instance is unknown): contact last_seen
+  const lastActivity = lastInbound || (scoped ? null : contact?.last_seen) || null
   if (!lastActivity) return false
 
   const diff = Date.now() - new Date(lastActivity).getTime()
