@@ -4,7 +4,6 @@ import Head from 'next/head'
 import axios from 'axios'
 import { useAuthStore } from '@/lib/store'
 import { useRequireAuth } from '@/hooks/useAuth'
-import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
 import { format, isToday, isYesterday } from 'date-fns'
 import clsx from 'clsx'
@@ -277,7 +276,6 @@ export default function ChatPage() {
 
   const messagesEndRef = useRef(null)
   const textareaRef = useRef(null)
-  const realtimeRef = useRef(null)
 
   // Load accessible inboxes + last selected
   const loadInboxes = async (currentStatus?: string) => {
@@ -338,88 +336,115 @@ export default function ChatPage() {
 
   // Keep ref in sync so realtime handler always reads current value
   useEffect(() => { activeConvRef.current = activeConv }, [activeConv])
+  // ── Live updates ────────────────────────────────────────────
+  // Authenticated polling of /api/inbox/updates (server-scoped to this
+  // account and the member's inboxes). Replaces the former anon-key Supabase
+  // Realtime subscription, which received every tenant's messages.
+  const seenMsgIdsRef = useRef(new Set())
   useEffect(() => {
     if (!user?.id) return
+    let cancelled = false
+    let inFlight = false
+    let cursor = null
+    let timer = null
+    const seen = seenMsgIdsRef.current
 
-    const channel = supabase
-      .channel('inbox-realtime')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        // No server-side filter — filter client-side to avoid RLS/publication issues
-        // (server filter requires exact column match; client filter is more reliable)
-      }, (payload) => {
-        const newMsg = payload.new
-        // Client-side filter: only handle messages belonging to this user
-        if (newMsg.user_id !== user.id) return
-        const conv = activeConvRef.current  // always current — no stale closure
+    const handleNewMessage = (newMsg) => {
+      const conv = activeConvRef.current  // always current — no stale closure
 
-        // ── Add to open conversation ──────────────────────────
-        if (conv && newMsg.contact_id === conv.contact_id) {
-          setMessages(prev => {
-            if (prev.find(m => m.id === newMsg.id)) return prev
-            if (newMsg.wa_message_id && prev.find(m => m.wa_message_id === newMsg.wa_message_id)) return prev
-            const hasTempWaId = prev.find(m => m.id?.startsWith('temp-') && m.wa_message_id === newMsg.wa_message_id)
-            if (hasTempWaId) return prev.map(m => m.wa_message_id === newMsg.wa_message_id ? newMsg : m)
-            if (newMsg.direction === 'outbound') {
-              const hasTempOut = prev.find(m => m.id?.startsWith('temp-') && m.content === newMsg.content)
-              if (hasTempOut) return prev.map(m => (m.id?.startsWith('temp-') && m.content === newMsg.content) ? newMsg : m)
-            }
-            return [...prev, newMsg]
-          })
-        }
+      // ── Add to open conversation ──────────────────────────
+      if (conv && newMsg.contact_id === conv.contact_id) {
+        setMessages(prev => {
+          if (prev.find(m => m.id === newMsg.id)) return prev
+          if (newMsg.wa_message_id && prev.find(m => m.wa_message_id === newMsg.wa_message_id)) return prev
+          const hasTempWaId = prev.find(m => m.id?.startsWith('temp-') && m.wa_message_id === newMsg.wa_message_id)
+          if (hasTempWaId) return prev.map(m => m.wa_message_id === newMsg.wa_message_id ? newMsg : m)
+          if (newMsg.direction === 'outbound') {
+            const hasTempOut = prev.find(m => m.id?.startsWith('temp-') && m.content === newMsg.content)
+            if (hasTempOut) return prev.map(m => (m.id?.startsWith('temp-') && m.content === newMsg.content) ? newMsg : m)
+          }
+          return [...prev, newMsg]
+        })
+      }
 
-        // ── Update conversations list ─────────────────────────
-        if (newMsg.direction === 'inbound') {
-          setUnreadCounts(prev => ({
-            ...prev,
-            [newMsg.contact_id]: (prev[newMsg.contact_id] || 0) + 1,
-          }))
-          setConversations(prev => {
-            const exists = prev.find(c =>
-              c.contact_id === newMsg.contact_id &&
-              (!newMsg.instance_id || c.instance_id === newMsg.instance_id)
-            )
-            if (exists) {
-              return prev
-                .map(c => c.contact_id === newMsg.contact_id &&
-                  (!newMsg.instance_id || c.instance_id === newMsg.instance_id)
-                    ? { ...c, last_message: newMsg, last_message_at: newMsg.created_at }
-                    : c
-                )
-                .sort((a, b) => new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime())
-            }
-            // New contact — reload conversations to get full contact details
-            setTimeout(() => loadConversations(newMsg.instance_id || null), 300)
+      // ── Update conversations list ─────────────────────────
+      if (newMsg.direction === 'inbound') {
+        setUnreadCounts(prev => ({
+          ...prev,
+          [newMsg.contact_id]: (prev[newMsg.contact_id] || 0) + 1,
+        }))
+        setConversations(prev => {
+          const exists = prev.find(c =>
+            c.contact_id === newMsg.contact_id &&
+            (!newMsg.instance_id || c.instance_id === newMsg.instance_id)
+          )
+          if (exists) {
             return prev
-          })
-          if (newMsg.instance_id) {
-            setInboxes(prev => prev.map((inbox: any) =>
-              inbox.id === newMsg.instance_id
-                ? { ...inbox, unread: (inbox.unread || 0) + 1 }
-                : inbox
-            ))
+              .map(c => c.contact_id === newMsg.contact_id &&
+                (!newMsg.instance_id || c.instance_id === newMsg.instance_id)
+                  ? { ...c, last_message: newMsg, last_message_at: newMsg.created_at }
+                  : c
+              )
+              .sort((a, b) => new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime())
+          }
+          // New contact — reload conversations to get full contact details
+          setTimeout(() => loadConversations(newMsg.instance_id || null), 300)
+          return prev
+        })
+        if (newMsg.instance_id) {
+          setInboxes(prev => prev.map((inbox: any) =>
+            inbox.id === newMsg.instance_id
+              ? { ...inbox, unread: (inbox.unread || 0) + 1 }
+              : inbox
+          ))
+        }
+      }
+    }
+
+    const schedule = () => {
+      if (cancelled) return
+      clearTimeout(timer)
+      timer = setTimeout(tick, 3500)
+    }
+
+    const tick = async () => {
+      if (cancelled || inFlight) return
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') { schedule(); return }
+      inFlight = true
+      try {
+        const { data } = await axios.get('/api/inbox/updates', { params: cursor ? { after: cursor } : {} })
+        if (cancelled) return
+        const isFirst = cursor === null
+        cursor = data?.cursor || cursor
+        if (!isFirst) {
+          if (seen.size > 5000) seen.clear()
+          for (const m of data?.messages || []) {
+            if (seen.has(m.id)) {
+              // Re-delivered (overlap window) — just refresh its status
+              setMessages(prev => prev.map(x => (x.id === m.id && x.status !== m.status) ? { ...x, status: m.status } : x))
+              continue
+            }
+            seen.add(m.id)
+            handleNewMessage(m)
           }
         }
-      })
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'messages',
-      }, (payload) => {
-        const updated = payload.new
-        if (updated.user_id !== user?.id) return
-        setMessages(prev => prev.map(m =>
-          m.id === updated.id ? { ...m, status: updated.status } : m
-        ))
-      })
-      .subscribe((status) => {
-        console.log('[realtime] subscription:', status)
-      })
+      } catch {} finally {
+        inFlight = false
+      }
+      schedule()
+    }
 
-    realtimeRef.current = channel
-    return () => { supabase.removeChannel(channel) }
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible' && !inFlight) { clearTimeout(timer); tick() }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    tick()
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [user?.id])  // ← no activeConv dep — using ref to avoid stale closure
 
   // Poll for message status updates every 4 seconds

@@ -8,16 +8,16 @@ const supabaseUrl = (
   ''
 )
 
-const supabaseAnonKey = (
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_ANON_KEY ||
-  ''
-)
+// NOTE: there is deliberately no browser (anon-key) client any more. All data
+// access goes through API routes using the service-role client below; RLS is
+// enabled on every table with no anon/authenticated grants (migration 026).
 
-export const supabase = supabaseUrl ? createClient(supabaseUrl, supabaseAnonKey) : createClient('https://placeholder.supabase.co', 'placeholder')
-
-// Server-side client with service role (for admin operations)
+// Server-side client with service role (for admin operations).
+// Never import this from code that runs in the browser.
 export const supabaseAdmin = () => {
+  if (typeof window !== 'undefined') {
+    throw new Error('supabaseAdmin() must only be used server-side')
+  }
   const serviceRoleKey = (
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     ''
