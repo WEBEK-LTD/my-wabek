@@ -1,5 +1,6 @@
 import { smartSend, smartSendWAWeb, SmartSendResult } from '@/lib/wa-smart-send'
 import { supabaseAdmin } from './supabase'
+import { isValidAssignee } from './inbox-access'
 import { sendWAWebMessage } from './wa-web'
 import { sendTextMessage } from './whatsapp'
 import { v4 as uuidv4 } from 'uuid'
@@ -241,15 +242,34 @@ async function continueFlow(
 // Execute a single node — returns true if a message was sent
 // ─────────────────────────────────────────────────────────
 
+// Guards against misconfigured / malicious flows: a single inbound message may
+// execute at most MAX_STEPS_PER_RUN nodes, never the same node twice (no input
+// is awaited inside a run, so a revisit is always a loop), and sleep at most
+// MAX_DELAY_MS_PER_RUN in total.
+const MAX_STEPS_PER_RUN = 25
+const MAX_DELAY_MS_PER_RUN = 15000
+
+interface RunContext { steps: number; visited: Set<string>; delayMs: number }
+const newRun = (): RunContext => ({ steps: 0, visited: new Set<string>(), delayMs: 0 })
+
 async function executeNode(
   node: ChatbotNode,
   session: Session,
   flow: Record<string, unknown>,
-  instance: Record<string, unknown>
+  instance: Record<string, unknown>,
+  run: RunContext = newRun()
 ): Promise<boolean> {
   const db = supabaseAdmin()
   const edges: ChatbotEdge[] = (flow.edges as ChatbotEdge[]) || []
   const nodes: ChatbotNode[] = (flow.nodes as ChatbotNode[]) || []
+
+  run.steps++
+  if (run.steps > MAX_STEPS_PER_RUN || run.visited.has(node.id)) {
+    console.warn(`[CHATBOT] run aborted flow=${String(flow.id)} node=${node.id} steps=${run.steps} (loop or step limit)`)
+    await db.from('chatbot_sessions').update({ is_active: false }).eq('id', session.id)
+    return false
+  }
+  run.visited.add(node.id)
 
   const next = async (): Promise<boolean> => {
     const edge = edges.find(e => e.source === node.id)
@@ -257,7 +277,7 @@ async function executeNode(
     const nextNode = nodes.find(n => n.id === edge.target)
     if (!nextNode) return false
     await db.from('chatbot_sessions').update({ current_node_id: nextNode.id }).eq('id', session.id)
-    return await executeNode(nextNode, session, flow, instance)
+    return await executeNode(nextNode, session, flow, instance, run)
   }
 
   switch (node.type) {
@@ -271,7 +291,7 @@ async function executeNode(
         if (others.length === 1) {
           console.log(`[CHATBOT] start node has no edge — auto-running single node "${others[0].id}" (${others[0].type})`)
           await db.from('chatbot_sessions').update({ current_node_id: others[0].id }).eq('id', session.id)
-          return await executeNode(others[0], session, flow, instance)
+          return await executeNode(others[0], session, flow, instance, run)
         }
         console.log(`[CHATBOT] start node has no outgoing edge and ${others.length} other nodes — nothing to execute`)
         return false
@@ -298,8 +318,11 @@ async function executeNode(
     }
 
     case 'delay': {
-      const ms = Math.min((node.data.seconds as number || 1) * 1000, 10000)
-      await new Promise(r => setTimeout(r, ms))
+      const secs = Number(node.data.seconds) || 1
+      const requested = Math.max(0, Math.min(secs * 1000, 10000))
+      const ms = Math.min(requested, Math.max(0, MAX_DELAY_MS_PER_RUN - run.delayMs))
+      run.delayMs += ms
+      if (ms > 0) await new Promise(r => setTimeout(r, ms))
       return await next()
     }
 
@@ -321,7 +344,7 @@ async function executeNode(
         const nextNode = nodes.find(n => n.id === edge.target)
         if (nextNode) {
           await db.from('chatbot_sessions').update({ current_node_id: nextNode.id }).eq('id', session.id)
-          return await executeNode(nextNode, session, flow, instance)
+          return await executeNode(nextNode, session, flow, instance, run)
         }
       }
       return false
@@ -346,8 +369,10 @@ async function executeNode(
       const assignedTo = node.data.assigned_to as string
       if (assignedTo) {
         const { data: contact } = await db.from('contacts')
-          .select('id').eq('phone', session.contact_phone).maybeSingle()
-        if (contact) {
+          .select('id').eq('phone', session.contact_phone).eq('user_id', session.user_id).maybeSingle()
+        // The assignee must be the owner or one of the owner's team members
+        const assigneeOk = await isValidAssignee(db, session.user_id, assignedTo)
+        if (contact && assigneeOk) {
           await db.from('conversation_assignments').upsert({
             owner_id: session.user_id,
             contact_id: contact.id,
@@ -389,7 +414,8 @@ async function sendMsg(node: ChatbotNode, session: Session, instance: Record<str
 
   // Replace {{variables}}
   for (const [key, val] of Object.entries(session.variables)) {
-    text = text.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'gi'), String(val))
+    const safeKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    text = text.replace(new RegExp(`\\{\\{${safeKey}\\}\\}`, 'gi'), String(val))
   }
 
   try {
