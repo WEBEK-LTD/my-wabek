@@ -29,7 +29,16 @@ export interface MessageRow {
   meta?: Record<string, unknown>
 }
 
-export async function insertMessage(row: MessageRow): Promise<{ id: string; error?: string }> {
+function isUniqueViolation(error: { code?: string; message?: string } | null | undefined): boolean {
+  return !!error && (error.code === '23505' || /duplicate key/i.test(error.message || ''))
+}
+
+/**
+ * Insert a message row. `duplicate: true` means a row with the same
+ * wa_message_id already exists (unique index) — callers processing inbound
+ * webhooks use it to skip re-processing a redelivered message.
+ */
+export async function insertMessage(row: MessageRow): Promise<{ id: string; error?: string; duplicate?: boolean }> {
   const db = supabaseAdmin()
   const id = row.id || uuidv4()
 
@@ -53,6 +62,7 @@ export async function insertMessage(row: MessageRow): Promise<{ id: string; erro
   const { error } = await db.from('messages').insert(full)
 
   if (!error) return { id }
+  if (isUniqueViolation(error)) return { id, error: 'duplicate', duplicate: true }
 
   // If the error is about missing columns (migration not run yet),
   // retry without the new media columns so the message is never lost.
@@ -79,6 +89,7 @@ export async function insertMessage(row: MessageRow): Promise<{ id: string; erro
     }
     const { error: fallbackErr } = await db.from('messages').insert(fallback)
     if (fallbackErr) {
+      if (isUniqueViolation(fallbackErr)) return { id, error: 'duplicate', duplicate: true }
       console.error('[message-insert] fallback insert also failed:', fallbackErr.message)
       return { id, error: fallbackErr.message }
     }
