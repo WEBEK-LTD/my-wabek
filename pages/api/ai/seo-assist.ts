@@ -29,7 +29,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!response.ok) {
       const err = await response.text()
-      return res.status(502).json({ error: 'AI API error', detail: err })
+      console.error('[seo-assist] upstream error:', response.status, err.slice(0, 300))
+      return res.status(502).json({ error: 'AI API error' })
     }
 
     const data = await response.json()
@@ -37,6 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ result })
 
   } catch (err: any) {
-    return res.status(500).json({ error: 'AI request failed', detail: err.message })
+    console.error('[seo-assist] error:', err?.message)
+    return res.status(500).json({ error: 'AI request failed' })
   }
 }
