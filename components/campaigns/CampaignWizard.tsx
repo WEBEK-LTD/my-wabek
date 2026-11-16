@@ -49,11 +49,6 @@ interface WizardForm {
 
 const EMPTY_FORM: WizardForm = { name: '', instance_id: '', tags: '', segment_id: '', delay_seconds: '3', scheduled_at: '', template_name: '', template_language: '', template_variables: [] as string[], template_param_names: [] as string[] }
 
-const ELIGIBLE = [
-  { field: 'is_blocked', operator: 'equals', value: 'false' },
-  { field: 'opted_out', operator: 'equals', value: 'false' },
-]
-
 const isWaWeb = (inst: any) => (inst?.instance_type || inst?.type) === 'wa_web'
 
 /** datetime-local value for "now + minutes" in the browser's time zone. */
@@ -158,27 +153,27 @@ export function CampaignWizard({ onClose }: { onClose: () => void }) {
   /* ── Live recipient count (segments preview API) ─────────── */
   const segment = segments.find(s => s.id === form.segment_id)
   const tagList = debouncedTags.split(',').map(t => t.trim()).filter(Boolean)
+  // Exact count from the same filter the campaign sender uses
+  // (excludes blocked and opted-out contacts).
   const audienceQuery = useMemo(() => {
     if (audienceMode === 'segment') {
       if (!segment) return null
-      const conds = Array.isArray(segment.conditions) ? segment.conditions : []
-      if (segment.operator === 'OR') return { conditions: conds, operator: 'OR', exact: false }
-      return { conditions: [...conds, ...ELIGIBLE].slice(0, 20), operator: 'AND', exact: true }
+      return { audience: 'segment' as const, segment_id: segment.id }
     }
     if (audienceMode === 'tags') {
       if (!tagList.length) return null
-      return { conditions: tagList.slice(0, 20).map(v => ({ field: 'tags', operator: 'contains', value: v })), operator: 'OR', exact: false }
+      return { audience: 'tags' as const, tags: tagList.slice(0, 20), tag_operator: 'any' as const }
     }
-    return { conditions: ELIGIBLE, operator: 'AND', exact: true }
+    return { audience: 'all' as const }
   }, [audienceMode, segment, tagList.join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: audData, isFetching: audLoading, isError: audError } = useQuery(
     ['campaign-audience', audienceQuery],
-    () => axios.post('/api/segments/preview', { conditions: audienceQuery!.conditions, operator: audienceQuery!.operator }).then(r => r.data),
+    () => axios.post('/api/campaigns/audience-count', audienceQuery).then(r => r.data),
     { enabled: !!audienceQuery, keepPreviousData: true, staleTime: 30_000, retry: false }
   )
   const recipientCount: number | null = audienceQuery && audData ? Number(audData.count || 0) : null
-  const recipientExact = !!audienceQuery?.exact
+  const recipientExact = true
 
   /* ── Message ─────────────────────────────────────────────── */
   const selectedTemplate = approvedTemplates.find((t: any) => t.name === form.template_name && t.language === form.template_language)
@@ -265,7 +260,7 @@ export function CampaignWizard({ onClose }: { onClose: () => void }) {
       } : {}),
       segment_id: form.segment_id || undefined,
       contact_filter: form.segment_id ? { segment_id: form.segment_id }
-        : form.tags ? { tags: form.tags.split(',').map(t => t.trim()).filter(Boolean) } : { all: true },
+        : form.tags ? { tags: form.tags.split(',').map(t => t.trim()).filter(Boolean), tag_operator: 'any' } : { all: true },
       delay_seconds: parseInt(form.delay_seconds) || 3,
       // datetime-local is the browser's local time → send an ISO instant
       scheduled_at: scheduleMode === 'later' && form.scheduled_at ? new Date(form.scheduled_at).toISOString() : undefined,
