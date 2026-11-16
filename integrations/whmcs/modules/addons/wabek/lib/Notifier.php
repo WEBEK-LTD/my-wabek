@@ -55,6 +55,7 @@ final class Notifier
             'phone'              => $phone,
             'message'            => $message,
             'wa_template'        => $event['wa_template'],
+            'wa_template_lang'   => self::templateLanguage($event, $arabic),
             'wa_template_params' => self::templateParams($event, $ctx),
             'critical'           => $event['critical'],
             'priority'           => $event['critical'] ? 8 : 5,
@@ -88,6 +89,7 @@ final class Notifier
                 'phone'              => $phone,
                 'message'            => $message,
                 'wa_template'        => $event['wa_template'],
+                'wa_template_lang'   => self::templateLanguage($event, $arabic),
                 'wa_template_params' => self::templateParams($event, $ctx),
                 'critical'           => true,
                 'priority'           => 7,
@@ -101,7 +103,10 @@ final class Notifier
         return $count;
     }
 
-    /** Rendered "name=value" parameters for the event's approved template. */
+    /**
+     * Rendered parameters for the event's approved template: an object of
+     * named parameters or a list of positional ones ({{1}}, {{2}}, ...).
+     */
     public static function templateParams(array $event, array $ctx): array
     {
         if ($event['wa_template'] === '') {
@@ -114,6 +119,15 @@ final class Notifier
             $out[$name] = trim((string) preg_replace('/\s+/u', ' ', $rendered));
         }
         return $out;
+    }
+
+    /** The event's template language, or the recipient's language when none is set. */
+    public static function templateLanguage(array $event, bool $arabic): string
+    {
+        if ($event['wa_template'] === '') {
+            return '';
+        }
+        return $event['wa_template_lang'] !== '' ? $event['wa_template_lang'] : ($arabic ? 'ar' : '');
     }
 
     private static function skip(string $eventKey, int $clientId, string $phone, string $reason, string $relatedId, ?string $dedupeKey): void

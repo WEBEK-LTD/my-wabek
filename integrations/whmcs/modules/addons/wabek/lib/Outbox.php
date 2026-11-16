@@ -46,6 +46,7 @@ final class Outbox
                 'phone'              => substr((string) $item['phone'], 0, 20),
                 'message'            => (string) $item['message'],
                 'wa_template'        => substr((string) ($item['wa_template'] ?? ''), 0, 128),
+                'wa_template_lang'   => substr((string) ($item['wa_template_lang'] ?? ''), 0, 16),
                 'wa_template_params' => !empty($item['wa_template_params']) ? json_encode($item['wa_template_params'], JSON_UNESCAPED_UNICODE) : '',
                 'critical'           => !empty($item['critical']) ? 1 : 0,
                 'priority'           => max(0, min(9, (int) ($item['priority'] ?? 5))),
@@ -110,6 +111,7 @@ final class Outbox
         $params = [];
         if ((string) $row->wa_template_params !== '') {
             $decoded = json_decode((string) $row->wa_template_params, true);
+            // A JSON list stays a list (positional), an object stays named.
             $params = is_array($decoded) ? array_map('strval', $decoded) : [];
         }
         $customerName = '';
@@ -123,7 +125,9 @@ final class Outbox
             Config::get('default_instance'),
             (string) $row->wa_template,
             $params,
-            $customerName
+            $customerName,
+            (string) ($row->wa_template_lang ?? ''),
+            self::idempotencyKey((int) $row->id)
         );
 
         if ($res->ok()) {
@@ -135,6 +139,32 @@ final class Outbox
         }
         self::finish($id, 'failed', $res->status, $res->error, '', (int) $row->attempts + 1);
         return 'failed';
+    }
+
+    /** Stable per outbox row (and per WHMCS install): retries of one row can never send twice. */
+    public static function idempotencyKey(int $id): string
+    {
+        return 'whmcs-' . Config::installId() . '-' . $id;
+    }
+
+    /** Fetch the delivery status of a sent message (GET /api/v1/message-status). */
+    public static function refreshDeliveryStatus(int $id): string
+    {
+        $row = Capsule::table(self::TABLE)->where('id', $id)->first(['id', 'remote_id', 'status']);
+        if (!$row || $row->status !== 'sent' || (string) $row->remote_id === '') {
+            return '';
+        }
+        $res = ApiClient::make()->messageStatus((string) $row->remote_id);
+        $status = strtolower((string) ($res->data['status'] ?? ''));
+        if (!$res->ok() || !in_array($status, ['sent', 'delivered', 'read', 'failed'], true)) {
+            return '';
+        }
+        $update = ['delivery_status' => $status, 'updated_at' => date('Y-m-d H:i:s')];
+        if ($status === 'failed' && !empty($res->data['error']) && is_string($res->data['error'])) {
+            $update['last_error'] = substr($res->data['error'], 0, 500);
+        }
+        Capsule::table(self::TABLE)->where('id', $id)->update($update);
+        return $status;
     }
 
     private static function retryLater(object $row, string $error, int $status, int $retryAfter): string
@@ -240,6 +270,7 @@ final class Outbox
             'phone'              => (string) $row->phone,
             'message'            => (string) $row->message,
             'wa_template'        => (string) $row->wa_template,
+            'wa_template_lang'   => (string) ($row->wa_template_lang ?? ''),
             'wa_template_params' => is_array($params) ? $params : [],
             'critical'           => (bool) $row->critical,
             'priority'           => 8,

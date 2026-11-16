@@ -41,33 +41,64 @@ final class ApiClient
     }
 
     /**
-     * POST /api/v1/send
+     * POST /api/v1/send — always type "notification" (codes go through otpSend()).
      *
-     * @param array<string,string> $templateParams named parameters of the approved template
+     * @param array $templateParams named (object) or positional (list) parameters of the approved template
      */
-    public function send(string $toDigits, string $message, string $instanceId = '', string $template = '', array $templateParams = [], string $customerName = ''): ApiResponse
+    public function send(string $toDigits, string $message, string $instanceId = '', string $template = '', array $templateParams = [], string $customerName = '', string $templateLanguage = '', string $idempotencyKey = ''): ApiResponse
     {
-        $body = ['to' => $toDigits, 'message' => $message];
+        $body = ['to' => $toDigits, 'message' => $message, 'type' => 'notification'];
         if ($instanceId !== '') {
             $body['instance_id'] = $instanceId;
         }
         if ($template !== '') {
             // Used by the platform only when the recipient is outside the 24h window.
             $body['template'] = $template;
+            if ($templateLanguage !== '') {
+                $body['template_language'] = $templateLanguage;
+            }
             if ($templateParams) {
+                // A PHP list encodes as a JSON array (positional {{1}}, {{2}}), a map as an object (named).
                 $body['template_params'] = $templateParams;
             }
         }
         if ($customerName !== '') {
             $body['customer_name'] = $customerName;
         }
-        return $this->request('POST', '/api/v1/send', $body, 'send');
+        $headers = [];
+        if (preg_match('/^[A-Za-z0-9._:-]{8,100}$/', $idempotencyKey)) {
+            // Same key on every retry of one outbox row: a replay returns the first result.
+            $headers[] = 'Idempotency-Key: ' . $idempotencyKey;
+        }
+        return $this->request('POST', '/api/v1/send', $body, 'send', [], $headers);
     }
 
-    /** POST /api/v1/otp → { success, otpId } */
-    public function otpSend(string $toDigits, string $purpose): ApiResponse
+    /** POST /api/v1/contacts-opt-out {phone, opted_out} → {success, opted_out} */
+    public function contactOptOut(string $toDigits, bool $optedOut): ApiResponse
     {
-        return $this->request('POST', '/api/v1/otp', ['phone' => $toDigits, 'purpose' => $purpose], 'otp');
+        return $this->request('POST', '/api/v1/contacts-opt-out', ['phone' => $toDigits, 'opted_out' => $optedOut], 'contacts-opt-out');
+    }
+
+    /** GET /api/v1/message-status?id= → {id, status: sent|delivered|read|failed, error} */
+    public function messageStatus(string $messageId): ApiResponse
+    {
+        return $this->request('GET', '/api/v1/message-status?id=' . rawurlencode($messageId), null, 'message-status');
+    }
+
+    /**
+     * POST /api/v1/otp → { success, otpId }; failures are
+     * { success:false, error, code: no_instance|template_failed|outside_window|send_failed|internal }.
+     */
+    public function otpSend(string $toDigits, string $purpose, string $instanceId = '', string $brandName = ''): ApiResponse
+    {
+        $body = ['phone' => $toDigits, 'purpose' => $purpose];
+        if ($instanceId !== '') {
+            $body['instance_id'] = $instanceId;
+        }
+        if ($brandName !== '') {
+            $body['brand_name'] = $brandName;
+        }
+        return $this->request('POST', '/api/v1/otp', $body, 'otp');
     }
 
     /** POST /api/v1/otp-verify → { valid, reason? } */
@@ -77,8 +108,10 @@ final class ApiClient
     }
 
     /**
-     * GET /api/v1/instances (not provided by every platform version: a 404
-     * "Unknown action" after authentication still proves the key is valid).
+     * GET /api/v1/instances → { instances: [{ id, display_name, phone_number,
+     * status, instance_type, is_default, created_at }] }. Older platform
+     * versions answer 404 "Unknown action" (after authentication, so the key
+     * is still proven valid).
      */
     public function instances(): ApiResponse
     {
@@ -89,7 +122,7 @@ final class ApiClient
      * @param array|null $body JSON body for POST
      * @param string[]   $redactFields body fields hidden from the module log
      */
-    public function request(string $method, string $path, ?array $body, string $action, array $redactFields = []): ApiResponse
+    public function request(string $method, string $path, ?array $body, string $action, array $redactFields = [], array $extraHeaders = []): ApiResponse
     {
         if (!$this->configured()) {
             return new ApiResponse(0, [], 'WABEK API is not configured', false);
@@ -104,6 +137,9 @@ final class ApiClient
             'X-API-Key: ' . $this->apiKey,
             'User-Agent: WABEK-WHMCS/' . (defined('WABEK_MODULE_VERSION') ? WABEK_MODULE_VERSION : '4'),
         ];
+        foreach ($extraHeaders as $h) {
+            $headers[] = $h;
+        }
         $json = null;
         if ($body !== null) {
             $json = json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -155,12 +191,16 @@ final class ApiClient
             $error = '';
             if ($status < 200 || $status >= 300) {
                 $error = trim((string) ($data['error'] ?? ('HTTP ' . $status)));
+                if (!empty($data['code']) && is_string($data['code']) && preg_match('/^[a-z_]{1,40}$/', $data['code'])) {
+                    $error .= ' [' . $data['code'] . ']';
+                }
                 if (!empty($data['detail']) && is_string($data['detail'])) {
                     $error .= ' — ' . $data['detail'];
                 }
             }
-            // 5xx and 429 are transient; every other 4xx is final.
-            $retryable = $status >= 500 || $status === 429;
+            // 5xx, 429 and an idempotent request still in progress are transient; every other 4xx is final.
+            $retryable = $status >= 500 || $status === 429
+                || ($status === 409 && ($data['code'] ?? '') === 'idempotency_in_progress');
             $response = new ApiResponse($status, $data, $error, $retryable, $retryAfter);
         }
 

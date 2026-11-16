@@ -103,6 +103,10 @@ final class AdminController
                 $id = Outbox::resend(Security::postInt('id', 1), $this->adminId);
                 $this->flash[] = $id > 0 ? ['success', Lang::t('ok_resend_queued', ['{id}' => (string) $id])] : ['error', Lang::t('err_resend')];
                 break;
+            case 'check_status':
+                $st = Outbox::refreshDeliveryStatus(Security::postInt('id', 1));
+                $this->flash[] = $st !== '' ? ['success', Lang::t('ok_delivery_status', ['{status}' => Lang::t('delivery_' . $st)])] : ['error', Lang::t('err_delivery_status')];
+                break;
             case 'cancel':
                 $this->flash[] = Outbox::cancel(Security::postInt('id', 1)) ? ['success', Lang::t('ok_cancelled')] : ['error', Lang::t('err_cancel')];
                 break;
@@ -279,6 +283,11 @@ final class AdminController
             $this->flash[] = ['error', Lang::t('err_template_name')];
             return;
         }
+        $templateLang = Security::post('wa_template_lang', 16);
+        if (!Events::validTemplateLanguage($templateLang)) {
+            $this->flash[] = ['error', Lang::t('err_template_lang')];
+            return;
+        }
         $def = Events::get($key);
         Events::save($key, [
             'enabled'            => Security::postBool('enabled'),
@@ -286,6 +295,7 @@ final class AdminController
             'body_en'            => $reset ? $def['default_en'] : Security::postText('body_en'),
             'body_ar'            => $reset ? $def['default_ar'] : Security::postText('body_ar'),
             'wa_template'        => $template,
+            'wa_template_lang'   => $templateLang,
             'wa_template_params' => Security::postText('wa_template_params', 1000),
         ]);
         $this->flash[] = ['success', Lang::t('ok_event_saved', ['{event}' => Lang::t('event_' . $key)])];
@@ -303,7 +313,8 @@ final class AdminController
         }
         $lang = Security::choice(Security::post('lang', 10), ['en', 'ar'], 'en');
         $msg = Renderer::render($lang === 'ar' ? $event['body_ar'] : $event['body_en'], self::sampleContext());
-        $this->sendNow('test', null, $phone, $msg, true, $event['wa_template'], Notifier::templateParams($event, self::sampleContext()));
+        $this->sendNow('test', null, $phone, $msg, true, $event['wa_template'], Notifier::templateParams($event, self::sampleContext()),
+            Notifier::templateLanguage($event, $lang === 'ar'));
         $this->result['open_event'] = $key;
     }
 
@@ -345,11 +356,11 @@ final class AdminController
     }
 
     /** Send immediately and report the outcome (the attempt is logged in the outbox). */
-    private function sendNow(string $event, ?int $clientId, string $phone, string $msg, bool $critical, string $template = '', array $params = []): void
+    private function sendNow(string $event, ?int $clientId, string $phone, string $msg, bool $critical, string $template = '', array $params = [], string $templateLang = ''): void
     {
         $id = Outbox::enqueue([
             'event' => $event, 'audience' => $clientId ? 'client' : 'admin', 'client_id' => $clientId,
-            'phone' => $phone, 'message' => $msg, 'wa_template' => $template, 'wa_template_params' => $params,
+            'phone' => $phone, 'message' => $msg, 'wa_template' => $template, 'wa_template_lang' => $templateLang, 'wa_template_params' => $params,
             'critical' => $critical, 'priority' => 9, 'admin_id' => $this->adminId,
         ]);
         $status = $id > 0 ? Outbox::sendRow($id) : 'failed';
@@ -595,8 +606,11 @@ final class AdminController
                     . '</div>'
                     . View::chips($e['fields'])
                     . '<div class="wb-grid-2">'
-                    . View::field(Lang::t('lbl_wa_template'), View::input('wa_template', $e['wa_template'], 'text', ['pattern' => '[a-z0-9_]{1,128}', 'placeholder' => 'invoice_created', 'dir' => 'ltr']), Lang::t('help_wa_template'))
-                    . View::field(Lang::t('lbl_wa_template_params'), View::textarea('wa_template_params', $e['wa_template_params'], 3, ['dir' => 'ltr', 'placeholder' => "customer_name={first_name}\ninvoice_id={invoice_num}"]), Lang::t('help_wa_template_params'))
+                    . '<div>'
+                    . View::field(Lang::t('lbl_wa_template'), View::input('wa_template', $e['wa_template'], 'text', ['pattern' => '[a-z0-9_]{1,128}', 'placeholder' => 'invoice_created', 'dir' => 'ltr', 'id' => 'wb-tpl-' . $key]), Lang::t('help_wa_template'))
+                    . View::field(Lang::t('lbl_wa_template_lang'), View::input('wa_template_lang', $e['wa_template_lang'], 'text', ['pattern' => '[a-z]{2,3}(_[A-Z]{2})?', 'placeholder' => 'ar / en_US', 'dir' => 'ltr', 'maxlength' => '16', 'id' => 'wb-tpl-lang-' . $key]), Lang::t('help_wa_template_lang'))
+                    . '</div>'
+                    . View::field(Lang::t('lbl_wa_template_params'), View::textarea('wa_template_params', $e['wa_template_params'], 4, ['dir' => 'ltr', 'placeholder' => "customer_name={first_name}\ninvoice_id={invoice_num}", 'id' => 'wb-tpl-params-' . $key]), Lang::t('help_wa_template_params'))
                     . '</div>'
                     . '<div class="wb-actions">' . View::toggle('reset', false, Lang::t('lbl_reset_default')) . View::button(Lang::t('btn_save')) . '</div>';
                 $form = View::form('save_event', 'events', $this->link, $inner);
@@ -679,6 +693,9 @@ final class AdminController
             } elseif ($r->status !== 'sending' && (string) $r->message !== '' && (string) $r->phone !== '') {
                 $actions .= View::form('resend', 'log', $this->link, View::hidden('id', $r->id) . View::button(Lang::t('btn_resend'), 'ghost'), 'wb-inline-form');
             }
+            if ($r->status === 'sent' && (string) $r->remote_id !== '' && !in_array((string) ($r->delivery_status ?? ''), ['read', 'failed'], true)) {
+                $actions .= ' ' . View::form('check_status', 'log', $this->link, View::hidden('id', $r->id) . View::button(Lang::t('btn_check_status'), 'ghost'), 'wb-inline-form');
+            }
             $clientCell = $r->client_id
                 ? '<a class="wb-link" href="clientssummary.php?userid=' . (int) $r->client_id . '">#' . (int) $r->client_id . '</a>'
                 : View::e(Lang::t('audience_' . $r->audience));
@@ -690,7 +707,9 @@ final class AdminController
                 View::e($this->eventLabel((string) $r->event)) . $detail,
                 $clientCell,
                 '<span class="wb-mono" dir="ltr">' . View::e($r->phone) . '</span>',
-                View::badge((string) $r->status) . ($r->critical ? ' ' . View::badge('critical') : ''),
+                View::badge((string) $r->status)
+                    . ((string) ($r->delivery_status ?? '') !== '' ? ' ' . View::badge('delivery_' . $r->delivery_status) : '')
+                    . ($r->critical ? ' ' . View::badge('critical') : ''),
                 (int) $r->attempts . ($r->http_code ? ' · ' . (int) $r->http_code : ''),
                 '<span class="wb-error">' . View::e($r->last_error) . '</span>',
                 $actions,

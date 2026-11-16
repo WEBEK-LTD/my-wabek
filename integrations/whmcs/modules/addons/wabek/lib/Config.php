@@ -46,6 +46,7 @@ final class Config
         'otp_ttl_minutes'      => '10',
         'log_retention_days'   => '90',
         'cron_lock'            => '0',
+        'install_id'           => '',          // random, prefixes Idempotency-Key values
     ];
 
     /** @var array<string,string>|null */
@@ -140,6 +141,17 @@ final class Config
         }
         $tail = strlen($key) > 8 ? substr($key, -4) : '';
         return str_repeat('•', 8) . $tail;
+    }
+
+    /** Random id of this WHMCS install (created once), so two installs on one WABEK account never share idempotency keys. */
+    public static function installId(): string
+    {
+        $id = self::get('install_id');
+        if (!preg_match('/^[a-f0-9]{12}$/', $id)) {
+            $id = bin2hex(random_bytes(6));
+            self::set('install_id', $id);
+        }
+        return $id;
     }
 
     public static function apiBaseUrl(): string

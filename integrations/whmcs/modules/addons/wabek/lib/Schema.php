@@ -46,6 +46,7 @@ final class Schema
                 $t->text('body_en')->nullable();
                 $t->text('body_ar')->nullable();
                 $t->string('wa_template', 128)->default('');
+                $t->string('wa_template_lang', 16)->default('');
                 $t->text('wa_template_params')->nullable();
                 $t->dateTime('updated_at')->nullable();
             });
@@ -60,6 +61,7 @@ final class Schema
                 $t->string('phone', 20)->index();
                 $t->text('message');
                 $t->string('wa_template', 128)->default('');
+                $t->string('wa_template_lang', 16)->default('');
                 $t->text('wa_template_params')->nullable();
                 $t->boolean('critical')->default(false);
                 $t->unsignedTinyInteger('priority')->default(5);
@@ -69,6 +71,7 @@ final class Schema
                 $t->string('last_error', 500)->default('');
                 $t->unsignedSmallInteger('http_code')->default(0);
                 $t->string('remote_id', 128)->default('');
+                $t->string('delivery_status', 12)->default('');
                 $t->unsignedInteger('bulk_id')->nullable()->index();
                 $t->string('related_id', 64)->default('');
                 $t->string('dedupe_key', 160)->nullable()->unique();
@@ -124,7 +127,26 @@ final class Schema
             });
         }
 
+        self::ensureColumns();
         Events::seed();
+    }
+
+    /** Columns added after the first 4.0.0 builds; each guarded by hasColumn(). */
+    private static function ensureColumns(): void
+    {
+        $schema = Capsule::schema();
+        foreach (['mod_wabek_events', 'mod_wabek_outbox'] as $table) {
+            if ($schema->hasTable($table) && !$schema->hasColumn($table, 'wa_template_lang')) {
+                $schema->table($table, function (Blueprint $t) {
+                    $t->string('wa_template_lang', 16)->default('');
+                });
+            }
+        }
+        if ($schema->hasTable('mod_wabek_outbox') && !$schema->hasColumn('mod_wabek_outbox', 'delivery_status')) {
+            $schema->table('mod_wabek_outbox', function (Blueprint $t) {
+                $t->string('delivery_status', 12)->default('');
+            });
+        }
     }
 
     /**
@@ -142,7 +164,8 @@ final class Schema
         // Future migrations go here, e.g.:
         // if (version_compare($fromVersion, '4.1.0', '<')) { ... hasColumn() guarded ... }
 
-        // Always make sure new events get their default rows.
+        // Always make sure new columns and new events exist.
+        self::ensureColumns();
         Events::seed();
     }
 

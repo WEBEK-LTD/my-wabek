@@ -13,6 +13,7 @@ Complete rewrite of the addon (no code from 3.x).
 - Client area: WhatsApp preferences page (POST + CSRF) and WhatsApp verification page; optional WhatsApp code after login.
 - E.164 normalisation from the WHMCS phone number and client country, with an optional custom-field override.
 - Import of 3.x API settings (re-encrypted) and opt-outs.
+- Platform API integration: every message is sent with `type: "notification"` and an `Idempotency-Key` per outbox row (`409 idempotency_in_progress` is retried); approved templates take a language and named or positional parameters; instances are listed by `GET /api/v1/instances`; opt-ins/opt-outs are mirrored with `POST /api/v1/contacts-opt-out`; delivery status can be checked from the send log (`GET /api/v1/message-status`); OTP codes are sent from the default instance with the WHMCS company name as `brand_name`.
 
 ### Security
 - API key encrypted with WHMCS `encrypt()`, masked in the UI, sent only in the `X-API-Key` header, redacted from `logModuleCall`.

@@ -137,7 +137,7 @@ final class View
 
     public static function badge(string $status): string
     {
-        $key = 'status_' . $status;
+        $key = strpos($status, 'delivery_') === 0 ? $status : 'status_' . $status;
         $label = Lang::t($key);
         return '<span class="wb-badge wb-badge-' . self::e(preg_replace('/[^a-z_]/', '', $status)) . '">' . self::e($label === $key ? $status : $label) . '</span>';
     }
