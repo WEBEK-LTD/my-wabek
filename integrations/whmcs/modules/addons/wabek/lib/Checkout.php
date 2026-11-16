@@ -41,8 +41,12 @@ final class Checkout
         if (!self::enabled()) {
             return '';
         }
-        Lang::initForSession(false);
         $clientId = (int) ($_SESSION['uid'] ?? 0);
+        // New accounts already get the native "Receive WhatsApp notifications" field from the order form.
+        if ($clientId <= 0 && ConsentField::onOrderForm()) {
+            return '';
+        }
+        Lang::initForSession(false);
         $checked = $clientId > 0 ? self::subscribed($clientId) : Config::get('consent_mode') !== 'opt_in';
         // A re-displayed form (validation error) keeps what the client ticked.
         if (isset($_POST[self::SHOWN])) {
@@ -143,8 +147,7 @@ final class Checkout
 
     private static function subscribed(int $clientId): bool
     {
-        $state = Consent::state($clientId);
-        return !$state['opted_out'] && (Config::get('consent_mode') !== 'opt_in' || $state['opted_in']);
+        return Consent::subscribed($clientId);
     }
 
     private static function postedValue(): bool

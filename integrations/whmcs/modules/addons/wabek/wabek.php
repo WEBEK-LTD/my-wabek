@@ -42,6 +42,8 @@ function wabek_activate()
 {
     try {
         Schema::install();
+        // Native "Receive WhatsApp notifications" client field (setting consent_field_auto, default on).
+        Schema::ensureConsentField();
         return [
             'status'      => 'success',
             'description' => 'WABEK activated. Open Addons → WABEK WhatsApp to enter your API key.',

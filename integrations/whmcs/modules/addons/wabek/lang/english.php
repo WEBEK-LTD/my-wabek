@@ -115,8 +115,8 @@ $_ADDONLANG = [
     'consent_opt_out' => 'Send unless the client opted out',
     'consent_opt_in' => 'Send only to clients who opted in',
     'help_consent_mode' => 'Applies to non-critical messages. Critical events (set per notification) are always delivered.',
-    'set_consent_field' => 'Opt-out custom field (tickbox)',
-    'help_consent_field' => 'Optional: a client tickbox custom field where ticked means "no WhatsApp". Kept in sync with the client area page.',
+    'set_consent_field' => 'Consent custom field (tickbox)',
+    'help_consent_field' => 'The client tickbox field that mirrors the WhatsApp choice. While the option above is on, "None" re-attaches the field created by WABEK.',
     'set_checkout_consent' => 'Show a WhatsApp consent checkbox at checkout',
     'help_checkout_consent' => 'Adds an optional checkbox to the checkout of every order form (standard, comparison, slider, boxes, Lagom, Lagom One Step, Nexus). It shows the client\'s current choice; a changed choice is recorded with source "checkout".',
     'set_include_credentials' => 'Include login credentials in "Service activated" messages',
@@ -364,4 +364,15 @@ $_ADDONLANG = [
     'client_state_off' => 'Off',
     'checkout_consent_label' => 'Send me order, billing and support updates on WhatsApp',
     'checkout_consent_help' => 'You can change this at any time under Account → WhatsApp notifications.',
+
+    // Native consent custom field (4.2.0)
+    'set_consent_field_auto' => 'Show a native "Receive WhatsApp notifications" field to clients',
+    'help_consent_field_auto' => 'Creates, once, a client tickbox custom field that every theme prints on the registration form, the checkout of new accounts and the Account details page, and that admins see on the client profile. It is kept in two-way sync with the client area page, the admin toggle and the checkout box. Turning this off hides the field from clients; its values are kept.',
+    'set_consent_field_meaning' => 'A ticked box means',
+    'consent_field_receive' => 'Receive WhatsApp notifications',
+    'consent_field_opt_out' => 'No WhatsApp (opt-out field of 4.0 / 4.1)',
+    'ok_consent_field_created' => 'The client custom field "{name}" (#{id}) now holds the WhatsApp choice.',
+    'err_consent_field' => 'The WhatsApp consent custom field could not be updated. See the activity log.',
+    'cf_consent_name' => 'Receive WhatsApp notifications',
+    'cf_consent_desc' => 'Order, billing and support updates on WhatsApp. Essential account notices may still be sent.',
 ];

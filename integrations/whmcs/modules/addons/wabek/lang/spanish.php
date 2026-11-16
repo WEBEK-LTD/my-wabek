@@ -60,4 +60,8 @@ $_ADDONLANG = [
 
     'checkout_consent_label' => 'Quiero recibir avisos sobre pedidos, facturación y soporte por WhatsApp',
     'checkout_consent_help' => 'Puede cambiarlo en cualquier momento en Cuenta → Notificaciones de WhatsApp.',
+
+    // Campo personalizado nativo
+    'cf_consent_name' => 'Recibir notificaciones por WhatsApp',
+    'cf_consent_desc' => 'Novedades de pedidos, facturación y soporte por WhatsApp. Es posible que se sigan enviando avisos esenciales de su cuenta.',
 ];

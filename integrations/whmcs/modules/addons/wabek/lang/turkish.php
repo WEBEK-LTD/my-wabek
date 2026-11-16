@@ -60,4 +60,8 @@ $_ADDONLANG = [
 
     'checkout_consent_label' => 'Sipariş, fatura ve destek bilgilendirmelerini WhatsApp üzerinden almak istiyorum',
     'checkout_consent_help' => 'Bunu istediğiniz zaman Hesap → WhatsApp bildirimleri bölümünden değiştirebilirsiniz.',
+
+    // Yerel özel alan
+    'cf_consent_name' => 'WhatsApp bildirimlerini al',
+    'cf_consent_desc' => 'Sipariş, fatura ve destek güncellemeleri WhatsApp üzerinden. Hesabınızla ilgili önemli bildirimler yine de gönderilebilir.',
 ];

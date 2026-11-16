@@ -57,7 +57,7 @@ final class ClientController
 
         $phone = $clientId > 0 ? Phone::forClient($clientId) : null;
         $state = $clientId > 0 ? Consent::state($clientId) : ['opted_in' => false, 'opted_out' => false, 'verified_phone' => '', 'verified_at' => ''];
-        $subscribed = !$state['opted_out'] && (Config::get('consent_mode') !== 'opt_in' || $state['opted_in']);
+        $subscribed = $clientId > 0 && Consent::isSubscribed($state);
         $verified = $phone !== null && $state['verified_phone'] === $phone;
 
         $pending = (int) ($_SESSION['wabek_otp_request'] ?? 0) > 0;

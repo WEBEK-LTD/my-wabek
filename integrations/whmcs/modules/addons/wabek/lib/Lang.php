@@ -56,6 +56,18 @@ final class Lang
         return $replace ? strtr($s, $replace) : $s;
     }
 
+    /** One string in a given language (English fallback) without changing the active language. */
+    public static function tIn(string $language, string $key): string
+    {
+        static $files = [];
+        $language = strtolower($language);
+        $language = in_array($language, self::SUPPORTED, true) ? $language : 'english';
+        if (!isset($files[$language])) {
+            $files[$language] = $language === 'english' ? self::file('english') : array_merge(self::file('english'), self::file($language));
+        }
+        return (string) ($files[$language][$key] ?? $key);
+    }
+
     public static function all(): array
     {
         if (!self::$strings) {

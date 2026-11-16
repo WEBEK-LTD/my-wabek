@@ -15,6 +15,7 @@ require_once __DIR__ . '/bootstrap.php';
 use WABEK\Checkout;
 use WABEK\Config;
 use WABEK\Consent;
+use WABEK\ConsentField;
 use WABEK\Context;
 use WABEK\Cron;
 use WABEK\Lang;
@@ -45,11 +46,25 @@ add_hook('ClientAdd', 1, function ($vars) {
     wabek_safe('ClientAdd', function () use ($vars) {
         $id = (int) ($vars['client_id'] ?? $vars['userid'] ?? 0);
         if ($id > 0) {
+            // Native "Receive WhatsApp notifications" field (registration, checkout, admin "Add client").
+            wabek_safe('ClientAdd consent field', function () use ($id) {
+                ConsentField::syncFromSubmission($id, true, defined('ADMINAREA') ? 'admin' : 'register');
+            });
             // Account created during checkout: record the WhatsApp checkbox before the welcome is queued.
             wabek_safe('ClientAdd checkout consent', function () use ($id) {
                 Checkout::applyForNewClient($id);
             });
             Notifier::client('client_welcome', Context::client($id), 'client:' . $id, 'client_welcome:' . $id);
+        }
+    });
+});
+
+// Account details (client area), admin client profile, API UpdateClient: the native consent field → consent.
+add_hook('ClientEdit', 1, function ($vars) {
+    wabek_safe('ClientEdit', function () use ($vars) {
+        $id = (int) ($vars['userid'] ?? $vars['client_id'] ?? 0);
+        if ($id > 0) {
+            ConsentField::syncFromSubmission($id, false, defined('ADMINAREA') ? 'admin' : 'client_details');
         }
     });
 });
@@ -371,6 +386,13 @@ add_hook('ClientAreaHeadOutput', 1, function ($vars) {
         $root = isset($vars['WEB_ROOT']) && is_string($vars['WEB_ROOT']) ? rtrim($vars['WEB_ROOT'], '/') . '/' : '';
         $href = $root . 'modules/addons/wabek/assets/client.css?v=' . rawurlencode(WABEK_MODULE_VERSION);
         return '<link rel="stylesheet" href="' . Security::e($href) . '">';
+    });
+});
+
+// Registration / checkout of new accounts (opt-out mode): the native consent box starts ticked.
+add_hook('ClientAreaFooterOutput', 1, function ($vars) {
+    return (string) wabek_safe('ClientAreaFooterOutput', function () use ($vars) {
+        return ConsentField::prefillScript((string) ($vars['filename'] ?? ''), !empty($_SESSION['uid']));
     });
 });
 
