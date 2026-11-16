@@ -65,11 +65,21 @@ final class Otp
             'expires_at' => date('Y-m-d H:i:s', $now + Config::int('otp_ttl_minutes', 1, 60) * 60),
         ]);
 
-        $res = ApiClient::make()->otpSend(Phone::apiFormat($phone), $purpose === 'login' ? 'login' : 'verification');
+        $res = ApiClient::make()->otpSend(
+            Phone::apiFormat($phone),
+            $purpose === 'login' ? 'login' : 'verification',
+            Config::get('default_instance'),
+            substr(Config::companyName(), 0, 60)
+        );
         $remoteId = is_scalar($res->data['otpId'] ?? null) ? (string) $res->data['otpId'] : '';
-        if (!$res->ok() || $remoteId === '') {
+        if (!$res->ok() || $remoteId === '' || (isset($res->data['success']) && $res->data['success'] === false)) {
             Capsule::table(self::TABLE)->where('id', $rowId)->update(['status' => 'failed']);
-            return ['ok' => false, 'error' => 'otp_send_failed'];
+            $code = (string) ($res->data['code'] ?? '');
+            // Configuration problems on the platform side are reported to the admin, not the client.
+            if (in_array($code, ['no_instance', 'template_failed', 'outside_window'], true) && function_exists('logActivity')) {
+                logActivity('WABEK OTP could not be sent (' . $code . '): check the WhatsApp instance and the Authentication template in WABEK.');
+            }
+            return ['ok' => false, 'error' => $res->retryable || $res->status === 0 ? 'otp_service_down' : 'otp_send_failed'];
         }
         Capsule::table(self::TABLE)->where('id', $rowId)->update(['status' => 'sent', 'remote_id' => substr($remoteId, 0, 128)]);
         return ['ok' => true, 'request_id' => $rowId, 'phone' => $phone];

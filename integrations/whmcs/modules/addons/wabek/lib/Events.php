@@ -140,6 +140,7 @@ final class Events
                 'body_en'            => $d[6],
                 'body_ar'            => $d[7],
                 'wa_template'        => '',
+                'wa_template_lang'   => '',
                 'wa_template_params' => '',
                 'updated_at'         => $now,
             ]);
@@ -179,6 +180,7 @@ final class Events
             'default_en'         => $d[6],
             'default_ar'         => $d[7],
             'wa_template'        => (string) ($row['wa_template'] ?? ''),
+            'wa_template_lang'   => (string) ($row['wa_template_lang'] ?? ''),
             'wa_template_params' => (string) ($row['wa_template_params'] ?? ''),
         ];
     }
@@ -205,6 +207,7 @@ final class Events
             'body_en'            => (string) ($data['body_en'] ?? ''),
             'body_ar'            => (string) ($data['body_ar'] ?? ''),
             'wa_template'        => (string) ($data['wa_template'] ?? ''),
+            'wa_template_lang'   => (string) ($data['wa_template_lang'] ?? ''),
             'wa_template_params' => (string) ($data['wa_template_params'] ?? ''),
             'updated_at'         => date('Y-m-d H:i:s'),
         ]);
@@ -212,25 +215,36 @@ final class Events
     }
 
     /**
-     * Parse "param=value" lines of an event's approved-template parameters.
-     * @return array<string,string>
+     * Parse an event's approved-template parameters, one per line:
+     * - every line "name=value" → named parameters (["name" => "value"]);
+     * - otherwise each line is one positional value for {{1}}, {{2}}, ...
+     * @return array<string,string>|string[]
      */
     public static function parseTemplateParams(string $raw): array
     {
-        $out = [];
+        $lines = [];
         foreach (preg_split('/\r\n|\r|\n/', $raw) as $line) {
             $line = trim($line);
-            if ($line === '' || strpos($line, '=') === false) {
-                continue;
+            if ($line !== '') {
+                $lines[] = $line;
             }
-            [$name, $value] = array_map('trim', explode('=', $line, 2));
-            if (preg_match('/^[a-z0-9_]{1,40}$/', $name)) {
-                $out[$name] = $value;
-            }
-            if (count($out) >= 10) {
+            if (count($lines) >= 10) {
                 break;
             }
         }
-        return $out;
+        $named = [];
+        foreach ($lines as $line) {
+            if (!preg_match('/^([a-z0-9_]{1,40})\s*=(.*)$/', $line, $m)) {
+                return $lines; // positional
+            }
+            $named[$m[1]] = trim($m[2]);
+        }
+        return $named;
+    }
+
+    /** "ar", "en", "en_US", "pt_BR" or "" (platform default). */
+    public static function validTemplateLanguage(string $lang): bool
+    {
+        return $lang === '' || (bool) preg_match('/^[a-z]{2,3}(_[A-Z]{2})?$/', $lang);
     }
 }

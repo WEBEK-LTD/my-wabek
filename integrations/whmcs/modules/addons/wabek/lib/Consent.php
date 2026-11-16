@@ -89,6 +89,22 @@ final class Consent
             // Nothing non-critical still waiting in the queue may go out.
             Outbox::cancelNonCriticalFor($clientId);
         }
+        self::syncToPlatform($clientId, !$subscribe);
+    }
+
+    /** Mirror the choice to WABEK contacts so the platform's own send guard honours it too. */
+    private static function syncToPlatform(int $clientId, bool $optedOut): void
+    {
+        $phone = Phone::forClient($clientId);
+        $api = ApiClient::make();
+        if ($phone === null || !$api->configured()) {
+            return;
+        }
+        $res = $api->contactOptOut(Phone::apiFormat($phone), $optedOut);
+        if (!$res->ok() && function_exists('logActivity')) {
+            logActivity('WABEK: could not sync WhatsApp opt-' . ($optedOut ? 'out' : 'in') . ' of client #' . $clientId
+                . ' to WABEK (' . substr($res->error, 0, 200) . ')');
+        }
     }
 
     public static function markVerified(int $clientId, string $e164): void

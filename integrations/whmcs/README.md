@@ -93,12 +93,14 @@ A WHMCS addon module that sends WhatsApp notifications to your clients and alert
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/api/v1/send` | `{to, message, instance_id?, template?, template_params?, customer_name?}` |
-| POST | `/api/v1/otp` | `{phone, purpose}` → `{success, otpId}` |
+| POST | `/api/v1/send` | `{to, message, type: "notification", instance_id?, template?, template_language?, template_params?, customer_name?}` with `Idempotency-Key: whmcs-<install>-<outbox id>` |
+| POST | `/api/v1/otp` | `{phone, purpose, instance_id?, brand_name}` → `{success, otpId}` or `{success:false, error, code}` |
 | POST | `/api/v1/otp-verify` | `{otp_id, otp}` → `{valid, reason?}` |
-| GET | `/api/v1/instances` | connection test / instance list (a `404 Unknown action` still proves the key is valid) |
+| POST | `/api/v1/contacts-opt-out` | `{phone, opted_out}` — every client opt-in/opt-out is mirrored to WABEK |
+| GET | `/api/v1/message-status?id=` | delivery status (sent / delivered / read / failed) from the send log |
+| GET | `/api/v1/instances` | connection test and default-instance picker (older platforms answer `404 Unknown action`, which still proves the key is valid) |
 
-All requests carry `X-API-Key`. Every message is rendered by the addon; the platform never needs to query your WHMCS.
+All requests carry `X-API-Key`. Every message is rendered by the addon; the platform never needs to query your WHMCS. Template parameters are named (`name={field}` per line) or positional (one value per line for `{{1}}`, `{{2}}`, …). Retries of one queued message reuse its idempotency key, so a timeout can never cause a double send.
 
 ### Notes
 

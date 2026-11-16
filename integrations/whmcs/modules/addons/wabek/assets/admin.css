@@ -120,6 +120,10 @@
 .wabek .wb-badge-pending, .wabek .wb-badge-sending { background: #e3f6f7; color: var(--wb-link); }
 .wabek .wb-badge-skipped, .wabek .wb-badge-cancelled, .wabek .wb-badge-disabled { background: #f0f2f3; color: #6b7b7d; }
 .wabek .wb-badge-critical { background: #fff2dc; color: #8a5a00; }
+.wabek .wb-badge-delivery_sent { background: #eef3f4; color: var(--wb-muted); }
+.wabek .wb-badge-delivery_delivered { background: #e6f8e1; color: #22661a; }
+.wabek .wb-badge-delivery_read { background: #d9f3f5; color: var(--wb-deep); }
+.wabek .wb-badge-delivery_failed { background: #fde8e6; color: #9b2218; }
 
 /* Tables */
 .wabek .wb-table-wrap { overflow-x: auto; border: 1px solid var(--wb-line); border-radius: 12px; }
