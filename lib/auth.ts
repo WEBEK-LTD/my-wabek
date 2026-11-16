@@ -2,16 +2,28 @@ import { SignJWT, jwtVerify } from 'jose'
 import { NextApiRequest, NextApiResponse } from 'next'
 import bcrypt from 'bcryptjs'
 import { randomBytes, createHash } from 'crypto'
-import { requireEnv } from './security'
+import { getJwtSecret, requireJwtSecret } from './security'
+import { isMissingDbObject, warnMissingOnce } from './db-compat'
 
 // The signing key is resolved lazily so `next build` does not crash when the
-// env is not present at build time. There is deliberately NO fallback: a
-// missing JWT_SECRET fails closed (every sign/verify throws / rejects).
+// env is not present at build time. Resolution: JWT_SECRET →
+// SUPABASE_JWT_SECRET → SUPABASE_JWT_SECRET_KEY (same as the previous code, so
+// existing sessions stay valid). There is NO hard-coded fallback: with none of
+// them set every sign/verify fails closed.
 let _jwtKey: Uint8Array | null = null
 function jwtKey(): Uint8Array {
-  if (!_jwtKey) _jwtKey = new TextEncoder().encode(requireEnv('JWT_SECRET'))
+  if (!_jwtKey) _jwtKey = new TextEncoder().encode(requireJwtSecret())
   return _jwtKey
 }
+
+export function isJwtConfigured(): boolean {
+  return !!getJwtSecret()
+}
+
+// Supabase signs its own access/anon/service tokens with SUPABASE_JWT_SECRET,
+// which may be our signing key (fallback above). Those tokens must never be
+// accepted as a WABEK session.
+const SUPABASE_ROLES = new Set(['anon', 'authenticated', 'service_role', 'supabase_admin'])
 
 export type MemberRole = 'admin' | 'agent' | 'viewer'
 
@@ -45,7 +57,9 @@ export async function signToken(payload: JWTPayload): Promise<string> {
 export async function verifyToken(token: string): Promise<JWTPayload | null> {
   try {
     const { payload } = await jwtVerify(token, jwtKey(), { algorithms: ['HS256'] })
-    if (typeof payload.userId !== 'string') return null
+    if (typeof payload.userId !== 'string' || !payload.userId) return null
+    if (typeof payload.role === 'string' && SUPABASE_ROLES.has(payload.role)) return null
+    if (payload.iss === 'supabase' || (typeof payload.iss === 'string' && /supabase/i.test(payload.iss))) return null
     return payload as unknown as JWTPayload
   } catch {
     return null
@@ -118,7 +132,9 @@ export async function bumpTokenVersion(userId: string): Promise<number | null> {
     const next = ((u as { token_version?: number } | null)?.token_version || 0) + 1
     const { error } = await db.from('users').update({ token_version: next }).eq('id', userId)
     if (error) {
-      console.error('[auth] bumpTokenVersion failed (is migration 027 applied?):', error.message)
+      // Migration 027 not applied: no revocation possible yet (old behaviour).
+      if (isMissingDbObject(error)) warnMissingOnce('users.token_version (session revocation)', error)
+      else console.error('[auth] bumpTokenVersion failed:', error.message)
       return null
     }
     return next
@@ -148,7 +164,8 @@ async function loadUserRow(id: string): Promise<{ row: UserRow | null; failed: b
   let { data, error } = await db.from('users')
     .select('id, email, role, is_active, sub_account_of, token_version')
     .eq('id', id).maybeSingle()
-  if (error && /token_version/i.test(error.message || '')) {
+  if (error && (isMissingDbObject(error) || /token_version/i.test(error.message || ''))) {
+    warnMissingOnce('users.token_version', error)
     // Migration 027 not applied yet → every token is version 0.
     ;({ data, error } = await db.from('users')
       .select('id, email, role, is_active, sub_account_of')
@@ -169,6 +186,10 @@ async function loadUserRow(id: string): Promise<{ row: UserRow | null; failed: b
 export async function getAuthUser(req: NextApiRequest): Promise<AuthResult> {
   const token = getTokenFromRequest(req)
   if (!token) return { ok: false, status: 401, error: 'Unauthorized' }
+  if (!isJwtConfigured()) {
+    console.error('[auth] No JWT signing secret configured (JWT_SECRET / SUPABASE_JWT_SECRET / SUPABASE_JWT_SECRET_KEY)')
+    return { ok: false, status: 500, error: 'Server authentication is not configured' }
+  }
   const claims = await verifyToken(token)
   if (!claims) return { ok: false, status: 401, error: 'Invalid or expired token' }
 

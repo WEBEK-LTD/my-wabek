@@ -1,5 +1,6 @@
 import { smartSend, smartSendWAWeb } from '@/lib/wa-smart-send'
 import { supabaseAdmin } from './supabase'
+import { isMissingDbObject, warnMissingOnce } from './db-compat'
 import { v4 as uuidv4 } from 'uuid'
 
 // ── Cost guards ───────────────────────────────────────────────────────────────
@@ -34,8 +35,10 @@ export async function consumeAiQuota(userId: string): Promise<boolean> {
   const db = supabaseAdmin()
   const { data, error } = await db.rpc('consume_ai_quota', { p_user: userId, p_limit: aiUserDailyLimit() })
   if (error) {
-    const missing = error.code === 'PGRST202' || error.code === '42883'
-    console.error(`[AI] consume_ai_quota error code=${error.code}${missing ? ' (migration 026 not applied — allowing)' : ''}`)
+    // Function or ai_usage_daily missing (migration 026 not applied) → allow.
+    const missing = isMissingDbObject(error)
+    if (missing) warnMissingOnce('consume_ai_quota()', error)
+    else console.error(`[AI] consume_ai_quota error code=${error.code}`)
     return missing
   }
   return data === true
@@ -86,7 +89,8 @@ async function incrementAiUsage(userId: string, settingsId: string, current: num
   const db = supabaseAdmin()
   const { error } = await db.rpc('increment_ai_usage', { p_user: userId, p_settings_id: settingsId })
   if (error) {
-    console.error(`[AI] increment_ai_usage error code=${error.code} — falling back`)
+    if (isMissingDbObject(error)) warnMissingOnce('increment_ai_usage()', error)
+    else console.error(`[AI] increment_ai_usage error code=${error.code} — falling back`)
     await db.from('ai_settings').update({ replies_this_month: (current || 0) + 1, updated_at: new Date().toISOString() }).eq('id', settingsId).eq('user_id', userId)
   }
 }

@@ -21,6 +21,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import Stripe from 'stripe'
 import { supabaseAdmin } from '@/lib/supabase'
+import { isMissingDbObject, warnMissingOnce } from '@/lib/db-compat'
 import { applySubscriptionState, mapStripeStatus, recordResellerEarning, BillingCycle } from '@/lib/stripe'
 
 export const config = { api: { bodyParser: false } }
@@ -165,11 +166,17 @@ const HANDLED = new Set([
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  // Dedicated secret for the Connect endpoint — never the platform webhook secret.
-  const webhookSecret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET
+  // Dedicated secret for the Connect endpoint. Until it is configured, fall
+  // back to the platform webhook secret (previous behaviour) so connected-
+  // account events keep being processed.
+  let webhookSecret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET
+  if (!webhookSecret && process.env.STRIPE_WEBHOOK_SECRET) {
+    console.warn('[connect-webhook] STRIPE_CONNECT_WEBHOOK_SECRET is not set — verifying with STRIPE_WEBHOOK_SECRET (legacy fallback). Create a Connect endpoint secret and set it.')
+    webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
+  }
   const stripeKey = process.env.STRIPE_SECRET_KEY
   if (!webhookSecret || !stripeKey) {
-    console.error('[connect-webhook] STRIPE_CONNECT_WEBHOOK_SECRET / STRIPE_SECRET_KEY not configured')
+    console.error('[connect-webhook] STRIPE_CONNECT_WEBHOOK_SECRET / STRIPE_WEBHOOK_SECRET / STRIPE_SECRET_KEY not configured')
     return res.status(500).json({ error: 'Webhook not configured' })
   }
 
@@ -193,11 +200,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const db = supabaseAdmin()
 
   // Idempotency: first writer wins; duplicates are acknowledged and skipped.
+  // processed_stripe_events (migration 027/028) missing → process without
+  // the dedupe table (previous behaviour); reseller_earnings' payment_ref
+  // check still guards the balance where its unique index exists.
+  let claimed = false
   const { error: dupErr } = await db.from('processed_stripe_events').insert({ id: event.id })
   if (dupErr) {
     if ((dupErr as { code?: string }).code === '23505') return res.status(200).json({ received: true, duplicate: true })
-    console.error('[connect-webhook] idempotency insert failed:', dupErr.message)
-    return res.status(500).json({ error: 'Temporary error' })
+    if (isMissingDbObject(dupErr)) {
+      warnMissingOnce('processed_stripe_events', dupErr)
+    } else {
+      console.error('[connect-webhook] idempotency insert failed:', dupErr.message)
+      return res.status(500).json({ error: 'Temporary error' })
+    }
+  } else {
+    claimed = true
   }
 
   try {
@@ -206,7 +223,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (err) {
     console.error('[connect-webhook] processing failed:', (err as Error)?.message)
     // Allow Stripe to retry this event.
-    await db.from('processed_stripe_events').delete().eq('id', event.id)
+    if (claimed) await db.from('processed_stripe_events').delete().eq('id', event.id)
     return res.status(500).json({ error: 'Processing failed' })
   }
 }

@@ -29,8 +29,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     root = await verifyWixWebhook(rawBody) as Record<string, any> | null
   } catch (e) {
-    console.error('[Wix Billing] WIX_PUBLIC_KEY missing/invalid — rejecting:', (e as Error).message)
-    return res.status(503).json({ error: 'Not configured' })
+    // Fail closed on purpose: an unsigned billing event could grant a free
+    // plan. 503 makes Wix retry the delivery once WIX_PUBLIC_KEY is set.
+    console.error('[Wix Billing] WIX_PUBLIC_KEY missing/invalid — rejecting (Wix will retry):', (e as Error).message)
+    return res.status(503).json({ error: 'Wix billing webhook not configured', code: 'wix_not_configured' })
   }
   if (!root) {
     console.error('[Wix Billing] invalid signature — rejected')

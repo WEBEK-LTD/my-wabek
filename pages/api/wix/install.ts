@@ -10,7 +10,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://waabek.com'
   if (!APP_ID) {
     console.error('[wix install] WIX_APP_ID is not set')
-    return res.status(500).json({ error: 'Wix app is not configured' })
+    return res.status(503).json({ error: 'Wix app not configured', code: 'wix_not_configured' })
   }
 
   const token       = req.query.token // Wix sends this

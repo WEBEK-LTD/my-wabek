@@ -20,9 +20,57 @@ export function requireEnv(name: string): string {
   return v
 }
 
+// ── JWT signing secret ────────────────────────────────────────────────────────
+// Same resolution order as the code that is live today, so existing sessions
+// stay valid: JWT_SECRET → SUPABASE_JWT_SECRET → SUPABASE_JWT_SECRET_KEY.
+// There is deliberately NO hard-coded fallback: with none of them set every
+// sign/verify fails closed.
+export const JWT_SECRET_ENV_NAMES = ['JWT_SECRET', 'SUPABASE_JWT_SECRET', 'SUPABASE_JWT_SECRET_KEY'] as const
+
+let _warnedJwtFallback = false
+export function getJwtSecret(): string | null {
+  for (const name of JWT_SECRET_ENV_NAMES) {
+    const v = process.env[name]
+    if (v) {
+      if (name !== 'JWT_SECRET' && !_warnedJwtFallback) {
+        _warnedJwtFallback = true
+        console.warn(`[security] JWT_SECRET is not set — signing with ${name}. Set JWT_SECRET to the same value.`)
+      }
+      return v
+    }
+  }
+  return null
+}
+
+/** The JWT signing secret, or throws (fail closed — callers turn this into a 500). */
+export function requireJwtSecret(): string {
+  const v = getJwtSecret()
+  if (!v) throw new Error('Missing required environment variable: JWT_SECRET')
+  return v
+}
+
 // ── Cron / internal system calls ──────────────────────────────────────────────
 // Accepts the secret ONLY from a header (never the query string, which ends up
-// in access logs). Uses CRON_SECRET only — never the JWT signing key.
+// in access logs). Uses CRON_SECRET; when it is not set, a stable secret is
+// derived from the JWT signing secret: HMAC-SHA256(jwtSecret, 'wabek-cron-v1')
+// in hex. The Netlify scheduled functions (netlify/functions/*.mts) derive
+// the identical value in the same env, so cron keeps working; the raw JWT
+// secret itself is never sent anywhere.
+export const CRON_DERIVATION_LABEL = 'wabek-cron-v1'
+
+let _warnedCronDerived = false
+export function getCronSecret(): string | null {
+  const explicit = process.env.CRON_SECRET
+  if (explicit) return explicit
+  const jwt = getJwtSecret()
+  if (!jwt) return null
+  if (!_warnedCronDerived) {
+    _warnedCronDerived = true
+    console.warn('[security] CRON_SECRET is not set — using a secret derived from the JWT signing secret. Set CRON_SECRET on Netlify and Railway.')
+  }
+  return createHmac('sha256', jwt).update(CRON_DERIVATION_LABEL).digest('hex')
+}
+
 export function getCronSecretFromReq(req: NextApiRequest): string | null {
   const h = req.headers['x-cron-secret']
   if (typeof h === 'string' && h) return h
@@ -32,13 +80,13 @@ export function getCronSecretFromReq(req: NextApiRequest): string | null {
 }
 
 export function isCronRequest(req: NextApiRequest): boolean {
-  const expected = process.env.CRON_SECRET
+  const expected = getCronSecret()
   if (!expected) return false
   return safeEqual(getCronSecretFromReq(req), expected)
 }
 
 export function requireCron(req: NextApiRequest, res: NextApiResponse): boolean {
-  if (!process.env.CRON_SECRET) {
+  if (!getCronSecret()) {
     res.status(500).json({ error: 'CRON_SECRET is not configured' })
     return false
   }
@@ -74,7 +122,7 @@ export function randomCode(len: number, alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ2345
 
 // ── Signed, expiring state for OAuth flows ────────────────────────────────────
 function stateKey(): string {
-  return process.env.OAUTH_STATE_SECRET || requireEnv('JWT_SECRET')
+  return process.env.OAUTH_STATE_SECRET || requireJwtSecret()
 }
 
 export function signState(payload: Record<string, unknown>, ttlSeconds = 600): string {
@@ -86,7 +134,12 @@ export function signState(payload: Record<string, unknown>, ttlSeconds = 600): s
 export function verifyState<T = Record<string, unknown>>(state: unknown): T | null {
   if (typeof state !== 'string' || !state.includes('.')) return null
   const [body, sig] = state.split('.', 2)
-  const expected = createHmac('sha256', stateKey()).update(body).digest('base64url')
+  let expected: string
+  try {
+    expected = createHmac('sha256', stateKey()).update(body).digest('base64url')
+  } catch {
+    return null // no signing secret configured → fail closed
+  }
   if (!safeEqual(sig, expected)) return null
   try {
     const data = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'))

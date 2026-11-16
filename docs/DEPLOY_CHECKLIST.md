@@ -14,7 +14,10 @@
 5. **Smoke test** (القسم ٥) + **تحقق اتصالات واتساب** (القسم ٦).
 
 > الكود الجديد متسامح مع غياب الـ migrations (fallbacks)، والـ migrations إضافية فقط،
-> لذلك الترتيب أعلاه آمن. لا تنشر Netlify قبل ضبط `JWT_SECRET` و `CRON_SECRET`.
+> لذلك الترتيب أعلاه آمن. الدمج في `main` (نشر Netlify تلقائي) **لا يكسر الإنتاج** حتى لو
+> لم تُضبط المتغيرات الجديدة ولم تُشغَّل 026–032 بعد: كل متغير ناقص يرجع للسلوك القديم مع
+> تحذير في السجلات (القسم ٢.٥)، وكل قيد جديد يبدأ في وضع **log-only**.
+> شغّل `node scripts/check-deploy.mjs` (القسم ٢.٦) لمعرفة ما ينقص.
 
 ---
 
@@ -24,19 +27,19 @@
 
 | Variable | ملاحظات |
 |---|---|
-| `JWT_SECRET` | **حرج.** لا يوجد أي fallback الآن (الكود القديم كان يقبل `SUPABASE_JWT_SECRET` ثم `SUPABASE_JWT_SECRET_KEY` ثم `'fallback-secret-change-in-production'`). ضع **نفس القيمة المستخدمة حالياً في الإنتاج**: إن كان `JWT_SECRET` مضبوطاً اتركه؛ وإلا إن كان الإنتاج يعتمد على `SUPABASE_JWT_SECRET` فاضبط `JWT_SECRET` على نفس قيمته. غير ذلك → كل المستخدمين يُسجَّل خروجهم (مرة واحدة فقط). إن كان الإنتاج يعمل فعلاً على `fallback-secret…` فيجب توليد سر جديد قوي (٣٢+ حرفاً) وقبول تسجيل خروج الجميع. |
+| `JWT_SECRET` | **حرج.** الترتيب نفسه كالكود القديم: `JWT_SECRET` ← `SUPABASE_JWT_SECRET` ← `SUPABASE_JWT_SECRET_KEY` (لذلك الجلسات الحالية تبقى صالحة). **لا يوجد** قيمة ثابتة في الكود بعد الآن: إن غابت الثلاثة تفشل المصادقة مغلقة (500). يُستحسن ضبط `JWT_SECRET` على **نفس القيمة المستخدمة حالياً**. رموز Supabase نفسها (role `anon`/`authenticated`، بدون `userId`) لا تُقبل أبداً كجلسة. إن كان الإنتاج يعمل فعلاً على `fallback-secret…` (لا شيء من الثلاثة مضبوط) فيجب توليد سر جديد قوي (٣٢+ حرفاً) **قبل** الدمج وقبول تسجيل خروج الجميع مرة واحدة. |
 | `NEXT_PUBLIC_APP_URL` | رابط الموقع (يُستخدم في روابط Stripe/OAuth/Webhooks). |
 | `NEXT_PUBLIC_SUPABASE_URL` (أو `NEXT_PUBLIC_SUPABASE_DATABASE_URL` / `SUPABASE_DATABASE_URL`) | رابط مشروع Supabase. OAuth يستخدم `NEXT_PUBLIC_SUPABASE_DATABASE_URL`. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | يُستخدم فقط لتدفق OAuth؛ بعد 026 لا يملك أي صلاحية على جداول `public`. |
 | `SUPABASE_SERVICE_ROLE_KEY` | كل وصول الخادم لقاعدة البيانات. |
-| `CRON_SECRET` | **نفس القيمة على Netlify و Railway.** تحميه `/api/cron/expire-plans` و `/api/campaigns/scheduler` و `/api/ai/review-scheduler` (Netlify scheduled functions ترسله تلقائياً). مقارنة constant-time، ويفشل مغلقاً إن غاب. |
+| `CRON_SECRET` | **نفس القيمة على Netlify و Railway.** تحميه `/api/cron/expire-plans` و `/api/campaigns/scheduler` و `/api/ai/review-scheduler` (Netlify scheduled functions ترسله في الترويسة `x-cron-secret` فقط). إن غاب على Netlify يُشتق سر ثابت = `HMAC-SHA256(سر JWT، 'wabek-cron-v1')` (hex) بنفس الطريقة في `lib/security.ts` و `netlify/functions/*.mts`، فتستمر الحملات المجدولة؛ سر JWT نفسه لا يُرسل أبداً. Railway → review-scheduler يبقى على fallback `SERVER_SECRET`. |
 | `WA_WEB_SERVER_URL` | رابط خادم Baileys على Railway. |
-| `WA_WEB_SERVER_SECRET` | **يساوي `SERVER_SECRET` على Railway.** |
-| `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | توكن التحقق لـ Meta webhook (نفس القيمة المسجلة في Meta App — لا تغيّرها). |
+| `WA_WEB_SERVER_SECRET` | **يساوي `SERVER_SECRET` على Railway.** إن غاب: `/api/whatsapp/wa-web-events` **يقبل** الأحداث (كالسابق) مع تحذير `⚠️ SECURITY` في السجل حتى لا تضيع رسائل QR الواردة؛ لكن **الإرسال** عبر Baileys يحتاجه. |
+| `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | توكن التحقق لـ Meta webhook (نفس القيمة المسجلة في Meta App — لا تغيّرها). إن غاب يرجع GET (التحقق، يُستخدم فقط عند إعادة تسجيل الـ webhook) 403؛ استقبال الرسائل (POST) **لا يتأثر**. |
 | `META_APP_SECRET` | للتحقق من توقيع `X-Hub-Signature-256` على Meta webhook. |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Stripe المنصة (`/api/billing/webhook`). |
-| `STRIPE_CONNECT_WEBHOOK_SECRET` | **جديد ومستقل** لـ `/api/reseller/stripe-connect/webhook` (endpoint من نوع *Connected accounts* في Stripe). بدونه يرجع 500. |
-| `WIX_APP_ID`, `WIX_APP_SECRET` (**rotated** — ضع القيمة الجديدة), `WIX_PUBLIC_KEY` | تكامل Wix. `WIX_PUBLIC_KEY` بصيغة PEM (يُقبل `\n` حرفياً). |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | **جديد ومستقل** لـ `/api/reseller/stripe-connect/webhook` (endpoint من نوع *Connected accounts* في Stripe). إن غاب يُستخدم `STRIPE_WEBHOOK_SECRET` (السلوك القديم) مع تحذير. |
+| `WIX_APP_ID`, `WIX_APP_SECRET` (**rotated** — ضع القيمة الجديدة), `WIX_PUBLIC_KEY` | تكامل Wix. `WIX_PUBLIC_KEY` بصيغة PEM (يُقبل `\n` حرفياً). بدون `WIX_PUBLIC_KEY`: webhooks **الطلبات** (`/api/wix/webhook`) تُقبل دون تحقق مع تحذير (السلوك القديم)، أما webhook **الفوترة** (`/api/wix/billing`) فيرجع 503 (Wix يعيد المحاولة لاحقاً) لأن حدثاً غير موقّع قد يمنح باقة مجانية. بدون `WIX_APP_SECRET`/`WIX_APP_ID`: مسارات Wix ترجع `503 Wix app not configured`. |
 
 ### ٢.٢ Netlify — اختيارية (Optional)
 
@@ -46,7 +49,9 @@
 | `META_APP_ID`, `META_CONFIG_ID` | Embedded Signup. |
 | `WHATSAPP_API_VERSION` | `v21.0` افتراضياً (Graph API لكل الإرسال والتحقق، بما فيه `admin/validate-wa-token`). |
 | `WHATSAPP_SUBSCRIBE_API_VERSION` | `v25.0` افتراضياً (subscribed_apps فقط). |
-| `MESSAGE_LIMIT_MODE` | ضع `log` في البداية: تجاوز حد الرسائل الشهري يُسجَّل فقط ولا يُحجب. احذفه لاحقاً لتفعيل الحجب. (opt-out / blocked يُحجب دائماً.) |
+| `MESSAGE_LIMIT_MODE` | **الافتراضي log-only**: تجاوز حد الرسائل الشهري يُسجَّل فقط (`[send-guard] ... not blocking`). ضع `enforce` لتفعيل الحجب (`403 plan_limit`). (opt-out / blocked يُحجب دائماً.) |
+| `API_ACCESS_MODE` | **الافتراضي log-only**: مفتاح API لباقة بدون `allow_api_access` يُسجَّل فقط (`[api-key] ... not blocking`). ضع `enforce` لإرجاع `403 plan_no_api`. |
+| `PLAN_LIMIT_ZERO` | **الافتراضي: القراءة القديمة** — الحد `0` = غير محدد = غير محدود. ضع `none` لتصبح `0` = «غير مسموح». (`max_sub_accounts` لا يتأثر: `0` + `allow_sub_accounts=true` = غير محدود، وإلا غير مسموح.) |
 | `AI_USER_DAILY_LIMIT` | حد يومي لكل مستخدم لطلبات AI التفاعلية (يتطلب 026). |
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | rate limiting موزّع؛ بدونه يُستخدم `rate_limit_hit()` (027) ثم ذاكرة محلية. |
 | `WABEK_EVENTS_SECRET` | سر إضافي مقبول على `/api/whatsapp/wa-web-events` (بجانب `WA_WEB_SERVER_SECRET`). |
@@ -65,14 +70,14 @@
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google Search Console (admin). |
 | `NEXT_PUBLIC_APP_NAME` | اسم التطبيق. |
 
-> متغيرات لم تعد مستخدمة ويمكن حذفها بعد التأكد: `SUPABASE_JWT_SECRET_KEY`, `ADMIN_SECRET_KEY`.
-> (`SUPABASE_JWT_SECRET` لم يعد يقرأه الكود — انقل قيمته إلى `JWT_SECRET` كما سبق.)
+> `SUPABASE_JWT_SECRET` / `SUPABASE_JWT_SECRET_KEY` ما زالا يُقرآن كـ fallback لـ `JWT_SECRET`؛
+> بعد ضبط `JWT_SECRET` بنفس القيمة يمكن حذفهما. `ADMIN_SECRET_KEY` لم يعد مستخدماً.
 
 ### ٢.٣ Railway (wabek-baileys)
 
 | Variable | ملاحظات |
 |---|---|
-| `SERVER_SECRET` | **مطلوب.** الخادم يتوقف (FATAL) إن كان فارغاً أو `'change-this-secret'`. سر عشوائي طويل، **ونفس القيمة** في `WA_WEB_SERVER_SECRET` على Netlify. تغييره لا يمس جلسات Baileys (لا يُستخدم للتشفير). |
+| `SERVER_SECRET` | **مطلوب عملياً.** سر عشوائي طويل، **ونفس القيمة** في `WA_WEB_SERVER_SECRET` على Netlify. إن كان فارغاً أو `'change-this-secret'` أو أقصر من ١٦ حرفاً **لا يتوقف الخادم** (حتى تبقى الجلسات متصلة) لكنه يطبع `⚠️ SECURITY WARNING` عند التشغيل وكل ساعة. تغييره لا يمس جلسات Baileys (لا يُستخدم للتشفير) — غيّره على Railway و Netlify معاً. |
 | `CRON_SECRET` | **نفس قيمة Netlify.** يُرسل في `x-cron-secret` إلى `/api/ai/review-scheduler`. إن غاب يُرسل `SERVER_SECRET` (مقبول مؤقتاً على Netlify فقط إن كان ≥16 حرفاً) — اضبطه لإنهاء هذا الـ fallback. |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | لتخزين جلسات `wa_sessions` ورفع الوسائط — **لا تغيّرها**. |
 | `WABEK_EVENTS_URL` | `https://<site>/api/whatsapp/wa-web-events` — لا تغيّره. |
@@ -86,6 +91,45 @@
 
 - bucket **`wa-media`** (public): ارفع **File size limit إلى 50MB** (المستندات حتى 50MB — `MAX_DOCUMENT_BYTES`). الكود ينشئه بـ 50MB فقط إن لم يكن موجوداً؛ bucket موجود بحد أقل يجب تعديله يدوياً من لوحة Supabase.
 - bucket **`brand-assets`** (public): تنشئه 028 أو أول رفع شعار.
+
+### ٢.٥ الوضع الافتراضي عند غياب متغير أو migration (آمن للدمج)
+
+| الحالة | السلوك بعد الدمج | لتفعيل/إصلاح |
+|---|---|---|
+| `JWT_SECRET` غائب | يُستخدم `SUPABASE_JWT_SECRET` ثم `SUPABASE_JWT_SECRET_KEY`؛ إن غاب الكل → 500 (لا قيمة ثابتة) | اضبط `JWT_SECRET` بنفس القيمة الحالية |
+| `CRON_SECRET` غائب | سر مشتق من سر JWT (HMAC، `wabek-cron-v1`) | اضبط `CRON_SECRET` على Netlify و Railway |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` غائب | `STRIPE_WEBHOOK_SECRET` + تحذير | أنشئ endpoint Connect وضع سرّه |
+| `WA_WEB_SERVER_SECRET` غائب | wa-web-events يقبل + تحذير | اضبطه = `SERVER_SECRET` |
+| `SERVER_SECRET` (Railway) غائب/ضعيف | الخادم يعمل + تحذير كل ساعة | سر طويل على الجهتين |
+| `WIX_PUBLIC_KEY` غائب | طلبات Wix تُقبل دون تحقق + تحذير؛ الفوترة 503 | اضبط `WIX_PUBLIC_KEY` |
+| `WIX_APP_SECRET`/`WIX_APP_ID` غائب | `503 Wix app not configured` | اضبطهما |
+| `WHATSAPP_WEBHOOK_VERIFY_TOKEN` غائب | GET 403 فقط؛ POST يعمل | اضبطه قبل إعادة تسجيل الـ webhook |
+| وصول API حسب الباقة | log-only | `API_ACCESS_MODE=enforce` |
+| حد الرسائل الشهري | log-only | `MESSAGE_LIMIT_MODE=enforce` |
+| حد الباقة `0` | غير محدود (القراءة القديمة) | `PLAN_LIMIT_ZERO=none` (بعد تحويل كل «غير محدود» إلى `-1`) |
+| opt-out / blocked | **يُحجب دائماً** (متطلب قانوني) | — |
+| 027 غير مطبّقة | `token_version` = 0 (لا إلغاء جلسات)، OTP بدون عدّاد محاولات، rate limit في الذاكرة، Stripe بدون جدول dedupe | شغّل 027 |
+| 028 غير مطبّقة | صرف الموزعين بمسار قديم مع فحص الرصيد، أرباح الموزعين بفحص `payment_ref`، `paused` يُخزَّن `past_due` | شغّل 028 |
+| 031 غير مطبّقة | `Idempotency-Key` يُتجاهل (لا 409) | شغّل 031 |
+| 032 غير مطبّقة | قالب الحملة يُخزَّن داخل `meta`؛ webhooks الصادرة بدون توقيع وبدون إعادة محاولة | شغّل 032 |
+| 026 غير مطبّقة | عدادات AI/النقرات/تذاكر الدعم/رسم لوحة التحكم بالمسارات القديمة | شغّل 026 |
+
+كل fallback يطبع تحذيراً واحداً لكل عملية: ابحث في سجلات Netlify عن `[db-compat]` و `⚠️ SECURITY` و `not blocking`.
+
+**التحويل إلى enforce** (بعد أسبوع من مراقبة السجلات): Netlify → Site configuration → Environment variables →
+أضف `API_ACCESS_MODE=enforce`، `MESSAGE_LIMIT_MODE=enforce`، `PLAN_LIMIT_ZERO=none` (كلٌّ على حدة) ثم **Trigger deploy**.
+للتراجع: احذف المتغير وأعد النشر.
+
+### ٢.٦ فحص الجاهزية `scripts/check-deploy.mjs`
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co SUPABASE_SERVICE_ROLE_KEY=<service key> \
+  node scripts/check-deploy.mjs
+```
+
+يقرأ فقط (HEAD / `limit=0` على الجداول والأعمدة، و`rpc` بمعاملات غير صالحة لمعرفة وجود الدالة دون تنفيذ أي تعديل)،
+ويطبع جدول present/missing لكائنات 026–032، ثم أي متغيرات القائمة مضبوطة في البيئة الحالية (بدون طباعة القيم).
+شغّله في بيئة فيها نفس متغيرات Netlify لرؤية القسم الثاني بدقة.
 
 ---
 
@@ -150,7 +194,7 @@
 - [ ] Meta App Dashboard → Webhooks: آخر delivery ناجحة (200) بعد النشر. إن ظهر 401 لمستأجر بتطبيق Meta خاص → أضف سرّه في `META_APP_SECRETS`.
 - [ ] `/api/whatsapp/wa-web-events` يرجع 200 لأحداث Baileys (وليس 401) — أي أن `WA_WEB_SERVER_SECRET` (Netlify) = `SERVER_SECRET` (Railway).
 - [ ] رسالة واردة + صادرة على رقم Cloud API واحد ورقم QR واحد على الأقل لمستأجر حقيقي.
-- [ ] `MESSAGE_LIMIT_MODE=log`: راقب سجلات `[send-guard] ... not blocking` لمعرفة من سيتأثر قبل تفعيل الحجب.
+- [ ] حد الرسائل log-only افتراضياً: راقب سجلات `[send-guard] ... not blocking` لمعرفة من سيتأثر قبل `MESSAGE_LIMIT_MODE=enforce`.
 
 ---
 
@@ -158,15 +202,16 @@
 
 | التغيير | ما الذي يحدث | ما المطلوب قبل النشر |
 |---|---|---|
-| **وصول الـ API حسب الباقة** | استدعاءات مفاتيح الـ API (v1 و gateway، ومنها إضافات WordPress وWHMCS) تُرفض بـ `403 plan_no_api` إذا كانت الباقة لا تتضمن `allow_api_access`. | فعّل `allow_api_access` على الباقات المدفوعة من لوحة الأدمن، أو ضع `API_ACCESS_MODE=log` مؤقتًا لتسجيل الحالات دون حجب. |
-| **قيمة 0 في حدود الباقة** | أصبحت `0` تعني «غير مسموح»، و`-1` تعني «غير محدود» (كانت `0` تُقرأ خطأً كغير محدود، فكانت الباقة المجانية تملك حملات بلا حد). | راجع كل الباقات: أي حد وُضع `0` بقصد «غير محدود» غيّره إلى `-1`. للتراجع السريع: `PLAN_LIMIT_ZERO=unlimited`. |
-| **حد الرسائل الشهري** | يُطبَّق لأول مرة. | ابدأ بـ `MESSAGE_LIMIT_MODE=log`. |
+| **وصول الـ API حسب الباقة** | **log-only افتراضياً.** مع `API_ACCESS_MODE=enforce` تُرفض استدعاءات مفاتيح الـ API (v1 و gateway، ومنها إضافات WordPress وWHMCS) بـ `403 plan_no_api` إذا كانت الباقة لا تتضمن `allow_api_access`. | فعّل `allow_api_access` على الباقات المدفوعة من لوحة الأدمن، راقب `[api-key] ... not blocking`، ثم `API_ACCESS_MODE=enforce`. |
+| **قيمة 0 في حدود الباقة** | **افتراضياً بلا تغيير** (`0` = غير محدود). مع `PLAN_LIMIT_ZERO=none` تصبح `0` = «غير مسموح» و`-1` = «غير محدود» (فالباقة المجانية بـ `max_campaigns = 0` لا تنشئ حملات). | راجع كل الباقات: أي حد وُضع `0` بقصد «غير محدود» غيّره إلى `-1`، ثم `PLAN_LIMIT_ZERO=none`. |
+| **حد الرسائل الشهري** | **log-only افتراضياً.** | راقب السجلات ثم `MESSAGE_LIMIT_MODE=enforce`. |
 | **صلاحيات أعضاء الفريق** | المشاهد (viewer) للقراءة فقط، والموظف (agent) للمحادثات وجهات الاتصال والردود السريعة فقط؛ غير ذلك `403 member_forbidden`. | أبلغ العملاء أصحاب الفرق، وراجع أدوار الأعضاء الحاليين. |
 | **النص خارج نافذة الـ 24 ساعة** | gateway وtrigger وWix وwebhook الخاص بـ WHMCS ترجع `422 outside_window` بدل إرسال قالب عام لا علاقة له بالرسالة. | لا شيء؛ الإضافات الجديدة تمرّر قالبًا معتمدًا تلقائيًا. |
 | **حدود جهات الاتصال والحسابات الفرعية** | تُطبَّق عند الإنشاء والاستيراد. | راجع `max_contacts` و`max_sub_accounts` في الباقات. |
 | **إيقاف الرسائل بكلمة STOP** | رسالة «STOP» أو «إيقاف» من العميل توقف الإرسال إليه، و«START» أو «اشتراك» تعيده. | لا شيء. |
 | **مفاتيح الـ API وصلاحياتها** | تُطبَّق صلاحيات المفتاح (`send`, `contacts:read`, `contacts:write`, `otp`)؛ المفتاح بلا صلاحيات = وصول كامل كما كان. | لا شيء. |
-| **أسرار الـ webhooks الصادرة** | كل webhook أصبح موقّعًا بـ `X-WABEK-Signature`؛ الـ webhooks القديمة أُنشئ لها سر تلقائيًا. | على أصحابها تدوير السر من صفحة التكاملات لرؤيته. |
+| **أسرار الـ webhooks الصادرة** | بعد 032: كل webhook موقّع بـ `X-WABEK-Signature`؛ الـ webhooks القديمة يُنشأ لها سر تلقائيًا. قبل 032: تُرسل بدون توقيع (كالسابق). | على أصحابها تدوير السر من صفحة التكاملات لرؤيته. |
+| **توقيع Meta webhook** | إن كان `META_APP_SECRET` مضبوطاً (وهو مستخدم أصلاً لـ Embedded Signup) يُرفض أي webhook بتوقيع غير صحيح (401). | أي مستأجر بتطبيق Meta خاص: أضف سرّه في `META_APP_SECRETS` **قبل** الدمج. |
 
 ## ٧. ملاحظات إضافية
 

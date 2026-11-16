@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { requireAdmin } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { isMissingDbObject, warnMissingOnce } from '@/lib/db-compat'
 import { logAction, getClientIp } from '@/lib/middleware'
 
 const PAYOUT_METHODS = ['bank_transfer', 'paypal', 'wise', 'crypto', 'stripe', 'other']
@@ -112,7 +113,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const idemKey = typeof idempotency_key === 'string' && idempotency_key ? idempotency_key.slice(0, 128) : null
 
     if (idemKey) {
-      const { data: prior } = await db.from('reseller_payouts').select('*').eq('idempotency_key', idemKey).maybeSingle()
+      const { data: prior, error: priorErr } = await db.from('reseller_payouts').select('*').eq('idempotency_key', idemKey).maybeSingle()
+      if (priorErr && isMissingDbObject(priorErr)) warnMissingOnce('reseller_payouts.idempotency_key', priorErr)
       if (prior) return res.status(200).json({ payout: prior, duplicate: true })
     }
 
@@ -131,7 +133,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       p_idempotency_key: idemKey,
     })
 
-    if (rpcErr) {
+    let resolvedPayoutId: unknown = payoutId
+    if (rpcErr && isMissingDbObject(rpcErr)) {
+      // Migration 028 not applied yet: previous (non-atomic) behaviour, but
+      // the balance check is kept and the decrement is compare-and-set.
+      warnMissingOnce('reseller_record_payout()', rpcErr)
+      const { data: bal } = await db.from('reseller_profiles')
+        .select('balance_pending, balance_paid').eq('user_id', reseller_id).maybeSingle()
+      const pending = Number(bal?.balance_pending || 0)
+      if (!bal || pending < amount) {
+        return res.status(400).json({ error: 'Amount exceeds the pending balance ($' + pending.toFixed(2) + ')' })
+      }
+      const { data: moved, error: balErr } = await db.from('reseller_profiles').update({
+        balance_pending: Math.round((pending - amount) * 100) / 100,
+        balance_paid: Math.round((Number(bal.balance_paid || 0) + amount) * 100) / 100,
+        updated_at: new Date().toISOString(),
+      }).eq('user_id', reseller_id).eq('balance_pending', bal.balance_pending).select('user_id')
+      if (balErr || !moved?.length) {
+        return res.status(409).json({ error: 'Balance changed, please retry' })
+      }
+      const { data: ins, error: insErr } = await db.from('reseller_payouts').insert({
+        reseller_id, amount, currency: 'USD', method: payMethod,
+        reference: typeof reference === 'string' ? reference.slice(0, 200) : null,
+        status: 'paid', period_start: toDate(period_start), period_end: toDate(period_end),
+        paid_at: new Date().toISOString(),
+      }).select('id').single()
+      if (insErr || !ins) {
+        console.error('[payouts] legacy payout insert failed:', insErr?.message)
+        return res.status(500).json({ error: 'Failed to record payout' })
+      }
+      resolvedPayoutId = ins.id
+    } else if (rpcErr) {
       // Concurrent request with the same idempotency key → return that payout.
       if (rpcErr.code === '23505' && idemKey) {
         const { data: prior } = await db.from('reseller_payouts').select('*').eq('idempotency_key', idemKey).maybeSingle()
@@ -140,11 +172,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       console.error('[payouts] reseller_record_payout failed (is migration 028 applied?):', rpcErr.message)
       return res.status(500).json({ error: 'Failed to record payout' })
     }
-    if (!payoutId) {
+    if (!resolvedPayoutId) {
       return res.status(400).json({ error: `Amount exceeds the pending balance ($${Number(rp.balance_pending || 0).toFixed(2)})` })
     }
 
-    const { data: payout } = await db.from('reseller_payouts').select('*').eq('id', payoutId as string).single()
+    const { data: payout } = await db.from('reseller_payouts').select('*').eq('id', resolvedPayoutId as string).single()
 
     await db.from('notifications').insert({
       user_id: reseller_id,
@@ -155,7 +187,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })
 
     await logAction({
-      userId: admin.userId, action: 'admin_record_payout', resource: 'reseller_payout', resourceId: String(payoutId),
+      userId: admin.userId, action: 'admin_record_payout', resource: 'reseller_payout', resourceId: String(resolvedPayoutId),
       details: { reseller_id, amount, method: payMethod, idempotency_key: idemKey },
       ipAddress: getClientIp(req),
     })

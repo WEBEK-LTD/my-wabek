@@ -128,10 +128,13 @@ export async function authenticateApiKey(
   return lookupApiKey(legacy)
 }
 
+const _apiLogAt = new Map<string, number>()
+
 /**
  * Plan gate for the integration API (/api/v1, /api/gateway): the account's
  * plan must have `allow_api_access`. Platform admins and dashboard (JWT)
- * calls are not gated. API_ACCESS_MODE=log only logs (rollout switch).
+ * calls are not gated. Only enforced with API_ACCESS_MODE=enforce; the
+ * default is log-only (rollout switch).
  */
 export async function apiPlanAllowed(auth: ApiKeyAuth): Promise<boolean> {
   if (auth.via === 'jwt') return true
@@ -142,8 +145,16 @@ export async function apiPlanAllowed(auth: ApiKeyAuth): Promise<boolean> {
   } catch { /* fall through to the plan check */ }
   const { checkPlanFeature } = await import('./middleware')
   const ok = await checkPlanFeature(auth.userId, 'allow_api_access')
-  if (!ok && process.env.API_ACCESS_MODE === 'log') {
-    console.warn(`[api-key] user ${auth.userId} has no allow_api_access on its plan — not blocking (API_ACCESS_MODE=log)`)
+  // Rollout switch: LOG-ONLY unless API_ACCESS_MODE=enforce, so existing
+  // integrations (WordPress / WHMCS plugins, Zapier, custom code) keep working
+  // on the day this ships.
+  if (!ok && process.env.API_ACCESS_MODE !== 'enforce') {
+    const now = Date.now()
+    if ((_apiLogAt.get(auth.userId) || 0) < now - 60 * 60 * 1000) {
+      _apiLogAt.set(auth.userId, now)
+      if (_apiLogAt.size > 5000) _apiLogAt.clear()
+      console.warn(`[api-key] user ${auth.userId} has no allow_api_access on its plan — not blocking (API_ACCESS_MODE is not 'enforce')`)
+    }
     return true
   }
   return ok

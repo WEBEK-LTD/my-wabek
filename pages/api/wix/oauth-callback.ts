@@ -22,7 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     APP_SECRET = requireEnv('WIX_APP_SECRET')
   } catch (e) {
     console.error('[Wix OAuth]', (e as Error).message)
-    return res.status(500).json({ error: 'Wix app is not configured' })
+    return res.status(503).json({ error: 'Wix app not configured', code: 'wix_not_configured' })
   }
 
   try {

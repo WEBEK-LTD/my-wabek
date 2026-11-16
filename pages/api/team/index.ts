@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuth } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { isMissingDbObject } from '@/lib/db-compat'
 import { v4 as uuidv4 } from 'uuid'
 import crypto from 'crypto'
 
@@ -91,7 +92,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     let { data, error } = await db.from('team_members').insert(row)
       .select('id, owner_id, user_id, name, email, role, status, created_at').single()
-    if (error && /invite_expires_at/i.test(error.message || '')) {
+    if (error && (isMissingDbObject(error) || /invite_expires_at/i.test(error.message || ''))) {
       // Migration 027 not applied yet — expiry falls back to invited_at/created_at + 7 days.
       delete row.invite_expires_at
       ;({ data, error } = await db.from('team_members').insert(row)

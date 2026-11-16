@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { verifyWixInstance, getWixInstanceParam, getLinkedUserId } from '@/lib/wix-auth'
+import { verifyWixInstance, getWixInstanceParam, getLinkedUserId, wixAppConfigured } from '@/lib/wix-auth'
 import { createMetaOAuthState } from '@/lib/meta-oauth'
 import { checkInstanceCreateAllowed } from '@/lib/wa-smart-send'
 
@@ -11,6 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
   const instanceParam = getWixInstanceParam(req) || (typeof req.query.wix_instance === 'string' ? req.query.wix_instance : null)
+  if (!wixAppConfigured(res)) return
   const wix = verifyWixInstance(instanceParam)
   if (!wix || !instanceParam) return res.status(401).json({ error: 'Invalid or expired Wix session. Please reopen the app from your Wix dashboard.' })
   const userId = await getLinkedUserId(wix.instanceId)

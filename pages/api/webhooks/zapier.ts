@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { isMissingDbObject } from '@/lib/db-compat'
 import { assertPublicUrl } from '@/lib/security'
 import {
   WEBHOOK_EVENTS, isWebhookEvent, generateWebhookSecret, invalidateWebhookCache, sendTestWebhook,
@@ -85,7 +86,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     let { data, error } = await db.from('zapier_hooks').insert({ ...row, secret }).select(PUBLIC_FIELDS).single()
     let signed = true
-    if (error && /secret/i.test(error.message || '')) {
+    if (error && (isMissingDbObject(error) || /secret/i.test(error.message || ''))) {
       // Migration 032 not applied yet: hook works, unsigned until it is.
       ;({ data, error } = await db.from('zapier_hooks').insert(row).select(PUBLIC_FIELDS).single())
       signed = false

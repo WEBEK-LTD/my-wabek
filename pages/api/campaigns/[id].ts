@@ -6,7 +6,7 @@ import { isCronRequest } from '@/lib/security'
 import { smartSend, smartSendWAWeb, TEMPLATES, resolveProvider } from '@/lib/wa-smart-send'
 import { notifyCampaignComplete } from '@/lib/notifications'
 import { applyCampaignFilter, CampaignContactFilter } from '@/lib/segments'
-import { parseScheduledAt, userTimeZone, personalize, cleanTemplateParam, buildTemplateBodyParams, campaignTemplateFields } from '@/lib/campaign-templates'
+import { parseScheduledAt, userTimeZone, personalize, cleanTemplateParam, buildTemplateBodyParams, campaignTemplateFields, withTemplateFields, writeCampaignCompat } from '@/lib/campaign-templates'
 import { emitWebhookEvent } from '@/lib/outgoing-webhooks'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -56,7 +56,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(403).json({ error: 'Forbidden' })
     }
     const { data } = await db.from('campaigns').select('*').eq('id', id).maybeSingle()
-    campaign = data
+    campaign = withTemplateFields(data)
     if (!campaign) return res.status(404).json({ error: 'Campaign not found' })
     userId = campaign.user_id
   } else {
@@ -64,7 +64,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!authed) return
     userId = authed.userId
     const { data } = await db.from('campaigns').select('*').eq('id', id).eq('user_id', userId).maybeSingle()
-    campaign = data
+    campaign = withTemplateFields(data)
     if (!campaign) return res.status(404).json({ error: 'Campaign not found' })
   }
 
@@ -93,7 +93,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (b.template_param_names !== undefined) nextMeta.template_param_names = b.template_param_names?.length ? b.template_param_names : undefined
     if (b.template_variables !== undefined) nextMeta.template_variables_explicit = Array.isArray(b.template_variables) || undefined
 
-    const { data, error } = await db.from('campaigns').update({
+    const { data, error } = await writeCampaignCompat({
       name: b.name, message: b.message, media_url: b.media_url, scheduled_at: scheduledAt,
       delay_seconds: b.delay_seconds,
       ...(b.instance_id ? { instance_id: b.instance_id } : {}),
@@ -102,13 +102,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ...(b.template_variables !== undefined ? { template_variables: b.template_variables ?? null } : {}),
       meta: JSON.parse(JSON.stringify(nextMeta)),
       updated_at: new Date().toISOString(),
-    }).eq('id', id).eq('user_id', userId).in('status', ['draft', 'scheduled']).select().maybeSingle()
+    }, row => db.from('campaigns').update(row).eq('id', id).eq('user_id', userId).in('status', ['draft', 'scheduled']).select().maybeSingle())
     if (error) {
       console.error('[Campaign] update error:', error.message)
       return res.status(500).json({ error: 'Failed to update campaign' })
     }
     if (!data) return res.status(409).json({ error: 'Cannot edit running campaign' })
-    return res.status(200).json({ campaign: data })
+    return res.status(200).json({ campaign: withTemplateFields(data) })
   }
 
   if (req.method === 'POST') {

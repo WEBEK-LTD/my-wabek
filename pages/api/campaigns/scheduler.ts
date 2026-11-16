@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
-import { requireCron } from '@/lib/security'
+import { requireCron, getCronSecret } from '@/lib/security'
 import { retryWebhookDeliveries } from '@/lib/outgoing-webhooks'
 
 // Called every minute by netlify/functions/campaign-runner.mts:
@@ -48,7 +48,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.URL || 'https://waabek.com'
-  const cronSecret = process.env.CRON_SECRET as string // requireCron guarantees it is set
+  const cronSecret = getCronSecret() as string // requireCron guarantees it is set (CRON_SECRET or derived)
 
   const outcomes = await Promise.all(campaigns.map(async (campaign) => {
     const ctrl = new AbortController()

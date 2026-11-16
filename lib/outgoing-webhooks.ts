@@ -24,6 +24,7 @@ import { createHmac, randomBytes } from 'crypto'
 import { v4 as uuidv4 } from 'uuid'
 import { supabaseAdmin } from './supabase'
 import { safeFetch } from './security'
+import { isMissingDbObject, warnMissingOnce } from './db-compat'
 
 export const WEBHOOK_EVENTS = [
   'message_received',
@@ -61,8 +62,34 @@ interface HookRow {
   id: string
   user_id: string
   target_url: string
-  secret: string | null
+  secret?: string | null
   trigger_count?: number | null
+  /** zapier_hooks.secret does not exist yet (pre-032): deliver unsigned. */
+  noSecretColumn?: boolean
+}
+
+// Migration 032 adds zapier_hooks.secret / last_status / last_error /
+// failure_count and webhook_deliveries. Until it has run, hooks are
+// selected without the new columns and delivered unsigned (previous
+// behaviour), outcomes are recorded with the legacy columns only, and failed
+// deliveries are not queued for retry.
+let _hooksLegacySchema = false
+
+type HookQuery = (columns: string) => PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }>
+
+async function selectHooks(base: string, run: HookQuery): Promise<{ data: unknown; error: { message: string } | null; legacy: boolean }> {
+  if (!_hooksLegacySchema) {
+    const r = await run(`${base}, secret`)
+    if (!r.error || !isMissingDbObject(r.error)) return { ...r, legacy: false }
+    warnMissingOnce('zapier_hooks.secret (webhooks delivered unsigned)', r.error)
+    _hooksLegacySchema = true
+  }
+  const r = await run(base)
+  return { ...r, legacy: true }
+}
+
+function markLegacy(rows: HookRow[], legacy: boolean): HookRow[] {
+  return legacy ? rows.map(r => ({ ...r, noSecretColumn: true })) : rows
 }
 
 // Per-instance cache of "which events does this tenant subscribe to", so
@@ -88,7 +115,8 @@ async function subscribedEvents(userId: string): Promise<Set<string>> {
   return events
 }
 
-async function ensureSecret(hook: HookRow): Promise<string> {
+async function ensureSecret(hook: HookRow): Promise<string | null> {
+  if (hook.noSecretColumn) return null
   if (hook.secret) return hook.secret
   // Hooks created before signing existed: generate one now (the owner can
   // reveal it by rotating the secret in Integrations).
@@ -111,7 +139,7 @@ async function deliver(hook: HookRow, event: string, deliveryId: string, body: s
         'X-WABEK-Event': event,
         'X-WABEK-Delivery': deliveryId,
         'X-WABEK-Timestamp': timestamp,
-        'X-WABEK-Signature': `sha256=${signWebhookBody(secret, timestamp, body)}`,
+        ...(secret ? { 'X-WABEK-Signature': `sha256=${signWebhookBody(secret, timestamp, body)}` } : {}),
       },
       body,
       timeoutMs: DELIVERY_TIMEOUT_MS,
@@ -130,25 +158,33 @@ async function recordOutcome(hook: HookRow, outcome: { ok: boolean; status?: num
   const db = supabaseAdmin()
   try {
     if (outcome.ok) {
-      await db.from('zapier_hooks').update({
-        last_triggered_at: new Date().toISOString(),
-        trigger_count: (hook.trigger_count || 0) + 1,
+      const legacy = { last_triggered_at: new Date().toISOString(), trigger_count: (hook.trigger_count || 0) + 1 }
+      const { error } = await db.from('zapier_hooks').update({
+        ...legacy,
         last_status: outcome.status ?? null,
         last_error: null,
       }).eq('id', hook.id)
+      // last_status / last_error from 032 missing → keep the legacy counters.
+      if (error && isMissingDbObject(error)) {
+        warnMissingOnce('zapier_hooks.last_status/last_error', error)
+        await db.from('zapier_hooks').update(legacy).eq('id', hook.id)
+      }
     } else {
-      await db.from('zapier_hooks').update({
+      const { error } = await db.from('zapier_hooks').update({
         last_status: outcome.status ?? null,
         last_error: outcome.error || null,
       }).eq('id', hook.id)
+      if (error && isMissingDbObject(error)) warnMissingOnce('zapier_hooks.last_status/last_error', error)
     }
-  } catch { /* columns from 032 may be missing — non-critical */ }
+  } catch { /* non-critical */ }
 }
 
 function nextAttemptAt(attemptsMade: number): string {
   const mins = BACKOFF_MINUTES[Math.min(attemptsMade - 1, BACKOFF_MINUTES.length - 1)] || 60
   return new Date(Date.now() + mins * 60_000).toISOString()
 }
+
+let _deliveriesMissing = false
 
 /**
  * Send `event` to every active subscription of `userId`. Resolves when every
@@ -161,27 +197,32 @@ export async function emitWebhookEvent(userId: string | null | undefined, event:
     if (!events.has(event)) return
 
     const db = supabaseAdmin()
-    const { data: hooks, error } = await db.from('zapier_hooks')
-      .select('id, user_id, target_url, secret, trigger_count')
+    const sel = await selectHooks('id, user_id, target_url, trigger_count', cols => db.from('zapier_hooks')
+      .select(cols)
       .eq('user_id', userId).eq('event', event).eq('is_active', true)
-      .limit(MAX_HOOKS_PER_EVENT)
-    if (error || !hooks?.length) return
+      .limit(MAX_HOOKS_PER_EVENT))
+    if (sel.error) return
+    const hooks = markLegacy((sel.data as HookRow[] | null) || [], sel.legacy)
+    if (!hooks.length) return
 
     const payload = { event, created_at: new Date().toISOString(), data }
     const body = JSON.stringify(payload)
 
-    await Promise.allSettled((hooks as HookRow[]).map(async hook => {
+    await Promise.allSettled(hooks.map(async hook => {
       const deliveryId = uuidv4()
       const outcome = await deliver(hook, event, deliveryId, body)
       await recordOutcome(hook, outcome)
-      if (!outcome.ok) {
+      if (!outcome.ok && !_deliveriesMissing) {
         const { error: insErr } = await db.from('webhook_deliveries').insert({
           id: deliveryId, user_id: userId, hook_id: hook.id, event, payload,
           status: 'pending', attempts: 1,
           last_status: outcome.status ?? null, last_error: outcome.error || null,
           next_attempt_at: nextAttemptAt(1),
         })
-        if (insErr) console.error('[webhooks] could not queue retry (is migration 032 applied?):', insErr.message)
+        if (insErr) {
+          if (isMissingDbObject(insErr)) { _deliveriesMissing = true; warnMissingOnce('webhook_deliveries (no retries)', insErr) }
+          else console.error('[webhooks] could not queue retry:', insErr.message)
+        }
       }
     }))
   } catch (e) {
@@ -191,10 +232,13 @@ export async function emitWebhookEvent(userId: string | null | undefined, event:
 
 /** Send a signed test payload to one subscription (Integrations → Test). */
 export async function sendTestWebhook(hookId: string, userId: string): Promise<{ ok: boolean; status?: number; error?: string }> {
-  const { data: hook } = await supabaseAdmin().from('zapier_hooks')
-    .select('id, user_id, target_url, secret, trigger_count, event')
-    .eq('id', hookId).eq('user_id', userId).maybeSingle()
-  if (!hook) return { ok: false, error: 'Webhook not found' }
+  const db = supabaseAdmin()
+  const sel = await selectHooks('id, user_id, target_url, trigger_count, event', cols => db.from('zapier_hooks')
+    .select(cols)
+    .eq('id', hookId).eq('user_id', userId).maybeSingle())
+  const found = sel.data as (HookRow & { event: string }) | null
+  if (!found) return { ok: false, error: 'Webhook not found' }
+  const hook = sel.legacy ? { ...found, noSecretColumn: true } : found
   const body = JSON.stringify({
     event: hook.event,
     created_at: new Date().toISOString(),
@@ -213,7 +257,11 @@ export async function retryWebhookDeliveries(limit = 50): Promise<{ retried: num
     .lte('next_attempt_at', new Date().toISOString())
     .order('next_attempt_at', { ascending: true })
     .limit(limit)
-  if (error || !due?.length) return { retried: 0, delivered: 0 }
+  if (error) {
+    if (isMissingDbObject(error)) warnMissingOnce('webhook_deliveries (no retries)', error)
+    return { retried: 0, delivered: 0 }
+  }
+  if (!due?.length) return { retried: 0, delivered: 0 }
 
   // Claim the batch so an overlapping cron run does not pick it up too
   await db.from('webhook_deliveries')
@@ -222,9 +270,11 @@ export async function retryWebhookDeliveries(limit = 50): Promise<{ retried: num
 
   let delivered = 0
   await Promise.allSettled(due.map(async row => {
-    const { data: hook } = await db.from('zapier_hooks')
-      .select('id, user_id, target_url, secret, trigger_count, is_active')
-      .eq('id', row.hook_id).maybeSingle()
+    const sel = await selectHooks('id, user_id, target_url, trigger_count, is_active', cols => db.from('zapier_hooks')
+      .select(cols)
+      .eq('id', row.hook_id).maybeSingle())
+    const found = sel.data as (HookRow & { is_active?: boolean | null }) | null
+    const hook = found && sel.legacy ? { ...found, noSecretColumn: true } : found
     if (!hook || hook.is_active === false) {
       await db.from('webhook_deliveries').update({ status: 'failed', last_error: 'Webhook removed or disabled' }).eq('id', row.id)
       return

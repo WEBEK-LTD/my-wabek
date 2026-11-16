@@ -1,5 +1,6 @@
 import Stripe from 'stripe'
 import { supabaseAdmin } from './supabase'
+import { isMissingDbObject, warnMissingOnce } from './db-compat'
 
 type DB = ReturnType<typeof supabaseAdmin>
 export type BillingCycle = 'monthly' | 'yearly'
@@ -191,7 +192,10 @@ async function claimEvent(db: DB, id: string): Promise<'claimed' | 'duplicate' |
   const { error } = await db.from('processed_stripe_events').insert({ id })
   if (!error) return 'claimed'
   if (error.code === '23505') return 'duplicate'
-  console.error('[stripe] processed_stripe_events unavailable (apply migration 028):', error.message)
+  // Missing table (migration 027/028 not applied) or a transient error:
+  // process the event normally, without the dedupe claim.
+  if (isMissingDbObject(error)) warnMissingOnce('processed_stripe_events', error)
+  else console.error('[stripe] processed_stripe_events unavailable:', error.message)
   return 'unavailable'
 }
 
@@ -221,18 +225,19 @@ async function processEvent(db: DB, event: Stripe.Event, idempotent: boolean): P
       const synced = await syncSubscription(stripe, db, sub, userId)
 
       if (invoice.amount_paid > 0 && synced?.planId) {
-        if (!idempotent) {
-          console.error(`[stripe] ${event.id}: skipping reseller earning — idempotency table unavailable`)
-        } else {
-          await trackResellerEarning(db, {
-            userId,
-            fallbackResellerId: sub.metadata?.resellerId || null,
-            planId: synced.planId,
-            cycle: synced.cycle,
-            amountCents: invoice.amount_paid,
-            paymentRef: invoice.id,
-          })
-        }
+        // Without the processed_stripe_events claim (`idempotent` false,
+        // migration 027/028 not applied), recordResellerEarning still skips
+        // an invoice it already recorded (payment_ref lookup), so a Stripe
+        // retry cannot credit twice.
+        if (!idempotent) console.warn(`[stripe] ${event.id}: no event claim — relying on the payment_ref check for the reseller earning`)
+        await trackResellerEarning(db, {
+          userId,
+          fallbackResellerId: sub.metadata?.resellerId || null,
+          planId: synced.planId,
+          cycle: synced.cycle,
+          amountCents: invoice.amount_paid,
+          paymentRef: invoice.id,
+        })
       }
       return
     }
@@ -396,6 +401,12 @@ type SubscriptionRow = {
 export async function upsertSubscriptionRow(db: DB, row: SubscriptionRow): Promise<void> {
   const { error } = await db.from('subscriptions').upsert(row, { onConflict: 'user_id' })
   if (!error) return
+  // Pre-028 001 schema: the status CHECK has no 'paused'. Store it as
+  // past_due (closest pre-028 state); the user's plan update is unaffected.
+  if (error.code === '23514' && row.status === 'paused') {
+    warnMissingOnce("subscriptions.status 'paused'", error)
+    return upsertSubscriptionRow(db, { ...row, status: 'past_due' })
+  }
   if (error.code !== '42P10' && !/unique or exclusion constraint/i.test(error.message)) {
     throw new Error(`subscriptions upsert failed: ${error.message}`)
   }
@@ -454,6 +465,13 @@ export async function recordResellerEarning(db: DB, p: {
     const resellerEarning = round2(Math.max(0, grossAmount - platformFee))
     if (resellerEarning <= 0) return
 
+    // Application-level dedupe (the unique index from 028 may not exist yet).
+    if (p.paymentRef) {
+      const { data: already } = await db.from('reseller_earnings').select('id')
+        .eq('reseller_id', resellerId).eq('payment_ref', p.paymentRef).limit(1)
+      if (already?.length) return
+    }
+
     const { error: insErr } = await db.from('reseller_earnings').insert({
       reseller_id: resellerId,
       referred_user_id: p.userId,
@@ -472,7 +490,8 @@ export async function recordResellerEarning(db: DB, p: {
       p_user: resellerId, p_amount: resellerEarning, p_referred: p.userId,
     })
     if (rpcErr) {
-      console.error('[stripe] reseller_add_earning failed (apply migration 028):', rpcErr.message)
+      if (isMissingDbObject(rpcErr)) warnMissingOnce('reseller_add_earning()', rpcErr)
+      else console.error('[stripe] reseller_add_earning failed:', rpcErr.message)
       // Pre-028 fallback (non-atomic) so balances still move.
       const { data: bal } = await db.from('reseller_profiles')
         .select('balance_pending, balance_total').eq('user_id', resellerId).maybeSingle()

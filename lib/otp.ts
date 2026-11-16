@@ -3,6 +3,7 @@ import { supabaseAdmin } from './supabase'
 import { sendOtpTemplate } from './otp-template'
 import { createHash } from 'crypto'
 import { randomDigits, safeEqual } from './security'
+import { isMissingDbObject, warnMissingOnce } from './db-compat'
 
 export const MAX_OTP_ATTEMPTS = 5
 
@@ -152,7 +153,10 @@ export async function verifyOTP(params: {
   }
   if (!safeEqual(otpHash, data.otp_hash)) {
     const next = attempts + 1
-    await db.from('otp_codes').update({ attempts: next, ...(next >= MAX_OTP_ATTEMPTS ? { is_used: true } : {}) }).eq('id', params.otpId)
+    const { error: attErr } = await db.from('otp_codes').update({ attempts: next, ...(next >= MAX_OTP_ATTEMPTS ? { is_used: true } : {}) }).eq('id', params.otpId)
+    // Migration 027 not applied → no attempts column: verification still
+    // works, attempt counting is skipped (rate limits still apply).
+    if (attErr && isMissingDbObject(attErr)) warnMissingOnce('otp_codes.attempts', attErr)
     return { valid: false, reason: 'Invalid OTP' }
   }
 
@@ -223,7 +227,8 @@ export async function verifyPendingOtp(params: {
   const code = typeof params.otp === 'string' || typeof params.otp === 'number' ? String(params.otp).trim() : ''
   if (!/^\d{4,8}$/.test(code) || !safeEqual(sha256(code), rec.otp_hash)) {
     const next = attempts + 1
-    await db.from('otp_pending').update({ attempts: next, ...(next >= MAX_OTP_ATTEMPTS ? { is_used: true } : {}) }).eq('id', rec.id)
+    const { error: attErr } = await db.from('otp_pending').update({ attempts: next, ...(next >= MAX_OTP_ATTEMPTS ? { is_used: true } : {}) }).eq('id', rec.id)
+    if (attErr && isMissingDbObject(attErr)) warnMissingOnce('otp_pending.attempts', attErr)
     return { ok: false, error: next >= MAX_OTP_ATTEMPTS ? 'Too many attempts. Request a new code.' : 'Invalid verification code' }
   }
 

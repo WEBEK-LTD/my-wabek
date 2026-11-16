@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from './supabase'
+import { isMissingDbObject, warnMissingOnce } from './db-compat'
 
 // ── Rate Limiter ──────────────────────────────────────────────────────────────
 // Serverless-safe: Upstash Redis REST (if configured) → Supabase
@@ -49,12 +50,24 @@ async function upstashHit(key: string, max: number, windowSec: number): Promise<
   }
 }
 
+// When rate_limit_hit() / rate_limits (migration 027) do not exist yet, skip
+// the DB for a while instead of paying a failing round trip on every request.
+let _rlDbMissingUntil = 0
+
 async function supabaseHit(key: string, max: number, windowSec: number): Promise<boolean | null> {
+  if (_rlDbMissingUntil > Date.now()) return null
   try {
     const { data, error } = await supabaseAdmin().rpc('rate_limit_hit', {
       p_key: key, p_max: max, p_window_seconds: windowSec,
     })
-    if (error || typeof data !== 'boolean') return null
+    if (error) {
+      if (isMissingDbObject(error)) {
+        warnMissingOnce('rate_limit_hit()', error)
+        _rlDbMissingUntil = Date.now() + 5 * 60 * 1000
+      }
+      return null
+    }
+    if (typeof data !== 'boolean') return null
     return data
   } catch {
     return null
@@ -177,7 +190,8 @@ export function handleCors(req: NextApiRequest, res: NextApiResponse): boolean {
 // ── Plan Limit Check ──────────────────────────────────────────────────────────
 // Rules:
 //   -1  → unlimited (always allow)
-//    0  → none allowed (PLAN_LIMIT_ZERO=unlimited restores the old "always allow")
+//    0  → not set = unlimited (default); PLAN_LIMIT_ZERO=none → none allowed
+//         (sub_accounts: 0 → unlimited only if plan.allow_sub_accounts)
 //   >0  → hard limit (count and compare)
 //   no plan_id → allow (don't block users without a plan)
 export async function checkPlanLimit(
@@ -250,16 +264,17 @@ export async function checkPlanLimit(
     const limit = limitMap[type] ?? -1
 
     // -1 (or any negative) → unlimited.
-    //  0 → none allowed: this is how the Free plan blocks a feature
-    //      (migration 018 sets max_campaigns = 0). Sub-accounts keep their
-    //      rule: 0 + allow_sub_accounts = true → unlimited.
-    // Rollback switch: PLAN_LIMIT_ZERO=unlimited restores the old reading of
-    // 0 as "unlimited" for every type except sub-accounts.
+    //  0 → by default the PREVIOUS reading: "not set" = unlimited, so no
+    //      existing customer is cut off when this code ships. Set
+    //      PLAN_LIMIT_ZERO=none to make 0 mean "none allowed" (how the Free
+    //      plan is meant to block a feature: migration 018 sets
+    //      max_campaigns = 0). Sub-accounts keep their own rule regardless:
+    //      0 + allow_sub_accounts = true → unlimited, otherwise none.
     if (limit < 0) return ALLOW(limit)
     if (limit === 0) {
       if (type === 'sub_accounts') return plan.allow_sub_accounts === true ? ALLOW(-1) : BLOCK(0, 0)
-      if (process.env.PLAN_LIMIT_ZERO === 'unlimited') return ALLOW(limit)
-      return BLOCK(0, 0)
+      if (process.env.PLAN_LIMIT_ZERO === 'none') return BLOCK(0, 0)
+      return ALLOW(limit)
     }
 
     // 4. Count current usage

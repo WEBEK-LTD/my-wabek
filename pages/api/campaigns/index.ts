@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { requireMemberAccess } from '@/lib/auth'
 import { checkPlanLimit } from '@/lib/middleware'
 import { applyCampaignFilter } from '@/lib/segments'
-import { parseScheduledAt, campaignTemplateFields, resolveContactFilter, userTimeZone } from '@/lib/campaign-templates'
+import { parseScheduledAt, campaignTemplateFields, resolveContactFilter, userTimeZone, writeCampaignCompat, withTemplateFields } from '@/lib/campaign-templates'
 import { v4 as uuidv4 } from 'uuid'
 
 const createSchema = z.object({
@@ -36,7 +36,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       console.error('[campaigns] list error:', error.message)
       return res.status(500).json({ error: 'Failed to load campaigns' })
     }
-    return res.status(200).json({ campaigns: data })
+    return res.status(200).json({ campaigns: (data || []).map(c => withTemplateFields(c)) })
   }
 
   if (req.method === 'POST') {
@@ -77,7 +77,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { count } = await contactQuery
 
       const { segment_id: _sid, template_param_names, ...fields } = body
-      const { data, error } = await db.from('campaigns').insert({
+      const { data, error } = await writeCampaignCompat({
         id: uuidv4(),
         user_id: user.userId,
         ...fields,
@@ -97,13 +97,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           // An explicit (possibly empty) variables list: send exactly these
           ...(body.template_variables ? { template_variables_explicit: true } : {}),
         },
-      }).select().single()
+      }, row => db.from('campaigns').insert(row).select().single())
 
       if (error) {
         console.error('[campaigns] create error:', error.message)
         return res.status(500).json({ error: 'Failed to create campaign' })
       }
-      return res.status(201).json({ campaign: data })
+      return res.status(201).json({ campaign: withTemplateFields(data) })
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ error: 'Invalid data', details: err.errors })
       return res.status(500).json({ error: 'Failed to create campaign' })

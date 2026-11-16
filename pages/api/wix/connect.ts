@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
-import { verifyWixInstance, getWixInstanceParam, linkWixInstance } from '@/lib/wix-auth'
+import { verifyWixInstance, getWixInstanceParam, linkWixInstance, wixAppConfigured } from '@/lib/wix-auth'
 
 // WABEK user clicks "Connect Wix" → we save the link between user and Wix instance
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -38,6 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'POST') {
     // Proof of the store is a SIGNED Wix instance; a bare wix_instance_id is not accepted
+    if (!wixAppConfigured(res)) return
     const wix = verifyWixInstance(getWixInstanceParam(req))
     if (!wix) return res.status(400).json({ error: 'A valid Wix session is required. Please open the app from your Wix dashboard.' })
 

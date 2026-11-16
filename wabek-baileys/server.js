@@ -30,13 +30,23 @@ const dns      = require('dns').promises
 const net      = require('net')
 
 const PORT                = process.env.PORT              || 3001
-const SERVER_SECRET       = process.env.SERVER_SECRET
-// Refuse to run with no secret or the old placeholder: the API below can
-// read QR codes and send messages from every connected number.
-if (!SERVER_SECRET || SERVER_SECRET === 'change-this-secret') {
-  console.error('FATAL: SERVER_SECRET is missing or still "change-this-secret". Set a long random SERVER_SECRET (and the same value as WA_WEB_SERVER_SECRET on Netlify).')
-  process.exit(1)
+// The API below can read QR codes and send messages from every connected
+// number, so SERVER_SECRET must be a long random value. We deliberately do
+// NOT refuse to start without one: connected WhatsApp sessions must stay
+// online through a deploy. A missing value keeps the previous default
+// placeholder (so an existing WABEK deployment using it keeps working) and
+// is reported loudly at startup and every hour until it is fixed.
+const LEGACY_PLACEHOLDER_SECRET = 'change-this-secret'
+const SERVER_SECRET       = process.env.SERVER_SECRET || LEGACY_PLACEHOLDER_SECRET
+const SERVER_SECRET_WEAK  = !process.env.SERVER_SECRET || SERVER_SECRET === LEGACY_PLACEHOLDER_SECRET || SERVER_SECRET.length < 16
+function warnWeakServerSecret() {
+  if (!SERVER_SECRET_WEAK) return
+  console.error('⚠️  SECURITY WARNING: SERVER_SECRET is missing, too short, or still "change-this-secret". ' +
+    'Anyone who knows it can read QR codes and send messages. Set a long random SERVER_SECRET on Railway ' +
+    'and the SAME value as WA_WEB_SERVER_SECRET on Netlify, then redeploy both. (Sessions are not affected by the change.)')
 }
+warnWeakServerSecret()
+if (SERVER_SECRET_WEAK) setInterval(warnWeakServerSecret, 60 * 60 * 1000).unref()
 
 const app = express()
 app.disable('x-powered-by')
