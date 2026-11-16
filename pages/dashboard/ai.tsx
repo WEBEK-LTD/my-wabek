@@ -1,51 +1,97 @@
-// @ts-nocheck
-import DashboardLayout from '@/components/layout/DashboardLayout'
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { useMutation, useQuery, useQueryClient } from 'react-query'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import clsx from 'clsx'
-import { CpuChipIcon, BoltIcon, ChatBubbleLeftRightIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
+import {
+  AdjustmentsHorizontalIcon, BoltIcon, BookOpenIcon, ChatBubbleLeftRightIcon, ClockIcon, CpuChipIcon,
+  DevicePhoneMobileIcon, ExclamationTriangleIcon, HandRaisedIcon, InboxArrowDownIcon, SparklesIcon, PlusIcon,
+  CheckCircleIcon, ArrowLeftIcon,
+} from '@heroicons/react/24/outline'
+import DashboardLayout from '@/components/layout/DashboardLayout'
+import {
+  Badge, Button, Card, CardHeader, EmptyState, Field, Input, PageHeader, ProgressBar, Skeleton, StatCard, Switch, Textarea, cn, formatNumber,
+} from '@/components/ui'
+import { ChatPreview, ChatMessage } from '@/components/automation/ChatPreview'
+import { KeywordInput } from '@/components/automation/KeywordInput'
+import { LoadError } from '@/components/analytics/LoadError'
+import { apiError } from '@/components/analytics/format'
 
-const MODELS = [
-  { id: 'deepseek-v4-flash', label: 'WABEK AI', desc: 'Powered by WABEK AI' },
+/** Server-side cap (lib/ai-engine AI_MAX_TOKENS_CAP): larger values are clamped. */
+const MAX_TOKENS_CAP = 500
+const DEFAULT_ESCALATION = 'agent,human,انسان,موظف,بشري'
+
+interface Instance { id: string; display_name: string | null; phone_number: string | null; status: string; instance_type?: string; type?: string }
+interface AISetting {
+  instance_id: string; is_enabled: boolean; company_name: string | null; system_prompt: string | null; model: string | null
+  max_tokens: number | null; temperature: number | null; escalation_keywords: string | null
+}
+interface AIStats { total_replies?: number; replies_this_month?: number; limit?: number; used?: number; allowed?: boolean }
+interface FormState {
+  is_enabled: boolean; company_name: string; system_prompt: string; model: string; max_tokens: number; temperature: number; escalation_keywords: string
+}
+
+const DEFAULT_FORM: FormState = {
+  is_enabled: false, company_name: '', system_prompt: '', model: 'WABEK AI-v4-flash',
+  max_tokens: 300, temperature: 0.7, escalation_keywords: DEFAULT_ESCALATION,
+}
+
+const SNIPPETS = [
+  { label: 'المنتجات والخدمات', text: 'المنتجات والخدمات:\n- ' },
+  { label: 'الأسعار', text: 'الأسعار:\n- ' },
+  { label: 'الشحن والتوصيل', text: 'الشحن والتوصيل:\n- ' },
+  { label: 'الاسترجاع', text: 'سياسة الاسترجاع:\n- ' },
+  { label: 'أسلوب الرد', text: 'أسلوب الرد: ودود ومهني ومختصر (ثلاث جمل على الأكثر).' },
+  { label: 'اللغة', text: 'اللغة: أجب دائمًا بلغة العميل نفسها.' },
 ]
+
+const DAYS = [
+  { id: 'sat', label: 'السبت' }, { id: 'sun', label: 'الأحد' }, { id: 'mon', label: 'الاثنين' }, { id: 'tue', label: 'الثلاثاء' },
+  { id: 'wed', label: 'الأربعاء' }, { id: 'thu', label: 'الخميس' }, { id: 'fri', label: 'الجمعة' },
+]
+
+function tempLabel(t: number) {
+  if (t <= 0.35) return 'دقيق ومتسق'
+  if (t <= 0.8) return 'متوازن وطبيعي'
+  return 'إبداعي ومتنوّع'
+}
+
+function SectionCard({ icon, title, subtitle, children }: { icon: React.ElementType; title: string; subtitle?: string; children: React.ReactNode }) {
+  return (
+    <Card padding="lg" as="section">
+      <CardHeader className="!p-0" icon={icon} title={title} subtitle={subtitle} />
+      <div className="mt-5 flex flex-col gap-4">{children}</div>
+    </Card>
+  )
+}
 
 export default function AISettingsPage() {
   const qc = useQueryClient()
   const [selectedInstance, setSelectedInstance] = useState('')
+  const [form, setForm] = useState<FormState>(DEFAULT_FORM)
+  const [dirty, setDirty] = useState(false)
   const [testMsg, setTestMsg] = useState('')
-  const [testResult, setTestResult] = useState(null)
+  const [chat, setChat] = useState<ChatMessage[]>([])
   const [testing, setTesting] = useState(false)
-  const [form, setForm] = useState({
-    is_enabled: false,
-    company_name: '',
-    system_prompt: '',
-    model: 'WABEK AI-v4-flash',
-    max_tokens: 300,
-    temperature: 0.7,
-    escalation_keywords: 'agent,human,انسان,موظف,بشري',
-  })
+  const [hours, setHours] = useState({ days: ['sun', 'mon', 'tue', 'wed', 'thu'], from: '09:00', to: '17:00' })
 
-  const { data: instData } = useQuery('instances',
-    () => axios.get('/api/whatsapp/instances').then(r => r.data)
-  )
-  const { data: aiData } = useQuery('ai-settings',
-    () => axios.get('/api/ai/settings').then(r => r.data)
-  )
-  const { data: statsData, refetch: refetchStats } = useQuery('ai-stats',
-    () => axios.get('/api/ai/stats').then(r => r.data)
-  )
+  const { data: instData, isLoading: instLoading, isError: instError, refetch: refetchInst } = useQuery<{ instances: Instance[] }>('instances', () => axios.get('/api/whatsapp/instances').then(r => r.data))
+  const { data: aiData } = useQuery<{ settings: AISetting[] }>('ai-settings', () => axios.get('/api/ai/settings').then(r => r.data))
+  const { data: statsData, isLoading: statsLoading, refetch: refetchStats } = useQuery<AIStats>('ai-stats', () => axios.get('/api/ai/stats').then(r => r.data))
 
   const instances = instData?.instances || []
   const aiSettings = aiData?.settings || []
   const stats = statsData || {}
+  const limit = stats.limit ?? 0
+  const planOk = limit === -1 || (limit > 0 && !!stats.allowed)
+  const usagePct = limit > 0 ? Math.round(((stats.replies_this_month || 0) / limit) * 100) : 0
+  const activeCount = aiSettings.filter(s => s.is_enabled).length
+  const current = instances.find(i => i.id === selectedInstance)
 
-  const planOk = stats.limit === -1 || (stats.limit > 0 && stats.allowed)
+  const set = <K extends keyof FormState>(k: K, v: FormState[K]) => { setForm(f => ({ ...f, [k]: v })); setDirty(true) }
 
-  const loadInstance = (instanceId) => {
+  const loadInstance = (instanceId: string) => {
     setSelectedInstance(instanceId)
-    setTestResult(null)
+    setChat([]); setDirty(false)
     const existing = aiSettings.find(s => s.instance_id === instanceId)
     if (existing) {
       setForm({
@@ -53,16 +99,12 @@ export default function AISettingsPage() {
         company_name: existing.company_name || '',
         system_prompt: existing.system_prompt || '',
         model: existing.model || 'WABEK AI-v4-flash',
-        max_tokens: existing.max_tokens || 300,
+        max_tokens: Math.min(existing.max_tokens || 300, MAX_TOKENS_CAP),
         temperature: existing.temperature ?? 0.7,
-        escalation_keywords: existing.escalation_keywords || 'agent,human,انسان,موظف,بشري',
+        escalation_keywords: existing.escalation_keywords || DEFAULT_ESCALATION,
       })
     } else {
-      setForm({
-        is_enabled: false, company_name: '', system_prompt: '',
-        model: 'WABEK AI-v4-flash', max_tokens: 300, temperature: 0.7,
-        escalation_keywords: 'agent,human,انسان,موظف,بشري',
-      })
+      setForm(DEFAULT_FORM)
     }
   }
 
@@ -72,287 +114,253 @@ export default function AISettingsPage() {
       onSuccess: () => {
         qc.invalidateQueries('ai-settings')
         refetchStats()
-        toast.success('AI settings saved ✅')
+        setDirty(false)
+        toast.success('حُفظت إعدادات المساعد')
       },
-      onError: (e) => toast.error(e?.response?.data?.error || 'Failed to save'),
-    }
+      onError: (e: unknown) => { toast.error(apiError(e, 'تعذّر الحفظ')) },
+    },
   )
 
+  const escalationWords = form.escalation_keywords.split(',').map(k => k.trim()).filter(Boolean)
+
   const runTest = async () => {
-    if (!testMsg.trim() || !selectedInstance) return
+    const msg = testMsg.trim()
+    if (!msg || !selectedInstance) return
+    setTestMsg('')
+    setChat(c => [...c, { role: 'user', text: msg }])
+    // Same check the live engine runs before calling the model.
+    const hit = escalationWords.find(k => msg.toLowerCase().includes(k.toLowerCase()))
+    if (hit) {
+      setChat(c => [...c, { role: 'bot', text: 'يتوقف المساعد هنا ويُبلغ فريقك ليتولّى المحادثة.', meta: `كلمة تصعيد: «${hit}»` }])
+      return
+    }
     setTesting(true)
-    setTestResult(null)
     try {
       const { data } = await axios.post('/api/ai/test', {
-        instance_id: selectedInstance,
-        message: testMsg,
-        system_prompt: form.system_prompt,
-        company_name: form.company_name,
-        model: form.model,
-        max_tokens: form.max_tokens,
-        temperature: form.temperature,
+        instance_id: selectedInstance, message: msg, system_prompt: form.system_prompt, company_name: form.company_name,
+        model: form.model, max_tokens: form.max_tokens, temperature: form.temperature,
       })
-      setTestResult({ ok: true, reply: data.reply })
+      setChat(c => [...c, { role: 'bot', text: data.reply || '(لا يوجد رد)' }])
     } catch (e) {
-      setTestResult({ ok: false, error: e?.response?.data?.error || 'Failed' })
+      setChat(c => [...c, { role: 'bot', text: apiError(e, 'تعذّر الحصول على رد'), error: true }])
     }
     setTesting(false)
   }
 
-  const usagePct = stats.limit > 0 ? Math.round((stats.replies_this_month / stats.limit) * 100) : 0
+  const appendToPrompt = (text: string) => set('system_prompt', form.system_prompt.trim() ? `${form.system_prompt.trimEnd()}\n\n${text}` : text)
+
+  const hoursText = () => {
+    const days = DAYS.filter(d => hours.days.includes(d.id)).map(d => d.label).join('، ')
+    return `ساعات العمل: ${days || '—'} من ${hours.from} إلى ${hours.to}. خارج هذه الساعات أخبر العميل بأن الفريق سيرد عليه في أقرب وقت خلال ساعات العمل.`
+  }
 
   return (
     <DashboardLayout title="AI Auto-Reply">
-      <div className="max-w-3xl space-y-5">
+      <div className="flex flex-col gap-6">
+        <PageHeader
+          eyebrow="الأتمتة والذكاء الاصطناعي"
+          title="المساعد الذكي"
+          description="يرد المساعد على رسائل عملائك تلقائيًا بناءً على معلومات نشاطك، ويحوّل المحادثة إلى فريقك عند الحاجة."
+          actions={selectedInstance && (
+            <Button icon={CheckCircleIcon} loading={saveMut.isLoading} onClick={() => saveMut.mutate()}>حفظ الإعدادات</Button>
+          )}
+        />
 
-        {/* Plan warning */}
-        {!planOk && (
-          <div className="card border-yellow-800/50 bg-yellow-900/10">
-            <div className="flex items-start gap-3">
-              <ExclamationTriangleIcon className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold text-slate-900 text-sm">AI replies not available on your plan</p>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {stats.limit === 0
-                    ? 'Your current plan has 0 AI replies/month. Ask the admin to update your plan.'
-                    : `You've used all ${stats.limit} AI replies this month. Upgrade to get more.`}
-                </p>
-                <a href="/dashboard/billing" className="text-xs text-yellow-400 underline mt-1 inline-block">View Billing →</a>
-              </div>
+        {!statsLoading && !planOk && (
+          <div role="alert" className="flex flex-wrap items-start gap-3 rounded-card border border-warning/30 bg-warning-bg p-4">
+            <ExclamationTriangleIcon className="h-5 w-5 shrink-0 text-warning" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-warning">ردود المساعد غير متاحة حاليًا في باقتك</p>
+              <p className="mt-0.5 text-sm text-body">
+                {limit === 0 ? 'باقتك الحالية لا تتضمن ردودًا ذكية. يمكنك ضبط الإعدادات الآن وتفعيلها بعد الترقية.' : `استخدمت كل الردود المتاحة هذا الشهر (${formatNumber(limit)}). رقِّ باقتك للحصول على المزيد.`}
+              </p>
             </div>
+            <Button size="sm" variant="dark" href="/dashboard/billing">عرض الباقات</Button>
           </div>
         )}
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="stat-card border-blue-200/40">
-            <div className="flex items-center gap-2 mb-1">
-              <CpuChipIcon className="w-4 h-4 text-blue-600" />
-              <p className="text-xs text-slate-500">This Month</p>
-            </div>
-            <p className="text-2xl font-display font-bold text-slate-900">
-              {stats.replies_this_month || 0}
-              {stats.limit > 0 && <span className="text-sm text-slate-500 font-normal"> / {stats.limit}</span>}
-              {stats.limit === -1 && <span className="text-sm text-blue-600 font-normal"> / ∞</span>}
-            </p>
-            {stats.limit > 0 && (
-              <div className="mt-2 h-1.5 bg-[#F8FAFC] rounded-full overflow-hidden">
-                <div className="h-full rounded-full transition-all" style={{
-                  width: `${Math.min(usagePct, 100)}%`,
-                  background: usagePct > 85 ? '#EF4444' : usagePct > 60 ? '#F59E0B' : '#00D46A'
-                }} />
-              </div>
+        {/* Usage */}
+        <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+          <Card padding="md" className="flex flex-col gap-3">
+            <div className="flex items-center gap-2 text-[13px] text-muted"><CpuChipIcon className="h-[18px] w-[18px] text-brand-ink" aria-hidden="true" />ردود هذا الشهر</div>
+            {statsLoading ? <Skeleton className="h-8 w-32" /> : (
+              <p className="tabular text-[28px] font-bold leading-none text-ink">
+                {formatNumber(stats.replies_this_month || 0)}
+                {limit > 0 && <span className="ms-1 text-sm font-normal text-muted">/ {formatNumber(limit)}</span>}
+                {limit === -1 && <span className="ms-1 text-sm font-normal text-muted">/ غير محدود</span>}
+              </p>
             )}
-          </div>
-          <div className="stat-card">
-            <div className="flex items-center gap-2 mb-1">
-              <ChatBubbleLeftRightIcon className="w-4 h-4 text-blue-400" />
-              <p className="text-xs text-slate-500">Total Replies</p>
-            </div>
-            <p className="text-2xl font-display font-bold text-slate-900">{(stats.total_replies || 0).toLocaleString()}</p>
-          </div>
-          <div className="stat-card">
-            <div className="flex items-center gap-2 mb-1">
-              <BoltIcon className="w-4 h-4 text-yellow-400" />
-              <p className="text-xs text-slate-500">Active Instances</p>
-            </div>
-            <p className="text-2xl font-display font-bold text-slate-900">
-              {aiSettings.filter(s => s.is_enabled).length}
-            </p>
-          </div>
+            {limit > 0 && <ProgressBar value={Math.min(usagePct, 100)} tone={usagePct > 85 ? 'danger' : usagePct > 60 ? 'warning' : 'gradient'} aria-label={`استهلاك ${usagePct}%`} />}
+          </Card>
+          <StatCard loading={statsLoading} label="إجمالي الردود" value={formatNumber(stats.total_replies || 0)} icon={ChatBubbleLeftRightIcon} sub="منذ البداية" />
+          <StatCard label="أرقام مفعّل عليها المساعد" value={formatNumber(activeCount)} icon={BoltIcon} sub={`من ${formatNumber(instances.length)} رقم`} />
         </div>
 
         {/* How it works */}
-        <div className="card border-blue-200/30 bg-blue-50/5">
-          <h3 className="font-display font-semibold text-slate-900 mb-3">🤖 How AI Auto-Reply Works</h3>
-          <div className="grid grid-cols-3 gap-4 text-sm">
+        <Card variant="muted" padding="md">
+          <ol className="grid gap-4 sm:grid-cols-3">
             {[
-              { icon: '1️⃣', title: 'Message arrives',  desc: 'Customer sends WhatsApp message' },
-              { icon: '2️⃣', title: 'Chatbot first',    desc: 'If chatbot flow matches → it replies' },
-              { icon: '3️⃣', title: 'AI fallback',      desc: 'No chatbot match → WABEK AI replies' },
-            ].map(s => (
-              <div key={s.icon} className="text-center">
-                <div className="text-2xl mb-1">{s.icon}</div>
-                <p className="font-medium text-slate-900 text-xs">{s.title}</p>
-                <p className="text-slate-500 text-xs mt-0.5">{s.desc}</p>
-              </div>
+              { icon: InboxArrowDownIcon, title: 'تصل رسالة', desc: 'يرسل العميل رسالة على واتساب' },
+              { icon: SparklesIcon, title: 'الروبوت أولًا', desc: 'إن طابقت الرسالة مسار روبوت محادثة، يرد هو' },
+              { icon: CpuChipIcon, title: 'ثم المساعد الذكي', desc: 'إن لم يطابق أي مسار، يرد المساعد الذكي' },
+            ].map((s, i) => (
+              <li key={s.title} className="flex items-start gap-3">
+                <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-brand-ink shadow-sm">
+                  <s.icon className="h-5 w-5" aria-hidden="true" />
+                  <span className="absolute -end-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-brand-gradient text-2xs font-bold text-[#04282C]">{i + 1}</span>
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-ink">{s.title}</p>
+                  <p className="text-xs text-muted">{s.desc}</p>
+                </div>
+              </li>
             ))}
-          </div>
-        </div>
+          </ol>
+        </Card>
 
-        {/* Instance selector */}
-        <div className="card space-y-4">
-          <h3 className="font-display font-semibold text-slate-900">Select Instance</h3>
-          {instances.length === 0 ? (
-            <div className="text-center py-6">
-              <p className="text-slate-500 text-sm">No connected WhatsApp instances</p>
-              <a href="/dashboard/instances" className="text-xs text-blue-600 underline mt-1 inline-block">Connect one →</a>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {instances.map(inst => {
-                const s = aiSettings.find(a => a.instance_id === inst.id)
-                return (
-                  <button key={inst.id} onClick={() => loadInstance(inst.id)}
-                    className={clsx(
-                      'flex items-center gap-3 p-3 rounded-xl border text-left transition-all',
-                      selectedInstance === inst.id
-                        ? 'border-brand-500 bg-blue-50/20'
-                        : 'border-slate-200 hover:border-gray-600'
-                    )}>
-                    <div className={clsx('w-2.5 h-2.5 rounded-full flex-shrink-0',
-                      inst.status === 'connected' ? 'bg-green-400' : 'bg-slate-200')} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-900 truncate">{inst.display_name || inst.phone_number}</p>
-                      <p className="text-xs text-slate-500">
-                        {inst.phone_number} · {(inst.instance_type || inst.type) === 'wa_web' ? 'WA Web' : 'Cloud API'}
-                      </p>
-                    </div>
-                    {s?.is_enabled
-                      ? <span className="badge-green text-xs flex-shrink-0">🟢 AI On</span>
-                      : <span className="text-xs text-slate-600 flex-shrink-0">Off</span>
-                    }
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Settings form */}
-        {selectedInstance && (
-          <div className="card space-y-5">
-            {/* Toggle */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-display font-semibold text-slate-900">AI Settings</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Configure how AI replies to customers</p>
-              </div>
-              <button
-                onClick={() => setForm(f => ({ ...f, is_enabled: !f.is_enabled }))}
-                className={clsx('relative w-12 h-6 rounded-full transition-colors flex-shrink-0',
-                  form.is_enabled ? 'bg-brand-500' : 'bg-[#F8FAFC]')}>
-                <span className={clsx('absolute top-1 w-4 h-4 bg-white rounded-full transition-transform shadow',
-                  form.is_enabled ? 'translate-x-7' : 'translate-x-1')} />
-              </button>
-            </div>
-
-            {/* Status indicator */}
-            <div className={clsx('flex items-center gap-2 p-3 rounded-xl text-sm',
-              form.is_enabled ? 'bg-blue-50/20 border border-blue-200/40' : 'bg-[#F8FAFC]/50')}>
-              <div className={clsx('w-2 h-2 rounded-full', form.is_enabled ? 'bg-brand-400 animate-pulse' : 'bg-slate-200')} />
-              <span className={form.is_enabled ? 'text-blue-600' : 'text-slate-500'}>
-                {form.is_enabled ? 'AI will reply to incoming messages on this instance' : 'AI is disabled for this instance'}
-              </span>
-            </div>
-
-            {/* Company name */}
-            <div>
-              <label className="label">Company / Brand Name</label>
-              <input value={form.company_name}
-                onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))}
-                className="input" placeholder="Your Company Name" />
-            </div>
-
-            {/* System prompt */}
-            <div>
-              <label className="label">
-                System Prompt
-                <span className="text-slate-600 font-normal ml-1">(Tell AI about your business)</span>
-              </label>
-              <textarea value={form.system_prompt}
-                onChange={e => setForm(f => ({ ...f, system_prompt: e.target.value }))}
-                rows={7} className="input resize-none font-mono text-sm"
-                placeholder={`You are a helpful support assistant for [Company Name].
-
-- Products/services: hosting, domains, VPS servers
-- Pricing: Starter $9/mo, Pro $29/mo, Business $99/mo
-- Support hours: 9am–6pm UTC (Mon–Fri)
-- For billing issues: ask for their account email
-- For refunds: direct them to billing@company.com
-- Language: always reply in the same language the customer uses
-- Tone: friendly, professional, concise (max 3 sentences)`}
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                The more detail you provide, the better the AI responses.
-                Include your products, pricing, policies and tone.
-              </p>
-            </div>
-
-            {/* model fixed to WABEK AI */}
-
-            {/* Advanced */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="label">Max Reply Length (tokens)</label>
-                <input type="number" min={50} max={1000} step={50}
-                  value={form.max_tokens}
-                  onChange={e => setForm(f => ({ ...f, max_tokens: parseInt(e.target.value) || 300 }))}
-                  className="input" />
-                <p className="text-xs text-slate-500 mt-1">≈75 words per 100 tokens</p>
-              </div>
-              <div>
-                <label className="label">Temperature (0–1)</label>
-                <input type="number" min={0} max={1} step={0.1}
-                  value={form.temperature}
-                  onChange={e => setForm(f => ({ ...f, temperature: parseFloat(e.target.value) || 0.7 }))}
-                  className="input" />
-                <p className="text-xs text-slate-500 mt-1">0.3 precise · 0.7 natural</p>
-              </div>
-            </div>
-
-            {/* Escalation */}
-            <div>
-              <label className="label">Escalation Keywords (stop AI, notify you)</label>
-              <input value={form.escalation_keywords}
-                onChange={e => setForm(f => ({ ...f, escalation_keywords: e.target.value }))}
-                className="input font-mono text-sm"
-                placeholder="agent,human,انسان,موظف" />
-              <p className="text-xs text-slate-500 mt-1">
-                Customer says one of these → AI stops, you get a notification to take over
-              </p>
-            </div>
-
-            <button onClick={() => saveMut.mutate()} disabled={saveMut.isLoading}
-              className="btn-primary w-full justify-center">
-              {saveMut.isLoading ? 'Saving...' : '💾 Save AI Settings'}
-            </button>
-          </div>
-        )}
-
-        {/* Test AI */}
-        {selectedInstance && (
-          <div className="card space-y-3">
-            <h3 className="font-display font-semibold text-slate-900">🧪 Test AI Response</h3>
-            <p className="text-xs text-slate-500">Test how AI will respond — uses your current system prompt settings above</p>
-            <div className="flex gap-2">
-              <input value={testMsg}
-                onChange={e => setTestMsg(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && runTest()}
-                placeholder="e.g. What are your prices?"
-                className="input flex-1" />
-              <button onClick={runTest} disabled={testing || !testMsg.trim()}
-                className="btn-primary px-4 flex-shrink-0">
-                {testing ? '...' : 'Test'}
-              </button>
-            </div>
-            {testResult && (
-              <div className={clsx('p-3 rounded-xl text-sm', testResult.ok
-                ? 'bg-blue-50/20 border border-blue-200/40'
-                : 'bg-red-900/20 border border-red-800/40')}>
-                {testResult.ok ? (
-                  <>
-                    <p className="text-xs text-slate-500 mb-1">🧠 AI would reply:</p>
-                    <p className="text-slate-700 whitespace-pre-wrap">{testResult.reply}</p>
-                  </>
-                ) : (
-                  <p className="text-red-400">❌ {testResult.error}</p>
-                )}
+        {/* Instance picker */}
+        <Card padding="lg">
+          <CardHeader className="!p-0" icon={DevicePhoneMobileIcon} title="اختر رقم واتساب" subtitle="لكل رقم إعدادات مساعد مستقلة." />
+          <div className="mt-5">
+            {instError ? <LoadError size="sm" onRetry={() => refetchInst()} /> : instLoading ? (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1].map(i => <Skeleton key={i} className="h-[68px] w-full rounded-card" />)}</div>
+            ) : instances.length === 0 ? (
+              <EmptyState size="sm" icon={DevicePhoneMobileIcon} title="لا توجد أرقام متصلة" description="اربط رقم واتساب أولًا لتفعيل المساعد عليه."
+                action={<Button size="sm" icon={PlusIcon} href="/dashboard/instances">ربط رقم</Button>} />
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" role="radiogroup" aria-label="رقم واتساب">
+                {instances.map(inst => {
+                  const s = aiSettings.find(a => a.instance_id === inst.id)
+                  const active = selectedInstance === inst.id
+                  return (
+                    <button key={inst.id} type="button" role="radio" aria-checked={active} onClick={() => loadInstance(inst.id)}
+                      className={cn('flex items-center gap-3 rounded-card border p-3.5 text-start transition',
+                        active ? 'border-brand-teal bg-chip/50 shadow-ring' : 'border-line bg-surface hover:border-line-strong hover:shadow-card')}>
+                      <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', inst.status === 'connected' ? 'bg-success' : 'bg-line-strong')} aria-hidden="true" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-ink">{inst.display_name || inst.phone_number}</p>
+                        <p className="truncate text-xs text-muted"><span dir="ltr">{inst.phone_number}</span> · {(inst.instance_type || inst.type) === 'wa_web' ? 'WA Web' : 'Cloud API'}</p>
+                      </div>
+                      {s?.is_enabled ? <Badge tone="violet" dot>مفعّل</Badge> : <Badge tone="neutral">متوقف</Badge>}
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>
-        )}
+        </Card>
 
+        {selectedInstance && (
+          <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
+            <div className="flex flex-col gap-5">
+              <SectionCard icon={SparklesIcon} title="الحالة والهوية" subtitle={current ? `إعدادات ${current.display_name || current.phone_number}` : undefined}>
+                <Switch checked={form.is_enabled} onChange={v => set('is_enabled', v)}
+                  label="تفعيل الرد الآلي على هذا الرقم"
+                  description={form.is_enabled ? 'سيرد المساعد على الرسائل الواردة لهذا الرقم.' : 'المساعد متوقف على هذا الرقم.'} />
+                <Field label="اسم الشركة أو العلامة التجارية" hint="يُستخدم في التعريف بنفسه إذا تُركت التعليمات فارغة.">
+                  <Input value={form.company_name} maxLength={200} placeholder="اسم شركتك" onChange={e => set('company_name', e.target.value)} />
+                </Field>
+              </SectionCard>
+
+              <SectionCard icon={BookOpenIcon} title="المعرفة والتعليمات" subtitle="كل ما يحتاج المساعد معرفته عن نشاطك. كلما زادت التفاصيل تحسّنت الردود.">
+                <div className="flex flex-wrap gap-1.5" aria-label="إضافة قسم إلى التعليمات">
+                  {SNIPPETS.map(s => (
+                    <button key={s.label} type="button" onClick={() => appendToPrompt(s.text)}
+                      className="inline-flex h-7 items-center gap-1 rounded-full border border-line bg-surface px-2.5 text-xs font-medium text-muted transition hover:border-brand-teal hover:text-ink">
+                      <PlusIcon className="h-3.5 w-3.5" aria-hidden="true" />{s.label}
+                    </button>
+                  ))}
+                </div>
+                <Field label="تعليمات النظام" srOnlyLabel>
+                  <Textarea rows={10} maxLength={8000} showCount value={form.system_prompt} onChange={e => set('system_prompt', e.target.value)} className="text-[13px] leading-relaxed" dir="auto"
+                    placeholder={'أنت مساعد خدمة عملاء لشركة [اسم الشركة].\n\n- المنتجات والخدمات: …\n- الأسعار: …\n- ساعات الدعم: من الأحد إلى الخميس، 9 صباحًا – 5 مساءً\n- لمشكلات الفواتير: اطلب بريد الحساب\n- اللغة: أجب دائمًا بلغة العميل\n- الأسلوب: ودود ومهني ومختصر'} />
+                </Field>
+              </SectionCard>
+
+              <SectionCard icon={AdjustmentsHorizontalIcon} title="السلوك" subtitle="طول الرد ودرجة الإبداع.">
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <label htmlFor="ai-temp" className="text-sm font-medium text-ink">درجة الإبداع</label>
+                      <span className="tabular text-sm font-semibold text-ink">{form.temperature.toFixed(1)}</span>
+                    </div>
+                    <input id="ai-temp" type="range" min={0} max={1} step={0.1} value={form.temperature}
+                      onChange={e => set('temperature', parseFloat(e.target.value))} className="w-full accent-[#12B5BE]" aria-describedby="ai-temp-hint" />
+                    <p id="ai-temp-hint" className="mt-1.5 text-xs text-muted">{tempLabel(form.temperature)} · 0.3 للدقة، 0.7 للأسلوب الطبيعي</p>
+                  </div>
+                  <div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <label htmlFor="ai-tokens" className="text-sm font-medium text-ink">أقصى طول للرد</label>
+                      <span className="tabular text-sm font-semibold text-ink">{form.max_tokens} <span className="text-xs font-normal text-muted">رمز</span></span>
+                    </div>
+                    <input id="ai-tokens" type="range" min={50} max={MAX_TOKENS_CAP} step={10} value={form.max_tokens}
+                      onChange={e => set('max_tokens', parseInt(e.target.value, 10) || 300)} className="w-full accent-[#12B5BE]" aria-describedby="ai-tokens-hint" />
+                    <p id="ai-tokens-hint" className="mt-1.5 text-xs text-muted">
+                      نحو {formatNumber(Math.round(form.max_tokens * 0.75))} كلمة · الحد الأقصى {MAX_TOKENS_CAP} رمز (يقصّ الخادم أي قيمة أكبر)
+                    </p>
+                  </div>
+                </div>
+              </SectionCard>
+
+              <SectionCard icon={ClockIcon} title="ساعات العمل" subtitle="أضِف ساعات عملك إلى التعليمات ليخبر المساعد العملاء بها.">
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label="أيام العمل">
+                  {DAYS.map(d => {
+                    const on = hours.days.includes(d.id)
+                    return (
+                      <button key={d.id} type="button" aria-pressed={on}
+                        onClick={() => setHours(h => ({ ...h, days: on ? h.days.filter(x => x !== d.id) : [...h.days, d.id] }))}
+                        className={cn('h-8 rounded-full border px-3 text-xs font-medium transition',
+                          on ? 'border-transparent bg-brand-gradient text-[#04282C]' : 'border-line bg-surface text-muted hover:text-ink')}>
+                        {d.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="grid max-w-sm grid-cols-2 gap-3">
+                  <Field label="من"><Input type="time" dir="ltr" value={hours.from} onChange={e => setHours(h => ({ ...h, from: e.target.value }))} /></Field>
+                  <Field label="إلى"><Input type="time" dir="ltr" value={hours.to} onChange={e => setHours(h => ({ ...h, to: e.target.value }))} /></Field>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button variant="secondary" size="sm" icon={PlusIcon} onClick={() => { appendToPrompt(hoursText()); toast.success('أُضيفت ساعات العمل إلى التعليمات') }}>إضافة إلى التعليمات</Button>
+                  <p className="text-xs text-muted">لا يتوقف المساعد خارج هذه الساعات؛ يُبلغ العميل بها فقط.</p>
+                </div>
+              </SectionCard>
+
+              <SectionCard icon={HandRaisedIcon} title="التصعيد إلى الفريق" subtitle="إذا كتب العميل إحدى هذه الكلمات يتوقف المساعد ويصلك إشعار لتتولّى المحادثة.">
+                <Field label="كلمات التصعيد" srOnlyLabel>
+                  <KeywordInput value={escalationWords} onChange={v => set('escalation_keywords', v.join(','))} placeholder="موظف، human…" />
+                </Field>
+              </SectionCard>
+
+              <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface/95 px-4 py-3 shadow-dropdown backdrop-blur">
+                <p className="text-sm text-muted">{dirty ? 'لديك تغييرات غير محفوظة.' : 'كل التغييرات محفوظة.'}</p>
+                <Button icon={CheckCircleIcon} loading={saveMut.isLoading} onClick={() => saveMut.mutate()}>حفظ الإعدادات</Button>
+              </div>
+            </div>
+
+            {/* Playground */}
+            <div className="flex flex-col gap-3 lg:sticky lg:top-24">
+              <ChatPreview
+                title={form.company_name || 'المساعد الذكي'}
+                subtitle="تجربة بالإعدادات الحالية — قبل الحفظ"
+                avatar={<span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-gradient text-[#04282C]"><SparklesIcon className="h-5 w-5" aria-hidden="true" /></span>}
+                messages={chat}
+                loading={testing}
+                value={testMsg}
+                onChange={setTestMsg}
+                onSend={runTest}
+                onReset={() => setChat([])}
+                placeholder="مثال: ما أسعاركم؟"
+                height="h-[420px]"
+                emptyHint="اكتب سؤالًا كما سيكتبه عميلك لترى كيف سيرد المساعد."
+              />
+              <p className="flex items-start gap-1.5 text-xs text-muted">
+                <ArrowLeftIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 ltr:rotate-180" aria-hidden="true" />
+                تُختبر كل رسالة منفردة دون سياق الرسائل السابقة، وتُحتسب ضمن حد الاستخدام اليومي.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   )
