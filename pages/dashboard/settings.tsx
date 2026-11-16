@@ -10,51 +10,52 @@ import { useTheme } from '@/hooks/useTheme'
 import {
   UserCircleIcon, ShieldCheckIcon, DevicePhoneMobileIcon, BellIcon, LanguageIcon, TrashIcon,
   KeyIcon, LockOpenIcon, LockClosedIcon, ComputerDesktopIcon, SunIcon, MoonIcon, CheckIcon,
-  ExclamationTriangleIcon, ArrowLeftIcon, ArrowRightOnRectangleIcon,
+  ExclamationTriangleIcon, ArrowRightIcon, ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/outline'
 import {
   Avatar, Badge, Button, Card, CardHeader, ConfirmDialog, EmptyState, Field, Input, PageHeader, Select,
   Skeleton, TabPanel, Tabs, Tooltip, cn,
 } from '@/components/ui'
-import { ErrorState, InfoRow, Notice, SectionTitle, apiError } from '@/components/settings/Shared'
-import { fmtDate, fmtDateTime } from '@/components/settings/format'
+import { ErrorState, InfoRow, Notice, SectionTitle, apiError, rich } from '@/components/settings/Shared'
+import { useT } from '@/lib/i18n-local'
 
+import messages from '@/locales/dashboard/settings'
+
+// Labels are keys of locales/dashboard/settings.ts.
 const TABS = [
-  { id: 'profile', label: 'الملف الشخصي', icon: UserCircleIcon },
-  { id: 'security', label: 'الأمان', icon: ShieldCheckIcon },
-  { id: 'devices', label: 'الأجهزة الموثوقة', icon: DevicePhoneMobileIcon },
-  { id: 'preferences', label: 'اللغة والمظهر', icon: LanguageIcon },
-  { id: 'notifications', label: 'الإشعارات', icon: BellIcon },
+  { id: 'profile', label: 'tab_profile', icon: UserCircleIcon },
+  { id: 'security', label: 'tab_security', icon: ShieldCheckIcon },
+  { id: 'devices', label: 'tab_devices', icon: DevicePhoneMobileIcon },
+  { id: 'preferences', label: 'tab_preferences', icon: LanguageIcon },
+  { id: 'notifications', label: 'tab_notifications', icon: BellIcon },
 ]
 const TAB_IDS = TABS.map(t => t.id)
 // Old tab id kept so /dashboard/settings?tab=password still works.
 const TAB_ALIASES = { password: 'security' }
 
-const LANG_OPTIONS = [
-  { value: 'ar', label: 'العربية' },
-  { value: 'en', label: 'English' },
-  { value: 'fr', label: 'Français' },
-  { value: 'tr', label: 'Türkçe' },
-  { value: 'es', label: 'Español' },
-]
+// Language names are shown in the current UI language (keys `lang_<code>`).
+const LANG_OPTIONS = ['ar', 'en', 'fr', 'tr', 'es']
 const TZ_OPTIONS = [
-  { value: 'UTC', label: 'UTC' },
-  { value: 'Asia/Riyadh', label: 'الرياض (GMT+3)' },
-  { value: 'Asia/Dubai', label: 'دبي (GMT+4)' },
-  { value: 'Asia/Istanbul', label: 'إسطنبول (GMT+3)' },
-  { value: 'Africa/Cairo', label: 'القاهرة (GMT+2)' },
-  { value: 'Europe/London', label: 'لندن (GMT+0)' },
-  { value: 'America/New_York', label: 'نيويورك (GMT-5)' },
+  { value: 'UTC', label: 'tz_utc' },
+  { value: 'Asia/Riyadh', label: 'tz_riyadh' },
+  { value: 'Asia/Dubai', label: 'tz_dubai' },
+  { value: 'Asia/Istanbul', label: 'tz_istanbul' },
+  { value: 'Africa/Cairo', label: 'tz_cairo' },
+  { value: 'Europe/London', label: 'tz_london' },
+  { value: 'America/New_York', label: 'tz_newyork' },
 ]
 
+// Label `otp_<mode>`, description `otp_<mode>_desc`.
 const OTP_MODES = [
-  { value: 'disabled', label: 'متوقف', desc: 'لا يُطلب رمز تحقق عند تسجيل الدخول', icon: LockOpenIcon },
-  { value: 'new_device', label: 'الأجهزة الجديدة فقط', desc: 'يُطلب الرمز عند الدخول من جهاز لم يُستخدم من قبل', icon: DevicePhoneMobileIcon },
-  { value: 'always', label: 'دائمًا', desc: 'يُطلب رمز تحقق عبر واتساب مع كل تسجيل دخول', icon: LockClosedIcon },
+  { value: 'disabled', icon: LockOpenIcon },
+  { value: 'new_device', icon: DevicePhoneMobileIcon },
+  { value: 'always', icon: LockClosedIcon },
 ]
-const OTP_LABEL = { disabled: 'متوقف', new_device: 'الأجهزة الجديدة', always: 'دائمًا' }
+const OTP_LABEL = { disabled: 'otpShort_disabled', new_device: 'otpShort_new_device', always: 'otpShort_always' }
 
 export default function SettingsPage() {
+  const { t, fmtDate, fmtDateTime } = useT(messages)
+  const otpLabel = (mode: string) => (OTP_LABEL[mode] ? t(OTP_LABEL[mode]) : mode)
   const router = useRouter()
   const { user, setUser, fetchMe } = useAuthStore()
   const { theme, setTheme } = useTheme()
@@ -105,22 +106,22 @@ export default function SettingsPage() {
         if (res?.status === 202 || res?.data?.requiresPhoneVerification) {
           setPhoneOtpPending(true)
           setPhoneOtp('')
-          toast.success('أرسلنا رمز تحقق إلى الرقم الجديد عبر واتساب')
+          toast.success(t('phoneCodeSent'))
           return
         }
         setPhoneOtpPending(false)
         setPhoneOtp('')
         await fetchMe()  // reload full user from DB including phone/otp_mode/last_login etc.
-        toast.success('تم حفظ التغييرات')
+        toast.success(t('changesSaved'))
       },
-      onError: (e) => toast.error(e?.response?.data?.error || 'تعذّر الحفظ')
+      onError: (e) => toast.error(apiError(e, t('saveError')))
     }
   )
 
   const passwordMut = useMutation(
     (body) => axios.put('/api/settings/password', body),
-    { onSuccess: () => { toast.success('تم تغيير كلمة المرور'); setPasswords({ current: '', newPass: '', confirm: '' }) },
-      onError: (e) => toast.error(e?.response?.data?.error || 'تعذّر تغيير كلمة المرور') }
+    { onSuccess: () => { toast.success(t('passwordChanged')); setPasswords({ current: '', newPass: '', confirm: '' }) },
+      onError: (e) => toast.error(apiError(e, t('passwordError'))) }
   )
 
   const securityMut = useMutation(
@@ -130,9 +131,9 @@ export default function SettingsPage() {
         // Update store immediately so UI reflects the new mode
         setUser({ ...user, otp_mode: body.otp_mode })
         setCurrentPassword('')
-        toast.success('تم حفظ إعدادات الأمان')
+        toast.success(t('securitySaved'))
       },
-      onError: (e) => toast.error(e?.response?.data?.error || 'تعذّر الحفظ')
+      onError: (e) => toast.error(apiError(e, t('saveError')))
     }
   )
 
@@ -142,23 +143,23 @@ export default function SettingsPage() {
     () => axios.post('/api/auth/logout-all'),
     {
       onSuccess: () => {
-        toast.success('تم تسجيل الخروج من جميع الأجهزة')
+        toast.success(t('loggedOutAll'))
         useAuthStore.setState({ user: null, token: null })
         window.location.href = '/auth/login'
       },
-      onError: (e) => toast.error(e?.response?.data?.error || 'تعذّر تسجيل الخروج من جميع الأجهزة'),
+      onError: (e) => toast.error(apiError(e, t('logoutAllError'))),
     }
   )
 
   const removeDeviceMut = useMutation(
     (id) => axios.delete(`/api/settings/devices/${id}`),
-    { onSuccess: () => { refetchDevices(); setToRemove(null); toast.success('تمت إزالة الجهاز') },
-      onError: (e) => toast.error(apiError(e, 'تعذّرت إزالة الجهاز')) }
+    { onSuccess: () => { refetchDevices(); setToRemove(null); toast.success(t('deviceRemoved')) },
+      onError: (e) => toast.error(apiError(e, t('deviceRemoveError'))) }
   )
 
   const submitPassword = () => {
-    if (passwords.newPass !== passwords.confirm) { toast.error('كلمتا المرور غير متطابقتين'); return }
-    if (passwords.newPass.length < 8) { toast.error('يجب ألا تقل كلمة المرور عن 8 أحرف'); return }
+    if (passwords.newPass !== passwords.confirm) { toast.error(t('passwordMismatch')); return }
+    if (passwords.newPass.length < 8) { toast.error(t('passwordTooShort')); return }
     passwordMut.mutate({ currentPassword: passwords.current, newPassword: passwords.newPass })
   }
 
@@ -167,9 +168,9 @@ export default function SettingsPage() {
   const passStrength = Math.min(4, [/.{8,}/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter(r => r.test(passwords.newPass)).length)
 
   return (
-    <DashboardLayout title="Settings">
+    <DashboardLayout title={t('pageTitle')}>
       <div className="space-y-6">
-        <PageHeader eyebrow="الإعدادات" title="إعدادات الحساب" description="بياناتك الشخصية، وأمان تسجيل الدخول، وتفضيلات اللغة والمظهر." />
+        <PageHeader eyebrow={t('eyebrow')} title={t('title')} description={t('description')} />
 
         {/* Account summary */}
         <Card padding="none" className="overflow-hidden">
@@ -182,38 +183,38 @@ export default function SettingsPage() {
               <p className="truncate text-sm text-muted"><span dir="ltr">{user?.email}</span></p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {user?.is_verified ? <Badge tone="success" dot>حساب موثّق</Badge> : <Badge tone="warning" dot>غير موثّق</Badge>}
+              {user?.is_verified ? <Badge tone="success" dot>{t('verified')}</Badge> : <Badge tone="warning" dot>{t('notVerified')}</Badge>}
               <Badge tone={(user?.otp_mode || 'disabled') === 'disabled' ? 'neutral' : 'brand'} icon={ShieldCheckIcon}>
-                التحقق الثنائي: {OTP_LABEL[user?.otp_mode || 'disabled']}
+                {t('twoFactorBadge', { mode: otpLabel(user?.otp_mode || 'disabled') })}
               </Badge>
             </div>
           </div>
         </Card>
 
-        <Tabs idPrefix="settings" aria-label="أقسام الإعدادات" value={tab} onChange={changeTab} tabs={TABS} />
+        <Tabs idPrefix="settings" aria-label={t('tabsLabel')} value={tab} onChange={changeTab} tabs={TABS.map(x => ({ ...x, label: t(x.label) }))} />
 
         {/* ── Profile ─────────────────────────────── */}
         <TabPanel idPrefix="settings" id="profile" active={tab}>
           <div className="grid gap-5 lg:grid-cols-[minmax(0,640px)_1fr]">
             <Card>
-              <h2 className="text-[17px] font-semibold text-ink">المعلومات الشخصية</h2>
+              <h2 className="text-[17px] font-semibold text-ink">{t('personalInfo')}</h2>
               <form className="mt-5 space-y-4" onSubmit={e => {
                 e.preventDefault()
                 profileMut.mutate(phoneOtpPending ? { ...profile, phone_otp: phoneOtp } : profile)
               }}>
-                <Field label="الاسم الكامل" required>
+                <Field label={t('fullName')} required>
                   <Input value={profile.name} onChange={e => setProfile(p => ({ ...p, name: e.target.value }))} autoComplete="name" />
                 </Field>
-                <Field label="البريد الإلكتروني" hint="لا يمكن تغيير البريد الإلكتروني من هنا.">
+                <Field label={t('email')} hint={t('emailHint')}>
                   <Input value={user?.email || ''} disabled dir="ltr" />
                 </Field>
-                <Field label="رقم واتساب" hint="يُستخدم لرموز التحقق. أدخله مع رمز الدولة. تغييره يتطلب تأكيدًا برمز يُرسل إلى الرقم الجديد.">
+                <Field label={t('waNumber')} hint={t('waNumberHint')}>
                   <Input value={profile.phone} onChange={e => { setProfile(p => ({ ...p, phone: e.target.value })); setPhoneOtpPending(false) }}
                     placeholder="+201234567890" dir="ltr" inputMode="tel" autoComplete="tel" />
                 </Field>
                 {phoneOtpPending && (
                   <div className="rounded-card border border-brand-teal/30 bg-chip/40 p-4">
-                    <Field label="رمز التحقق" hint="أدخل الرمز الذي أرسلناه عبر واتساب لتأكيد تغيير الرقم." required>
+                    <Field label={t('verificationCode')} hint={t('verificationCodeHint')} required>
                       <Input value={phoneOtp} onChange={e => setPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 8))}
                         inputMode="numeric" autoComplete="one-time-code" placeholder="123456" dir="ltr" className="tracking-[0.3em] tabular" autoFocus />
                     </Field>
@@ -221,17 +222,17 @@ export default function SettingsPage() {
                 )}
                 <div className="flex flex-wrap items-center gap-3 pt-1">
                   <Button type="submit" loading={profileMut.isLoading} disabled={phoneOtpPending && !phoneOtp}>
-                    {phoneOtpPending ? 'تأكيد وحفظ' : phoneChanged ? 'إرسال رمز التحقق' : 'حفظ التغييرات'}
+                    {phoneOtpPending ? t('confirmSave') : phoneChanged ? t('sendCode') : t('saveChanges')}
                   </Button>
                   {phoneOtpPending && (
-                    <Button variant="ghost" onClick={() => { setPhoneOtpPending(false); setPhoneOtp(''); setProfile(p => ({ ...p, phone: user?.phone || '' })) }}>إلغاء تغيير الرقم</Button>
+                    <Button variant="ghost" onClick={() => { setPhoneOtpPending(false); setPhoneOtp(''); setProfile(p => ({ ...p, phone: user?.phone || '' })) }}>{t('cancelPhoneChange')}</Button>
                   )}
                 </div>
               </form>
             </Card>
             <Card variant="muted" className="h-fit">
-              <h3 className="font-semibold text-ink">لماذا نطلب رقم واتساب؟</h3>
-              <p className="mt-2 text-sm leading-relaxed text-muted">نرسل إليه رموز التحقق عند تسجيل الدخول إذا فعّلت التحقق الثنائي، وعند تأكيد تغيير الرقم. لن نستخدمه في الرسائل التسويقية.</p>
+              <h3 className="font-semibold text-ink">{t('whyPhone')}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted">{t('whyPhoneBody')}</p>
             </Card>
           </div>
         </TabPanel>
@@ -240,13 +241,13 @@ export default function SettingsPage() {
         <TabPanel idPrefix="settings" id="security" active={tab}>
           <div className="grid gap-5 xl:grid-cols-2">
             <Card>
-              <SectionTitle icon={ShieldCheckIcon} title="التحقق الثنائي" subtitle="احمِ حسابك برمز تحقق يصل عبر واتساب" />
+              <SectionTitle icon={ShieldCheckIcon} title={t('twoFactor')} subtitle={t('twoFactorSub')} />
               {!user?.phone && (
-                <Notice tone="warning" className="mb-4" action={<Button size="xs" variant="secondary" onClick={() => changeTab('profile')}>إضافة الرقم</Button>}>
-                  أضف رقم واتساب في الملف الشخصي أولًا لتفعيل رموز التحقق.
+                <Notice tone="warning" className="mb-4" action={<Button size="xs" variant="secondary" onClick={() => changeTab('profile')}>{t('addNumber')}</Button>}>
+                  {t('addNumberNotice')}
                 </Notice>
               )}
-              <div role="radiogroup" aria-label="وضع التحقق الثنائي" className="space-y-2">
+              <div role="radiogroup" aria-label={t('twoFactorMode')} className="space-y-2">
                 {OTP_MODES.map(mode => {
                   const selected = otp.otp_mode === mode.value
                   const disabled = !user?.phone && mode.value !== 'disabled'
@@ -260,8 +261,8 @@ export default function SettingsPage() {
                         <mode.icon className="h-5 w-5" aria-hidden="true" />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-semibold text-ink">{mode.label}</span>
-                        <span className="block text-xs text-muted">{mode.desc}</span>
+                        <span className="block text-sm font-semibold text-ink">{t(`otp_${mode.value}`)}</span>
+                        <span className="block text-xs text-muted">{t(`otp_${mode.value}_desc`)}</span>
                       </span>
                       <span className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2', selected ? 'border-brand-teal bg-brand-teal text-white' : 'border-line-strong')} aria-hidden="true">
                         {selected && <CheckIcon className="h-3 w-3" />}
@@ -273,7 +274,7 @@ export default function SettingsPage() {
 
               {weakening2fa && (
                 <div className="mt-4 rounded-card border border-warning/25 bg-warning-bg/60 p-4">
-                  <Field label="كلمة المرور الحالية" hint="مطلوبة لتخفيف التحقق الثنائي أو إيقافه." required>
+                  <Field label={t('currentPassword')} hint={t('currentPasswordHint')} required>
                     <Input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} autoComplete="current-password" />
                   </Field>
                 </div>
@@ -281,51 +282,51 @@ export default function SettingsPage() {
               <Button className="mt-4" fullWidth loading={securityMut.isLoading}
                 disabled={!otpDirty || (weakening2fa && !currentPassword)}
                 onClick={() => securityMut.mutate(weakening2fa ? { ...otp, current_password: currentPassword } : otp)}>
-                حفظ إعدادات الأمان
+                {t('saveSecurity')}
               </Button>
             </Card>
 
             <div className="space-y-5">
               <Card>
-                <SectionTitle icon={KeyIcon} title="تغيير كلمة المرور" />
+                <SectionTitle icon={KeyIcon} title={t('changePassword')} />
                 <form className="space-y-4" onSubmit={e => { e.preventDefault(); submitPassword() }}>
-                  <Field label="كلمة المرور الحالية" required>
+                  <Field label={t('currentPassword')} required>
                     <Input type="password" value={passwords.current} onChange={e => setPasswords(p => ({ ...p, current: e.target.value }))} autoComplete="current-password" />
                   </Field>
-                  <Field label="كلمة المرور الجديدة" hint="8 أحرف على الأقل" required>
+                  <Field label={t('newPassword')} hint={t('newPasswordHint')} required>
                     <Input type="password" value={passwords.newPass} onChange={e => setPasswords(p => ({ ...p, newPass: e.target.value }))} autoComplete="new-password" />
                   </Field>
                   {passwords.newPass && (
-                    <div className="flex items-center gap-2" aria-label={`قوة كلمة المرور ${passStrength} من 4`}>
+                    <div className="flex items-center gap-2" aria-label={t('strengthLabel', { n: passStrength })}>
                       {[0, 1, 2, 3].map(i => (
                         <span key={i} className={cn('h-1.5 flex-1 rounded-full', i < passStrength ? (passStrength >= 3 ? 'bg-success' : passStrength === 2 ? 'bg-warning' : 'bg-danger') : 'bg-track')} />
                       ))}
-                      <span className="w-14 text-end text-xs text-muted">{['ضعيفة', 'ضعيفة', 'متوسطة', 'جيدة', 'قوية'][passStrength]}</span>
+                      <span className="w-14 text-end text-xs text-muted">{t(`strength_${passStrength}`)}</span>
                     </div>
                   )}
-                  <Field label="تأكيد كلمة المرور الجديدة" required error={passwords.confirm && passwords.confirm !== passwords.newPass ? 'كلمتا المرور غير متطابقتين' : undefined}>
+                  <Field label={t('confirmPassword')} required error={passwords.confirm && passwords.confirm !== passwords.newPass ? t('passwordMismatch') : undefined}>
                     <Input type="password" value={passwords.confirm} onChange={e => setPasswords(p => ({ ...p, confirm: e.target.value }))} autoComplete="new-password" />
                   </Field>
-                  <Button type="submit" variant="dark" loading={passwordMut.isLoading} disabled={!passwords.current || !passwords.newPass}>تغيير كلمة المرور</Button>
+                  <Button type="submit" variant="dark" loading={passwordMut.isLoading} disabled={!passwords.current || !passwords.newPass}>{t('changePassword')}</Button>
                 </form>
               </Card>
 
               <Card>
-                <h3 className="mb-1 font-semibold text-ink">نشاط الحساب</h3>
-                <InfoRow label="آخر تسجيل دخول">{user?.last_login_at ? fmtDateTime(user.last_login_at) : 'لا يوجد'}</InfoRow>
-                <InfoRow label="عنوان IP"><span dir="ltr">{user?.last_login_ip || '—'}</span></InfoRow>
-                <InfoRow label="آخر جهاز">{user?.last_login_device || '—'}</InfoRow>
-                <InfoRow label="حالة الحساب">{user?.is_verified ? 'موثّق' : 'غير موثّق'}</InfoRow>
-                <InfoRow label="التحقق الثنائي">{OTP_LABEL[otp.otp_mode] || otp.otp_mode}</InfoRow>
+                <h3 className="mb-1 font-semibold text-ink">{t('accountActivity')}</h3>
+                <InfoRow label={t('lastLogin')}>{user?.last_login_at ? fmtDateTime(user.last_login_at) : t('none')}</InfoRow>
+                <InfoRow label={t('ipAddress')}><span dir="ltr">{user?.last_login_ip || '—'}</span></InfoRow>
+                <InfoRow label={t('lastDevice')}><span dir="ltr">{user?.last_login_device || '—'}</span></InfoRow>
+                <InfoRow label={t('accountStatus')}>{user?.is_verified ? t('statusVerified') : t('statusNotVerified')}</InfoRow>
+                <InfoRow label={t('twoFactor')}>{otpLabel(otp.otp_mode)}</InfoRow>
               </Card>
 
               <Card>
-                <SectionTitle icon={ArrowRightOnRectangleIcon} title="الجلسات النشطة" />
+                <SectionTitle icon={ArrowRightOnRectangleIcon} title={t('activeSessions')} />
                 <p className="mb-4 text-sm text-muted">
-                  إذا فقدت جهازًا أو اشتبهت في دخول غير مصرّح به، فأنهِ جميع الجلسات المفتوحة على كل المتصفحات والأجهزة، بما فيها هذا الجهاز. ستحتاج إلى تسجيل الدخول من جديد.
+                  {t('activeSessionsBody')}
                 </p>
                 <Button variant="danger" icon={ArrowRightOnRectangleIcon} onClick={() => setLogoutAllOpen(true)}>
-                  تسجيل الخروج من جميع الأجهزة
+                  {t('logoutAll')}
                 </Button>
               </Card>
             </div>
@@ -335,14 +336,14 @@ export default function SettingsPage() {
         {/* ── Devices ─────────────────────────────── */}
         <TabPanel idPrefix="settings" id="devices" active={tab}>
           <Card padding="none">
-            <CardHeader icon={DevicePhoneMobileIcon} title="الأجهزة الموثوقة" subtitle="أجهزة لا يُطلب منها رمز تحقق عند تسجيل الدخول" divider />
+            <CardHeader icon={DevicePhoneMobileIcon} title={t('devicesTitle')} subtitle={t('devicesSub')} divider />
             {devicesLoading ? (
               <div className="space-y-3 p-5">{[0, 1, 2].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div>
             ) : devicesError ? (
               <ErrorState className="m-5" message={apiError(devicesErr)} onRetry={() => refetchDevices()} />
             ) : activeDevices.length === 0 ? (
-              <EmptyState size="sm" icon={ComputerDesktopIcon} title="لا توجد أجهزة موثوقة"
-                description="عند تسجيل الدخول بالتحقق الثنائي واختيار «الوثوق بهذا الجهاز» سيظهر الجهاز هنا." />
+              <EmptyState size="sm" icon={ComputerDesktopIcon} title={t('noDevices')}
+                description={t('noDevicesDesc')} />
             ) : (
               <ul className="divide-y divide-line-soft">
                 {activeDevices.map(d => (
@@ -351,15 +352,15 @@ export default function SettingsPage() {
                       <ComputerDesktopIcon className="h-5 w-5" aria-hidden="true" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-ink">{d.device_name || 'جهاز غير معروف'}</p>
+                      <p className="truncate text-sm font-medium text-ink">{d.device_name || t('unknownDevice')}</p>
                       <p className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted">
                         {d.ip_address && <span dir="ltr">{d.ip_address}</span>}
-                        {d.last_used_at && <span>آخر استخدام {fmtDate(d.last_used_at)}</span>}
-                        <span>ينتهي {fmtDate(d.expires_at)}</span>
+                        {d.last_used_at && <span>{t('lastUsed', { date: fmtDate(d.last_used_at) })}</span>}
+                        <span>{t('expires', { date: fmtDate(d.expires_at) })}</span>
                       </p>
                     </div>
-                    <Tooltip content="إزالة الجهاز">
-                      <Button size="icon-sm" variant="ghost" icon={TrashIcon} aria-label={`إزالة ${d.device_name || 'الجهاز'}`} className="text-muted hover:text-danger" onClick={() => setToRemove(d)} />
+                    <Tooltip content={t('removeDevice')}>
+                      <Button size="icon-sm" variant="ghost" icon={TrashIcon} aria-label={t('removeNamed', { name: d.device_name || t('theDevice') })} className="text-muted hover:text-danger" onClick={() => setToRemove(d)} />
                     </Tooltip>
                   </li>
                 ))}
@@ -372,21 +373,21 @@ export default function SettingsPage() {
         <TabPanel idPrefix="settings" id="preferences" active={tab}>
           <div className="grid gap-5 lg:grid-cols-2">
             <Card>
-              <SectionTitle icon={LanguageIcon} title="اللغة والمنطقة الزمنية" subtitle="تُحفظ في حسابك وتُطبّق على كل أجهزتك" />
+              <SectionTitle icon={LanguageIcon} title={t('langTzTitle')} subtitle={t('langTzSub')} />
               <form className="space-y-4" onSubmit={e => { e.preventDefault(); profileMut.mutate({ language: profile.language, timezone: profile.timezone }) }}>
-                <Field label="لغة الواجهة">
-                  <Select value={profile.language || 'en'} onChange={e => setProfile(p => ({ ...p, language: e.target.value }))} options={LANG_OPTIONS} />
+                <Field label={t('uiLanguage')}>
+                  <Select value={profile.language || 'en'} onChange={e => setProfile(p => ({ ...p, language: e.target.value }))} options={LANG_OPTIONS.map(code => ({ value: code, label: t(`lang_${code}`) }))} />
                 </Field>
-                <Field label="المنطقة الزمنية" hint="تُستخدم في جدولة الحملات وعرض الأوقات.">
-                  <Select value={profile.timezone || 'UTC'} onChange={e => setProfile(p => ({ ...p, timezone: e.target.value }))} options={TZ_OPTIONS} />
+                <Field label={t('timezone')} hint={t('timezoneHint')}>
+                  <Select value={profile.timezone || 'UTC'} onChange={e => setProfile(p => ({ ...p, timezone: e.target.value }))} options={TZ_OPTIONS.map(o => ({ value: o.value, label: t(o.label) }))} />
                 </Field>
-                <Button type="submit" loading={profileMut.isLoading}>حفظ التفضيلات</Button>
+                <Button type="submit" loading={profileMut.isLoading}>{t('savePrefs')}</Button>
               </form>
             </Card>
             <Card>
-              <SectionTitle icon={theme === 'dark' ? MoonIcon : SunIcon} title="المظهر" subtitle="يُحفظ على هذا الجهاز" />
-              <div role="radiogroup" aria-label="المظهر" className="grid grid-cols-2 gap-3">
-                {[{ id: 'light', label: 'فاتح', icon: SunIcon }, { id: 'dark', label: 'داكن', icon: MoonIcon }].map(o => {
+              <SectionTitle icon={theme === 'dark' ? MoonIcon : SunIcon} title={t('appearance')} subtitle={t('appearanceSub')} />
+              <div role="radiogroup" aria-label={t('appearance')} className="grid grid-cols-2 gap-3">
+                {[{ id: 'light', label: t('light'), icon: SunIcon }, { id: 'dark', label: t('dark'), icon: MoonIcon }].map(o => {
                   const selected = theme === o.id
                   return (
                     <button key={o.id} type="button" role="radio" aria-checked={selected} onClick={() => setTheme(o.id)}
@@ -411,42 +412,41 @@ export default function SettingsPage() {
         <TabPanel idPrefix="settings" id="notifications" active={tab}>
           <div className="grid gap-5 lg:grid-cols-2">
             <Card>
-              <SectionTitle icon={BellIcon} title="مركز الإشعارات" subtitle="تنبيهات الحملات والرسائل والنظام" />
-              <p className="text-sm leading-relaxed text-muted">تصلك الإشعارات داخل لوحة التحكم عبر الجرس في الشريط العلوي. راجعها كلها، أو علّمها كمقروءة، من مركز الإشعارات.</p>
-              <Button className="mt-4" variant="secondary" iconEnd={ArrowLeftIcon} href="/dashboard/notifications">فتح مركز الإشعارات</Button>
+              <SectionTitle icon={BellIcon} title={t('notifCenter')} subtitle={t('notifCenterSub')} />
+              <p className="text-sm leading-relaxed text-muted">{t('notifCenterBody')}</p>
+              <Button className="mt-4 rtl:[&>svg]:rotate-180" variant="secondary" iconEnd={ArrowRightIcon} href="/dashboard/notifications">{t('openNotifCenter')}</Button>
             </Card>
             <Card>
-              <SectionTitle icon={ExclamationTriangleIcon} title="تنبيهات الأمان" subtitle="عبر واتساب" />
+              <SectionTitle icon={ExclamationTriangleIcon} title={t('securityAlerts')} subtitle={t('securityAlertsSub')} />
               <p className="text-sm leading-relaxed text-muted">
-                تصل رموز التحقق وتأكيد تغيير الرقم إلى رقم واتساب في ملفك الشخصي
-                {user?.phone ? <> (<span dir="ltr">{user.phone}</span>)</> : ''}.
+                {rich(t('securityAlertsBody'), { phone: user?.phone ? <> (<span dir="ltr">{user.phone}</span>)</> : '' })}
               </p>
-              <Button className="mt-4" variant="ghost" onClick={() => changeTab('security')}>إعدادات الأمان</Button>
+              <Button className="mt-4" variant="ghost" onClick={() => changeTab('security')}>{t('securitySettings')}</Button>
             </Card>
           </div>
         </TabPanel>
       </div>
 
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         destructive
         open={!!toRemove}
         onClose={() => setToRemove(null)}
         onConfirm={() => { if (toRemove) removeDeviceMut.mutate(toRemove.id) }}
         loading={removeDeviceMut.isLoading}
-        title="إزالة هذا الجهاز؟"
-        description="سيُطلب رمز تحقق عند تسجيل الدخول التالي من هذا الجهاز."
-        confirmLabel="إزالة"
+        title={t('removeDeviceTitle')}
+        description={t('removeDeviceDesc')}
+        confirmLabel={t('remove')}
       />
 
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         destructive
         open={logoutAllOpen}
         onClose={() => setLogoutAllOpen(false)}
         onConfirm={() => logoutAllMut.mutate()}
         loading={logoutAllMut.isLoading}
-        title="تسجيل الخروج من جميع الأجهزة؟"
-        description="ستُنهى كل الجلسات المفتوحة لحسابك فورًا، بما فيها الجلسة الحالية."
-        confirmLabel="تسجيل الخروج"
+        title={t('logoutAllTitle')}
+        description={t('logoutAllDesc')}
+        confirmLabel={t('logout')}
       />
     </DashboardLayout>
   )

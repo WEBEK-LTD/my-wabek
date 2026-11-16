@@ -1,7 +1,9 @@
 import React, { useState } from 'react'
 import { CodeBracketIcon } from '@heroicons/react/24/outline'
 import { Badge, Card, CardHeader, Tabs } from '@/components/ui'
-import { CodeBlock, CopyButton } from './Shared'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/api-keys'
+import { CodeBlock, CopyButton, rich } from './Shared'
 
 const LANGS = [
   { id: 'curl', label: 'cURL' },
@@ -49,27 +51,29 @@ data = res.json()`,
   } as Record<string, string>
 }
 
-export const API_ENDPOINTS = [
-  { method: 'POST', path: '/api/v1/send', desc: 'إرسال رسالة واتساب', body: '{"to":"966500000000","message":"Hello!"}' },
-  { method: 'GET', path: '/api/v1/contacts', desc: 'عرض جهات الاتصال', body: '' },
-  { method: 'POST', path: '/api/v1/contacts', desc: 'إنشاء جهة اتصال أو تحديثها', body: '{"phone":"966500000000","name":"Sara"}' },
-  { method: 'POST', path: '/api/v1/otp', desc: 'إرسال رمز تحقق عبر واتساب', body: '{"phone":"966500000000","purpose":"verification"}' },
-  { method: 'POST', path: '/api/v1/otp-verify', desc: 'التحقق من الرمز', body: '{"otp_id":"uuid","otp":"123456"}' },
+/** `desc` is a key of locales/dashboard/api-keys.ts. */
+export const API_ENDPOINTS: { method: string; path: string; desc: keyof typeof messages.en; body: string }[] = [
+  { method: 'POST', path: '/api/v1/send', desc: 'ep_send', body: '{"to":"966500000000","message":"Hello!"}' },
+  { method: 'GET', path: '/api/v1/contacts', desc: 'ep_contacts_list', body: '' },
+  { method: 'POST', path: '/api/v1/contacts', desc: 'ep_contacts_upsert', body: '{"phone":"966500000000","name":"Sara"}' },
+  { method: 'POST', path: '/api/v1/otp', desc: 'ep_otp', body: '{"phone":"966500000000","purpose":"verification"}' },
+  { method: 'POST', path: '/api/v1/otp-verify', desc: 'ep_otp_verify', body: '{"otp_id":"uuid","otp":"123456"}' },
 ]
 
 export function ApiQuickStart({ baseUrl, apiKey }: { baseUrl: string; apiKey: string }) {
+  const { t } = useT(messages)
   const [lang, setLang] = useState('curl')
   const code = samples(baseUrl, apiKey)
   return (
     <Card padding="none">
-      <CardHeader icon={CodeBracketIcon} title="ابدأ خلال دقيقة" subtitle="أرسل مفتاحك في الترويسة X-API-Key مع كل طلب" divider />
+      <CardHeader icon={CodeBracketIcon} title={t('qsTitle')} subtitle={rich(t('qsSubtitle'), { header: <code dir="ltr" className="font-mono">X-API-Key</code> })} divider />
       <div className="space-y-4 p-5 sm:p-[22px]">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Tabs variant="segmented" size="sm" idPrefix="qs" aria-label="لغة البرمجة" value={lang} onChange={setLang} tabs={LANGS} />
+          <Tabs variant="segmented" size="sm" idPrefix="qs" aria-label={t('qsLangLabel')} value={lang} onChange={setLang} tabs={LANGS} />
           <div className="flex min-w-0 items-center gap-2 text-xs text-muted">
-            <span>الرابط الأساسي</span>
+            <span>{t('baseUrl')}</span>
             <code dir="ltr" className="truncate rounded-md bg-surface-2 px-2 py-1 font-mono text-ink">{baseUrl}</code>
-            <CopyButton text={baseUrl} label="نسخ الرابط" />
+            <CopyButton text={baseUrl} label={t('copyUrl')} />
           </div>
         </div>
         <CodeBlock code={code[lang]} label={`POST /api/v1/send · ${LANGS.find(l => l.id === lang)?.label}`} />
@@ -79,10 +83,10 @@ export function ApiQuickStart({ baseUrl, apiKey }: { baseUrl: string; apiKey: st
               <li key={ep.method + ep.path} className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <Badge tone={ep.method === 'GET' ? 'info' : 'violet'} size="sm" className="w-14 justify-center font-mono">{ep.method}</Badge>
                 <code dir="ltr" className="font-mono text-[13px] text-ink">{ep.path}</code>
-                <span className="text-sm text-muted">{ep.desc}</span>
+                <span className="text-sm text-muted">{t(ep.desc)}</span>
                 <span className="ms-auto">
                   <CopyButton
-                    label="نسخ أمر cURL"
+                    label={t('copyCurl')}
                     text={`curl -X ${ep.method} ${baseUrl}${ep.path} \\\n  -H "X-API-Key: ${apiKey}"${ep.body ? ` \\\n  -H "Content-Type: application/json" \\\n  -d '${ep.body}'` : ''}`}
                   />
                 </span>
