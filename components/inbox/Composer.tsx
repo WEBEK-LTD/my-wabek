@@ -6,8 +6,9 @@ import {
 } from '@heroicons/react/24/outline'
 import { Button, Spinner, Tooltip } from '@/components/ui'
 import { cn } from '@/components/ui/utils'
-import { useInboxCopy } from './copy'
-import type { InboxCopyKey } from './copy'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/inbox'
+import type { MessageKey as InboxCopyKey } from '@/locales/dashboard/inbox'
 import type { WindowState } from './utils'
 import { formatBytes } from './utils'
 
@@ -50,7 +51,7 @@ export interface ComposerProps {
 }
 
 export function Composer(p: ComposerProps) {
-  const { c } = useInboxCopy()
+  const { t } = useT(messages)
   const [hi, setHi] = useState(0)
 
   // "/" at the start opens quick replies filtered by what follows.
@@ -91,8 +92,8 @@ export function Composer(p: ComposerProps) {
       {closed && (
         <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-warning/25 bg-warning-bg px-3.5 py-2.5 text-[13px] text-warning" role="status">
           <ClockIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
-          <p className="min-w-[200px] flex-1 leading-relaxed">{c('window_closed_d')}</p>
-          <Button size="xs" variant="secondary" icon={DocumentDuplicateIcon} onClick={p.onOpenTemplates}>{c('templates')}</Button>
+          <p className="min-w-[200px] flex-1 leading-relaxed">{t('window_closed_d')}</p>
+          <Button size="xs" variant="secondary" icon={DocumentDuplicateIcon} onClick={p.onOpenTemplates}>{t('templates')}</Button>
         </div>
       )}
 
@@ -100,16 +101,16 @@ export function Composer(p: ComposerProps) {
       {p.mode === 'reply' && (p.aiSuggestion || p.aiLoading) && (
         <div className="mb-2 rounded-2xl border border-violet/20 bg-violet-bg px-3.5 py-2.5" aria-live="polite">
           <p className="mb-1 flex items-center gap-1.5 text-[11.5px] font-semibold text-violet">
-            <SparklesIcon className="h-4 w-4" aria-hidden="true" />{c('ai_suggestion')}
+            <SparklesIcon className="h-4 w-4" aria-hidden="true" />{t('ai_suggestion')}
           </p>
           {p.aiLoading ? (
-            <p className="flex items-center gap-2 text-sm text-violet"><Spinner />{c('ai_thinking')}</p>
+            <p className="flex items-center gap-2 text-sm text-violet"><Spinner />{t('ai_thinking')}</p>
           ) : (
             <>
               <p className="line-clamp-4 whitespace-pre-wrap text-sm text-ink" dir="auto">{p.aiSuggestion}</p>
               <div className="mt-2 flex gap-2">
-                <Button size="xs" onClick={p.onUseSuggestion}>{c('ai_use')}</Button>
-                <Button size="xs" variant="ghost" onClick={p.onDismissSuggestion}>{c('ai_dismiss')}</Button>
+                <Button size="xs" onClick={p.onUseSuggestion}>{t('ai_use')}</Button>
+                <Button size="xs" variant="ghost" onClick={p.onDismissSuggestion}>{t('ai_dismiss')}</Button>
               </div>
             </>
           )}
@@ -118,11 +119,11 @@ export function Composer(p: ComposerProps) {
 
       {/* Quick replies */}
       {qrOpen && (
-        <div className="mb-2 max-h-56 overflow-y-auto rounded-2xl border border-line bg-surface shadow-dropdown" role="listbox" aria-label={c('quick_replies')}>
+        <div className="mb-2 max-h-56 overflow-y-auto rounded-2xl border border-line bg-surface shadow-dropdown" role="listbox" aria-label={t('quick_replies')}>
           {qrItems.length === 0 ? (
             <div className="flex items-center justify-between gap-3 px-4 py-3 text-sm text-muted">
-              <span>{c('no_quick_replies')}</span>
-              <Link href="/dashboard/quick-replies" className="text-[13px] font-medium text-link hover:text-link-hover">{c('manage_quick_replies')}</Link>
+              <span>{t('no_quick_replies')}</span>
+              <Link href="/dashboard/quick-replies" className="text-[13px] font-medium text-link hover:text-link-hover">{t('manage_quick_replies')}</Link>
             </div>
           ) : qrItems.map((r, i) => (
             <button
@@ -145,7 +146,7 @@ export function Composer(p: ComposerProps) {
       {p.showEmoji && (
         <div className="mb-2 flex flex-wrap gap-1 rounded-2xl border border-line bg-surface p-2 shadow-dropdown">
           {EMOJIS.map(e => (
-            <button key={e} type="button" onClick={() => { p.onText(t => t + e); p.onShowEmoji(false) }}
+            <button key={e} type="button" onClick={() => { p.onText(prev => prev + e); p.onShowEmoji(false) }}
               className="flex h-9 w-9 items-center justify-center rounded-xl text-xl transition hover:scale-110 hover:bg-surface-3" aria-label={e}>
               {e}
             </button>
@@ -177,23 +178,23 @@ export function Composer(p: ComposerProps) {
               <input
                 value={p.attachment.caption}
                 onChange={e => p.onAttachmentCaption(e.target.value)}
-                placeholder={c('caption_ph')}
-                aria-label={c('caption_ph')}
+                placeholder={t('caption_ph')}
+                aria-label={t('caption_ph')}
                 dir="auto"
                 className="mt-1.5 h-9 w-full rounded-lg border border-line-strong bg-surface px-2.5 text-xs text-ink outline-none focus:border-brand-teal focus:shadow-ring"
               />
             </div>
-            <Button size="icon-sm" variant="ghost" icon={XMarkIcon} aria-label={c('remove_attachment')} onClick={p.onCancelAttachment} />
+            <Button size="icon-sm" variant="ghost" icon={XMarkIcon} aria-label={t('remove_attachment')} onClick={p.onCancelAttachment} />
           </div>
           <Button size="sm" fullWidth className="mt-2.5" loading={p.uploadingAttachment} icon={PaperAirplaneIcon} onClick={p.onSendAttachment}>
-            {p.uploadingAttachment ? c('sending') : c('send_attachment', { type: c(typeKey) || p.attachment.type })}
+            {p.uploadingAttachment ? t('sending') : t('send_attachment', { type: t(typeKey) || p.attachment.type })}
           </Button>
         </div>
       )}
 
       {/* Mode switch */}
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <div className="flex gap-1" role="tablist" aria-label={c('mode_reply')}>
+        <div className="flex gap-1" role="tablist" aria-label={t('mode_reply')}>
           {([['reply', 'mode_reply', ChatBubbleBottomCenterTextIcon], ['note', 'mode_note', PencilSquareIcon]] as const).map(([m, label, Icon]) => (
             <button
               key={m}
@@ -204,14 +205,14 @@ export function Composer(p: ComposerProps) {
               className={cn('inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition',
                 p.mode === m ? (m === 'note' ? 'bg-warning-bg text-warning' : 'bg-chip text-chip-ink') : 'text-muted hover:bg-surface-3 hover:text-ink')}
             >
-              <Icon className="h-3.5 w-3.5" aria-hidden="true" />{c(label)}
+              <Icon className="h-3.5 w-3.5" aria-hidden="true" />{t(label)}
             </button>
           ))}
         </div>
         {p.mode === 'reply' && p.aiAvailable && !p.aiSuggestion && !p.aiLoading && (
           <button type="button" onClick={p.onSuggest}
             className="inline-flex items-center gap-1.5 rounded-full border border-violet/25 bg-violet-bg px-3 py-1 text-xs font-medium text-violet transition hover:brightness-95">
-            <SparklesIcon className="h-3.5 w-3.5" aria-hidden="true" />{c('ai_suggest')}
+            <SparklesIcon className="h-3.5 w-3.5" aria-hidden="true" />{t('ai_suggest')}
           </button>
         )}
       </div>
@@ -223,15 +224,15 @@ export function Composer(p: ComposerProps) {
           <>
             <input ref={p.fileInputRef} type="file" className="hidden" onChange={p.onPickAttachment} tabIndex={-1}
               accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.ppt,.pptx" />
-            <Tooltip content={c('attach')}>
-              <Button size="icon-sm" variant="ghost" icon={PaperClipIcon} aria-label={c('attach')} onClick={() => p.fileInputRef.current?.click()} />
+            <Tooltip content={t('attach')}>
+              <Button size="icon-sm" variant="ghost" icon={PaperClipIcon} aria-label={t('attach')} onClick={() => p.fileInputRef.current?.click()} />
             </Tooltip>
-            <Tooltip content={c('emoji')}>
-              <Button size="icon-sm" variant="ghost" icon={FaceSmileIcon} aria-label={c('emoji')} aria-pressed={p.showEmoji}
+            <Tooltip content={t('emoji')}>
+              <Button size="icon-sm" variant="ghost" icon={FaceSmileIcon} aria-label={t('emoji')} aria-pressed={p.showEmoji}
                 onClick={() => { p.onShowEmoji(v => !v); p.onShowQuickReplies(false) }} />
             </Tooltip>
-            <Tooltip content={c('quick_replies')}>
-              <Button size="icon-sm" variant="ghost" icon={BoltIcon} aria-label={c('quick_replies')} aria-pressed={p.showQuickReplies}
+            <Tooltip content={t('quick_replies')}>
+              <Button size="icon-sm" variant="ghost" icon={BoltIcon} aria-label={t('quick_replies')} aria-pressed={p.showQuickReplies}
                 onClick={() => { p.onShowQuickReplies(v => !v); p.onShowEmoji(false) }} />
             </Tooltip>
           </>
@@ -241,28 +242,28 @@ export function Composer(p: ComposerProps) {
           value={p.text}
           onChange={e => p.onText(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={isNote ? c('note_ph') : c('reply_ph')}
-          aria-label={isNote ? c('mode_note') : c('mode_reply')}
+          placeholder={isNote ? t('note_ph') : t('reply_ph')}
+          aria-label={isNote ? t('mode_note') : t('mode_reply')}
           rows={1}
           dir="auto"
           style={{ resize: 'none', maxHeight: '140px' }}
           className="min-h-[36px] flex-1 bg-transparent px-2 py-2 text-sm text-ink outline-none placeholder:text-muted/80"
           onInput={e => {
-            const t = e.currentTarget
-            t.style.height = 'auto'
-            t.style.height = Math.min(t.scrollHeight, 140) + 'px'
+            const el = e.currentTarget
+            el.style.height = 'auto'
+            el.style.height = Math.min(el.scrollHeight, 140) + 'px'
           }}
         />
         {isNote ? (
           <Button size="sm" variant="dark" loading={p.savingNote} disabled={!p.text.trim()} onClick={p.onAddNote} className="h-9 shrink-0">
-            {c('add_note')}
+            {t('add_note')}
           </Button>
         ) : (
-          <Button size="icon" icon={PaperAirplaneIcon} aria-label={c('send')} disabled={!p.text.trim() || p.sending} onClick={p.onSend}
+          <Button size="icon" icon={PaperAirplaneIcon} aria-label={t('send')} disabled={!p.text.trim() || p.sending} onClick={p.onSend}
             className="h-9 w-9 shrink-0 rounded-full rtl:[&_svg]:-scale-x-100" />
         )}
       </div>
-      <p className="mt-1 hidden px-2 text-[11px] text-muted sm:block">{c('enter_hint')}</p>
+      <p className="mt-1 hidden px-2 text-[11px] text-muted sm:block">{t('enter_hint')}</p>
     </div>
   )
 }

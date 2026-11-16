@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import axios from 'axios'
@@ -14,8 +14,9 @@ import { AuthLayout, AuthHeading } from '@/components/auth/AuthLayout'
 import {
   AuthDivider, AuthErrorAlert, OAuthButtons, OtpCodeInput, PasswordInput, PasswordStrength, useCooldown,
 } from '@/components/auth/AuthParts'
-import { useAuthCopy } from '@/components/auth/copy'
-import type { AuthCopyKey } from '@/components/auth/copy'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/auth'
+import type { MessageKey as AuthCopyKey } from '@/locales/auth'
 import { describeAuthError, getDeviceFingerprint, safeRedirect, validateEmail } from '@/components/auth/session'
 import type { AuthErrorView } from '@/components/auth/session'
 
@@ -37,7 +38,7 @@ export default function RegisterPage() {
   const router = useRouter()
   const { brandName } = useWhiteLabel()
   const brand = brandName || 'WABEK'
-  const { c, lang } = useAuthCopy()
+  const { t } = useT(messages)
   const { setUser, setToken } = useAuthStore()
   const redirectTo = safeRedirect(router.query.redirect)
 
@@ -122,9 +123,9 @@ export default function RegisterPage() {
         setOtp('')
         setStep('otp')
         setResendLeft(30)
-        toast.success(c('otp_sent_whatsapp'))
+        toast.success(t('otp_sent_whatsapp'))
       } else {
-        finish(data, c('welcome_new', { brand }))
+        finish(data, t('welcome_new', { brand }))
       }
     } catch (e: any) {
       const status = e?.response?.status
@@ -161,7 +162,7 @@ export default function RegisterPage() {
         trustDevice,
         deviceFingerprint: getDeviceFingerprint(),
       })
-      finish(data, c('verified_welcome'))
+      finish(data, t('verified_welcome'))
     } catch (e: any) {
       setOtpError(describeAuthError(e))
       setOtp('')
@@ -176,11 +177,11 @@ export default function RegisterPage() {
     setOtpError(null)
     try {
       const { data } = await axios.post('/api/auth/login', { email: form.email.trim(), password: form.password, deviceFingerprint: getDeviceFingerprint() })
-      if (data?.success) { finish(data, c('welcome_new', { brand })); return }
-      toast.success(c('code_resent'))
+      if (data?.success) { finish(data, t('welcome_new', { brand })); return }
+      toast.success(t('code_resent'))
       setResendLeft(30)
     } catch (e: any) {
-      if (e?.response?.data?.requiresVerification) { toast.success(c('code_resent')); setResendLeft(30) }
+      if (e?.response?.data?.requiresVerification) { toast.success(t('code_resent')); setResendLeft(30) }
       else setOtpError(describeAuthError(e))
     } finally { setLoading(false) }
   }
@@ -189,32 +190,32 @@ export default function RegisterPage() {
 
   if (step === 'otp') {
     return (
-      <AuthLayout title={c('otp_title_verify')}>
+      <AuthLayout title={t('otp_title_verify')}>
         <AuthHeading
           icon={ShieldCheckIcon}
-          title={c('otp_title_verify')}
+          title={t('otp_title_verify')}
           subtitle={form.phone
-            ? <>{c('otp_sent_whatsapp')} <bdi dir="ltr" className="font-semibold text-ink">{form.phone}</bdi></>
-            : c('otp_sent_generic')}
+            ? <>{t('otp_sent_whatsapp')} <bdi dir="ltr" className="font-semibold text-ink">{form.phone}</bdi></>
+            : t('otp_sent_generic')}
         />
         <form onSubmit={e => { e.preventDefault(); verifyOtp() }} className="flex flex-col gap-5">
           <OtpCodeInput value={otp} onChange={v => { setOtp(v); setOtpError(null) }} onComplete={v => verifyOtp(v)} invalid={!!otpError} disabled={loading} autoFocus />
           <AuthErrorAlert error={otpError} />
-          <Checkbox label={c('trust_device')} description={c('trust_device_d')} checked={trustDevice} onChange={e => setTrustDevice(e.target.checked)} />
+          <Checkbox label={t('trust_device')} description={t('trust_device_d')} checked={trustDevice} onChange={e => setTrustDevice(e.target.checked)} />
           <Button type="submit" size="lg" fullWidth loading={loading} disabled={otp.length !== 6}>
-            {loading ? c('verifying') : c('verify_account')}
+            {loading ? t('verifying') : t('verify_account')}
           </Button>
         </form>
         <div className="mt-6 flex flex-col items-center gap-3 text-sm">
           <p className="text-muted">
-            {c('didnt_receive')}{' '}
+            {t('didnt_receive')}{' '}
             {resendLeft > 0
-              ? <span className="tabular">{c('resend_in', { s: resendLeft })}</span>
-              : <button type="button" onClick={resendOtp} disabled={loading} className="font-semibold text-link hover:text-link-hover disabled:opacity-60">{c('resend')}</button>}
+              ? <span className="tabular">{t('resend_in', { s: resendLeft })}</span>
+              : <button type="button" onClick={resendOtp} disabled={loading} className="font-semibold text-link hover:text-link-hover disabled:opacity-60">{t('resend')}</button>}
           </p>
           <button type="button" onClick={() => { setStep('form'); setOtp(''); setOtpError(null) }} className="inline-flex items-center gap-1.5 text-muted hover:text-ink">
             <ArrowLeftIcon className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
-            {c('go_back')}
+            {t('go_back')}
           </button>
         </div>
       </AuthLayout>
@@ -222,8 +223,8 @@ export default function RegisterPage() {
   }
 
   return (
-    <AuthLayout title={c('reg_title')} width="md">
-      <AuthHeading title={c('reg_title')} subtitle={c('reg_subtitle', { brand })} />
+    <AuthLayout title={t('reg_title')} width="md">
+      <AuthHeading title={t('reg_title')} subtitle={t('reg_subtitle', { brand })} />
 
       {inviteState === 'valid' && inviteInfo && (
         <div className="mb-6 flex items-start gap-3 overflow-hidden rounded-2xl bg-brand-gradient-soft p-4 text-[#04282C]">
@@ -231,34 +232,34 @@ export default function RegisterPage() {
             <GiftIcon className="h-5 w-5" aria-hidden="true" />
           </span>
           <div className="flex min-w-0 flex-col gap-1.5">
-            <p className="font-semibold">{inviteInfo.reseller_name ? c('invite_from', { name: inviteInfo.reseller_name }) : c('invite_code')}</p>
+            <p className="font-semibold">{inviteInfo.reseller_name ? t('invite_from', { name: inviteInfo.reseller_name }) : t('invite_code')}</p>
             <div className="flex flex-wrap gap-1.5 text-xs font-medium">
-              {!!inviteInfo.trial_days && <span className="rounded-full bg-[#04282C]/10 px-2.5 py-1">{c('invite_trial', { days: inviteInfo.trial_days })}</span>}
-              {!!inviteInfo.discount_pct && <span className="rounded-full bg-[#04282C]/10 px-2.5 py-1">{c('invite_discount', { pct: inviteInfo.discount_pct })}</span>}
-              {planName && <span className="rounded-full bg-[#04282C]/10 px-2.5 py-1">{c('invite_plan', { plan: planName })}</span>}
+              {!!inviteInfo.trial_days && <span className="rounded-full bg-[#04282C]/10 px-2.5 py-1">{t('invite_trial', { days: inviteInfo.trial_days })}</span>}
+              {!!inviteInfo.discount_pct && <span className="rounded-full bg-[#04282C]/10 px-2.5 py-1">{t('invite_discount', { pct: inviteInfo.discount_pct })}</span>}
+              {planName && <span className="rounded-full bg-[#04282C]/10 px-2.5 py-1">{t('invite_plan', { plan: planName })}</span>}
             </div>
           </div>
         </div>
       )}
 
       <OAuthButtons providers={['google', 'facebook', 'github']} />
-      <AuthDivider>{c('or_email')}</AuthDivider>
+      <AuthDivider>{t('or_email')}</AuthDivider>
 
       <form onSubmit={e => { e.preventDefault(); handleRegister() }} noValidate className="flex flex-col gap-4">
-        <Field label={c('full_name')} error={fieldErrors.name ? c(fieldErrors.name) : undefined}>
-          <Input icon={UserIcon} autoComplete="name" placeholder={c('name_ph')} value={form.name} onChange={e => update('name', e.target.value)} />
+        <Field label={t('full_name')} error={fieldErrors.name ? t(fieldErrors.name) : undefined}>
+          <Input icon={UserIcon} autoComplete="name" placeholder={t('name_ph')} value={form.name} onChange={e => update('name', e.target.value)} />
         </Field>
-        <Field label={c('email')} error={fieldErrors.email ? c(fieldErrors.email) : undefined}>
-          <div dir="ltr"><Input type="email" inputMode="email" autoComplete="email" icon={EnvelopeIcon} placeholder={c('email_ph')} value={form.email} onChange={e => update('email', e.target.value)} /></div>
+        <Field label={t('email')} error={fieldErrors.email ? t(fieldErrors.email) : undefined}>
+          <div dir="ltr"><Input type="email" inputMode="email" autoComplete="email" icon={EnvelopeIcon} placeholder={t('email_ph')} value={form.email} onChange={e => update('email', e.target.value)} /></div>
         </Field>
-        <Field label={c('password')} hint={form.password ? undefined : c('password_hint')} error={fieldErrors.password ? c(fieldErrors.password) : undefined}>
-          <PasswordInput autoComplete="new-password" placeholder={c('password_ph')} value={form.password} onChange={e => update('password', e.target.value)} />
+        <Field label={t('password')} hint={form.password ? undefined : t('password_hint')} error={fieldErrors.password ? t(fieldErrors.password) : undefined}>
+          <PasswordInput autoComplete="new-password" placeholder={t('password_ph')} value={form.password} onChange={e => update('password', e.target.value)} />
         </Field>
         <PasswordStrength password={form.password} />
         <Field
-          label={<>{c('phone')} <span className="font-normal text-muted">({c('optional')})</span></>}
-          hint={c('phone_hint')}
-          error={fieldErrors.phone ? c(fieldErrors.phone) : undefined}
+          label={<>{t('phone')} <span className="font-normal text-muted">({t('optional')})</span></>}
+          hint={t('phone_hint')}
+          error={fieldErrors.phone ? t(fieldErrors.phone) : undefined}
         >
           <div dir="ltr"><Input type="tel" inputMode="tel" autoComplete="tel" icon={PhoneIcon} placeholder="+201234567890" value={form.phone} onChange={e => update('phone', e.target.value)} /></div>
         </Field>
@@ -271,7 +272,7 @@ export default function RegisterPage() {
             aria-expanded={inviteOpen}
             className="flex w-full items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-ink"
           >
-            <span className="flex items-center gap-2"><TicketIcon className="h-[18px] w-[18px] text-brand-ink" aria-hidden="true" />{c('invite_have')}</span>
+            <span className="flex items-center gap-2"><TicketIcon className="h-[18px] w-[18px] text-brand-ink" aria-hidden="true" />{t('invite_have')}</span>
             <span className="flex items-center gap-2">
               {inviteState === 'valid' && <Badge tone="success" size="sm">{inviteCode.trim().toUpperCase()}</Badge>}
               <ChevronDownIcon className={cn('h-4 w-4 text-muted transition-transform', inviteOpen && 'rotate-180')} aria-hidden="true" />
@@ -280,16 +281,16 @@ export default function RegisterPage() {
           {inviteOpen && (
             <div className="border-t border-line-soft px-4 pb-4 pt-3">
               <Field
-                label={c('invite_code')}
-                hint={inviteState === 'invalid' ? undefined : c('invite_hint')}
-                error={inviteState === 'invalid' ? c('invite_invalid') : undefined}
+                label={t('invite_code')}
+                hint={inviteState === 'invalid' ? undefined : t('invite_hint')}
+                error={inviteState === 'invalid' ? t('invite_invalid') : undefined}
               >
                 <div dir="ltr"><Input
-                  className="uppercase tracking-wider placeholder:normal-case placeholder:tracking-normal" placeholder={c('invite_ph')}
+                  className="uppercase tracking-wider placeholder:normal-case placeholder:tracking-normal" placeholder={t('invite_ph')}
                   value={inviteCode}
                   onChange={e => { setInviteCode(e.target.value); if (inviteState !== 'idle') setInviteState('idle'); checkedCode.current = '' }}
                   onBlur={() => validateInvite(inviteCode)}
-                  endAdornment={inviteState === 'checking' ? <Spinner label={c('invite_checking')} /> : undefined}
+                  endAdornment={inviteState === 'checking' ? <Spinner label={t('invite_checking')} /> : undefined}
                 /></div>
               </Field>
             </div>
@@ -301,27 +302,27 @@ export default function RegisterPage() {
         )}
         {error?.exists && (
           <p className="-mt-2 text-sm">
-            <Link href="/auth/login" className="font-semibold text-link hover:text-link-hover">{c('sign_in_link')}</Link>
+            <Link href="/auth/login" className="font-semibold text-link hover:text-link-hover">{t('sign_in_link')}</Link>
             <span className="text-muted"> · </span>
-            <Link href="/auth/forgot-password" className="font-medium text-link hover:text-link-hover">{c('forgot')}</Link>
+            <Link href="/auth/forgot-password" className="font-medium text-link hover:text-link-hover">{t('forgot')}</Link>
           </p>
         )}
 
         <Button type="submit" size="lg" fullWidth loading={loading} className="mt-1">
-          {loading ? c('creating') : c('create_account')}
+          {loading ? t('creating') : t('create_account')}
         </Button>
 
         <p className="text-center text-xs leading-relaxed text-muted">
-          {c('terms_prefix')}{' '}
-          <Link href="/legal/terms" className="text-link hover:text-link-hover">{c('terms')}</Link>{' '}
-          {c('and')}{lang === 'ar' ? '' : ' '}
-          <Link href="/legal/privacy" className="text-link hover:text-link-hover">{c('privacy')}</Link>.
+          {t('terms_agree').split(/(\{terms\}|\{privacy\})/).map((part, i) =>
+            part === '{terms}' ? <Link key={i} href="/legal/terms" className="text-link hover:text-link-hover">{t('terms')}</Link>
+              : part === '{privacy}' ? <Link key={i} href="/legal/privacy" className="text-link hover:text-link-hover">{t('privacy')}</Link>
+                : <Fragment key={i}>{part}</Fragment>)}
         </p>
       </form>
 
       <p className="mt-7 text-center text-sm text-muted">
-        {c('have_account')}{' '}
-        <Link href="/auth/login" className="font-semibold text-link hover:text-link-hover">{c('sign_in_link')}</Link>
+        {t('have_account')}{' '}
+        <Link href="/auth/login" className="font-semibold text-link hover:text-link-hover">{t('sign_in_link')}</Link>
       </p>
     </AuthLayout>
   )

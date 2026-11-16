@@ -19,7 +19,7 @@ export function initials(name?: string | null): string {
   const first = Array.from(parts[0])[0] || ''
   const second = parts.length > 1 ? Array.from(parts[1])[0] || '' : ''
   // Arabic initials read better as a single letter (as in the mock).
-  if (/[؀-ۿ]/.test(first)) return first
+  if (/[\u0600-\u06FF]/.test(first)) return first
   return (first + second).toUpperCase()
 }
 

@@ -1,4 +1,5 @@
-import React from 'react'
+import React, { useEffect } from 'react'
+import axios from 'axios'
 import Head from 'next/head'
 import Link from 'next/link'
 import {
@@ -8,8 +9,11 @@ import { Logo } from '@/components/ui'
 import { cn } from '@/components/ui/utils'
 import { LanguageMenu, ThemeToggle } from '@/components/layout/AppShell'
 import { useWhiteLabel } from '@/hooks/useWhiteLabel'
+import { useAuthStore } from '@/lib/store'
 import { setStoredLang } from '@/lib/i18n'
-import { useAuthCopy } from './copy'
+import { useTranslation } from '@/hooks/useTranslation'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/auth'
 
 export interface AuthLayoutProps {
   /** Browser tab title. */
@@ -31,14 +35,30 @@ const POINTS = [
  * side, the form on the other. Single column under `lg`.
  */
 export function AuthLayout({ title, children, width = 'sm' }: AuthLayoutProps) {
-  const { c, t, lang, dir } = useAuthCopy()
+  const { t, lang, dir } = useT(messages)
+  const { t: tShell } = useTranslation()
   const { brandName, customLogo } = useWhiteLabel()
   const brand = brandName || 'WABEK'
 
+  // A signed-in visitor's profile language wins over the device choice, so
+  // the switcher updates the profile too (same as the dashboard switcher).
+  const user = useAuthStore(s => s.user)
+  const setUser = useAuthStore(s => s.setUser)
   const changeLang = (code: string) => {
     setStoredLang(code)
     window.dispatchEvent(new CustomEvent('langchange', { detail: code }))
+    if (user) {
+      setUser({ ...user, language: code })
+      axios.put('/api/settings/profile', { language: code }).catch(() => {})
+    }
   }
+
+  // Keep <html lang/dir> on the effective language (profile → device).
+  useEffect(() => {
+    const root = document.documentElement
+    root.lang = lang
+    root.dir = dir
+  }, [lang, dir])
 
   return (
     <>
@@ -56,7 +76,7 @@ export function AuthLayout({ title, children, width = 'sm' }: AuthLayoutProps) {
 
           <div className="relative max-w-[460px]">
             <h2 className="text-[30px] font-bold leading-[1.35] text-deep-ink xl:text-[34px]">
-              {c('brand_tagline')}
+              {t('brand_tagline')}
             </h2>
             <ul className="mt-9 flex flex-col gap-5">
               {POINTS.map(p => (
@@ -65,8 +85,8 @@ export function AuthLayout({ title, children, width = 'sm' }: AuthLayoutProps) {
                     <p.icon className="h-5 w-5" aria-hidden="true" />
                   </span>
                   <span className="flex flex-col gap-1">
-                    <span className="text-[15px] font-semibold text-deep-ink">{c(p.t)}</span>
-                    <span className="text-sm leading-relaxed text-deep-muted">{c(p.d)}</span>
+                    <span className="text-[15px] font-semibold text-deep-ink">{t(p.t)}</span>
+                    <span className="text-sm leading-relaxed text-deep-muted">{t(p.d)}</span>
                   </span>
                 </li>
               ))}
@@ -75,9 +95,9 @@ export function AuthLayout({ title, children, width = 'sm' }: AuthLayoutProps) {
 
           <div className="relative flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-deep-muted">
             <span className="tabular">© {new Date().getFullYear()} {brand}</span>
-            <Link href="/legal/terms" className="text-deep-muted hover:text-white">{c('terms')}</Link>
-            <Link href="/legal/privacy" className="text-deep-muted hover:text-white">{c('privacy')}</Link>
-            <Link href="/status" className="text-deep-muted hover:text-white">{c('status')}</Link>
+            <Link href="/legal/terms" className="text-deep-muted hover:text-white">{t('terms')}</Link>
+            <Link href="/legal/privacy" className="text-deep-muted hover:text-white">{t('privacy')}</Link>
+            <Link href="/status" className="text-deep-muted hover:text-white">{t('status')}</Link>
           </div>
         </aside>
 
@@ -89,8 +109,8 @@ export function AuthLayout({ title, children, width = 'sm' }: AuthLayoutProps) {
               <Logo href="/" size={34} src={customLogo} name={brandName} />
             </div>
             <div className="flex items-center gap-1">
-              <LanguageMenu t={t} lang={lang} onChange={changeLang} />
-              <ThemeToggle t={t} />
+              <LanguageMenu t={tShell} lang={lang} onChange={changeLang} />
+              <ThemeToggle t={tShell} />
             </div>
           </div>
 
@@ -101,9 +121,9 @@ export function AuthLayout({ title, children, width = 'sm' }: AuthLayoutProps) {
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 px-4 pb-6 text-xs text-muted lg:hidden">
-            <Link href="/legal/terms" className="text-muted hover:text-ink">{c('terms')}</Link>
-            <Link href="/legal/privacy" className="text-muted hover:text-ink">{c('privacy')}</Link>
-            <Link href="/status" className="text-muted hover:text-ink">{c('status')}</Link>
+            <Link href="/legal/terms" className="text-muted hover:text-ink">{t('terms')}</Link>
+            <Link href="/legal/privacy" className="text-muted hover:text-ink">{t('privacy')}</Link>
+            <Link href="/status" className="text-muted hover:text-ink">{t('status')}</Link>
           </div>
         </main>
       </div>

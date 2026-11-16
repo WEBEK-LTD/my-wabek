@@ -9,11 +9,10 @@ import {
   Table, THead, TBody, TR, TH, TD, Avatar, CHART_COLORS,
 } from '@/components/ui'
 import { cn } from '@/components/ui/utils'
-import { useHomeCopy } from './copy'
-import type { HomeCopyKey } from './copy'
-import { localeTag } from '@/components/auth/makeCopy'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/home'
+import type { MessageKey as HomeCopyKey } from '@/locales/dashboard/home'
 
-export const fmt = (n: number | null | undefined) => new Intl.NumberFormat('en-US').format(Number(n) || 0)
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0)
 
 /* ── Recent campaigns ──────────────────────────────────────── */
@@ -26,13 +25,14 @@ const STATUS_KEYS: Record<string, HomeCopyKey> = {
 }
 
 export function RecentCampaigns({ campaigns, loading }: { campaigns: CampaignRow[]; loading?: boolean }) {
-  const { c, lang } = useHomeCopy()
-  const dateFmt = new Intl.DateTimeFormat(localeTag(lang), { day: 'numeric', month: 'short' })
+  const { t, locale, fmtNumber } = useT(messages)
+  const fmt = (n?: number | null) => fmtNumber(Number(n) || 0)
+  const dateFmt = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' })
   return (
     <Card padding="none" className="flex min-w-0 flex-col">
       <CardHeader
-        title={c('campaigns_title')}
-        action={<Link href="/dashboard/campaigns" className="text-[13px] font-medium text-link hover:text-link-hover">{c('campaigns_all')}</Link>}
+        title={t('campaigns_title')}
+        action={<Link href="/dashboard/campaigns" className="text-[13px] font-medium text-link hover:text-link-hover">{t('campaigns_all')}</Link>}
       />
       {loading ? (
         <div className="flex flex-col gap-3 p-5 sm:p-6">{[0, 1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
@@ -40,20 +40,20 @@ export function RecentCampaigns({ campaigns, loading }: { campaigns: CampaignRow
         <EmptyState
           size="sm"
           icon={MegaphoneIcon}
-          title={c('campaigns_empty')}
-          description={c('campaigns_empty_d')}
-          action={<Button size="sm" icon={PlusIcon} href="/dashboard/campaigns">{c('new_campaign')}</Button>}
+          title={t('campaigns_empty')}
+          description={t('campaigns_empty_d')}
+          action={<Button size="sm" icon={PlusIcon} href="/dashboard/campaigns">{t('new_campaign')}</Button>}
           className="py-10"
         />
       ) : (
-        <Table minWidth={620} caption={c('campaigns_title')} >
+        <Table minWidth={620} caption={t('campaigns_title')} >
           <THead>
             <TR>
-              <TH>{c('col_campaign')}</TH>
-              <TH>{c('col_status')}</TH>
-              <TH align="end">{c('col_sent')}</TH>
-              <TH>{c('col_delivered')}</TH>
-              <TH>{c('col_read')}</TH>
+              <TH>{t('col_campaign')}</TH>
+              <TH>{t('col_status')}</TH>
+              <TH align="end">{t('col_sent')}</TH>
+              <TH>{t('col_delivered')}</TH>
+              <TH>{t('col_read')}</TH>
             </TR>
           </THead>
           <TBody>
@@ -67,10 +67,10 @@ export function RecentCampaigns({ campaigns, loading }: { campaigns: CampaignRow
                   <TD sub={cm.created_at ? dateFmt.format(new Date(cm.created_at)) : undefined}>
                     <span className="font-medium text-ink">{cm.name}</span>
                   </TD>
-                  <TD><StatusPill status={status}>{STATUS_KEYS[status] ? c(STATUS_KEYS[status]) : cm.status}</StatusPill></TD>
+                  <TD><StatusPill status={status}>{STATUS_KEYS[status] ? t(STATUS_KEYS[status]) : cm.status}</StatusPill></TD>
                   <TD align="end" className="tabular">{sent ? fmt(sent) : '—'}</TD>
-                  <TD><ProgressBar value={delivered} showValue tone="brand" className="w-28" aria-label={`${c('col_delivered')} · ${cm.name}`} /></TD>
-                  <TD><ProgressBar value={read} showValue className="w-28" aria-label={`${c('col_read')} · ${cm.name}`} /></TD>
+                  <TD><ProgressBar value={delivered} showValue tone="brand" className="w-28" aria-label={`${t('col_delivered')} · ${cm.name}`} /></TD>
+                  <TD><ProgressBar value={read} showValue className="w-28" aria-label={`${t('col_read')} · ${cm.name}`} /></TD>
                 </TR>
               )
             })}
@@ -85,23 +85,24 @@ export function RecentCampaigns({ campaigns, loading }: { campaigns: CampaignRow
 
 /** `ai` / `teamTotal`: outbound replies of the last 30 days; `team`: optional per-person breakdown. */
 export function RepliesCard({ ai, teamTotal: teamTotalProp, team }: { ai: number; teamTotal?: number; team: { name: string; messages: number }[] }) {
-  const { c } = useHomeCopy()
+  const { t, fmtNumber } = useT(messages)
+  const fmt = (n?: number | null) => fmtNumber(Number(n) || 0)
   const teamTotal = teamTotalProp ?? team.reduce((s, m) => s + m.messages, 0)
   const total = ai + teamTotal
   const aiPct = pct(ai, total)
   return (
     <Card padding="none" className="flex min-w-0 flex-col">
-      <CardHeader title={c('replies_title')} subtitle={c('replies_sub')} />
+      <CardHeader title={t('replies_title')} subtitle={t('replies_sub')} />
       <CardBody className="flex flex-col gap-4">
       <Donut
         size={124}
         legend="side"
         centerLabel={`${aiPct}%`}
-        centerSub={c('replies_center')}
+        centerSub={t('replies_center')}
         formatValue={(s, p) => `${Math.round(p)}%`}
         segments={[
-          { label: c('replies_ai'), value: ai, color: CHART_COLORS[0] },
-          { label: c('replies_team'), value: teamTotal, color: CHART_COLORS[1] },
+          { label: t('replies_ai'), value: ai, color: CHART_COLORS[0] },
+          { label: t('replies_team'), value: teamTotal, color: CHART_COLORS[1] },
         ]}
       />
       {team.length > 0 && (
@@ -110,7 +111,7 @@ export function RepliesCard({ ai, teamTotal: teamTotalProp, team }: { ai: number
             <li key={m.name} className="flex items-center gap-2.5">
               <Avatar name={m.name} size="sm" />
               <span className="min-w-0 flex-1 truncate text-sm text-ink">{m.name}</span>
-              <span className="tabular text-[13px] text-muted">{c('replies_n', { n: fmt(m.messages) })}</span>
+              <span className="tabular text-[13px] text-muted">{t('replies_n', { n: fmt(m.messages) })}</span>
             </li>
           ))}
         </ul>
@@ -123,23 +124,24 @@ export function RepliesCard({ ai, teamTotal: teamTotalProp, team }: { ai: number
 /* ── Delivery breakdown (fallback when there are no reply stats) ── */
 
 export function DeliveryCard({ breakdown }: { breakdown: { sent: number; delivered: number; read: number; failed: number } }) {
-  const { c } = useHomeCopy()
+  const { t, fmtNumber } = useT(messages)
+  const fmt = (n?: number | null) => fmtNumber(Number(n) || 0)
   const total = breakdown.sent + breakdown.delivered + breakdown.read + breakdown.failed
   return (
     <Card padding="none" className="flex min-w-0 flex-col">
-      <CardHeader title={c('delivery_title')} />
+      <CardHeader title={t('delivery_title')} />
       <CardBody>
       <Donut
         size={124}
         legend="side"
         centerLabel={`${pct(breakdown.read, total)}%`}
-        centerSub={c('delivery_center')}
+        centerSub={t('delivery_center')}
         formatValue={s => fmt(s.value)}
         segments={[
-          { label: c('delivery_read'), value: breakdown.read, color: CHART_COLORS[1] },
-          { label: c('delivery_delivered'), value: breakdown.delivered, color: CHART_COLORS[0] },
-          { label: c('delivery_sent'), value: breakdown.sent, color: CHART_COLORS[4] },
-          { label: c('delivery_failed'), value: breakdown.failed, color: CHART_COLORS[5] },
+          { label: t('delivery_read'), value: breakdown.read, color: CHART_COLORS[1] },
+          { label: t('delivery_delivered'), value: breakdown.delivered, color: CHART_COLORS[0] },
+          { label: t('delivery_sent'), value: breakdown.sent, color: CHART_COLORS[4] },
+          { label: t('delivery_failed'), value: breakdown.failed, color: CHART_COLORS[5] },
         ]}
       />
       </CardBody>
@@ -152,13 +154,13 @@ export function DeliveryCard({ breakdown }: { breakdown: { sent: number; deliver
 export interface InstanceRow { id: string; display_name?: string | null; phone_number?: string | null; status?: string; type?: string | null; instance_type?: string | null }
 
 export function NumbersCard({ instances, loading }: { instances: InstanceRow[]; loading?: boolean }) {
-  const { c } = useHomeCopy()
+  const { t } = useT(messages)
   return (
     <Card padding="none" className="flex min-w-0 flex-col">
       <CardHeader
-        title={c('numbers_title')}
+        title={t('numbers_title')}
         icon={DevicePhoneMobileIcon}
-        action={instances.length > 0 ? <Link href="/dashboard/instances" className="text-[13px] font-medium text-link hover:text-link-hover">{c('numbers_manage')}</Link> : undefined}
+        action={instances.length > 0 ? <Link href="/dashboard/instances" className="text-[13px] font-medium text-link hover:text-link-hover">{t('numbers_manage')}</Link> : undefined}
       />
       <CardBody>
       {loading ? (
@@ -167,9 +169,9 @@ export function NumbersCard({ instances, loading }: { instances: InstanceRow[]; 
         <EmptyState
           size="sm"
           icon={DevicePhoneMobileIcon}
-          title={c('numbers_empty')}
-          description={c('numbers_empty_d')}
-          action={<Button size="sm" href="/dashboard/instances" icon={PlusIcon}>{c('numbers_connect')}</Button>}
+          title={t('numbers_empty')}
+          description={t('numbers_empty_d')}
+          action={<Button size="sm" href="/dashboard/instances" icon={PlusIcon}>{t('numbers_connect')}</Button>}
         />
       ) : (
         <ul className="flex flex-col divide-y divide-line-soft">
@@ -186,10 +188,10 @@ export function NumbersCard({ instances, loading }: { instances: InstanceRow[]; 
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-ink">{inst.display_name || <bdi dir="ltr">{inst.phone_number}</bdi>}</p>
                   <p className="truncate text-xs text-muted">
-                    {c(kind)}{inst.display_name && inst.phone_number ? <> · <bdi dir="ltr">{inst.phone_number}</bdi></> : null}
+                    {t(kind)}{inst.display_name && inst.phone_number ? <> · <bdi dir="ltr">{inst.phone_number}</bdi></> : null}
                   </p>
                 </div>
-                <StatusPill status={inst.status} size="sm">{connected ? c('st_connected') : disconnected ? c('st_disconnected') : c('st_other')}</StatusPill>
+                <StatusPill status={inst.status} size="sm">{connected ? t('st_connected') : disconnected ? t('st_disconnected') : t('st_other')}</StatusPill>
               </li>
             )
           })}
@@ -203,14 +205,15 @@ export function NumbersCard({ instances, loading }: { instances: InstanceRow[]; 
 /* ── Chatbot activity ──────────────────────────────────────── */
 
 export function ChatbotCard({ flows }: { flows: { name: string; trigger_count: number; is_active: boolean }[] }) {
-  const { c } = useHomeCopy()
+  const { t, fmtNumber } = useT(messages)
+  const fmt = (n?: number | null) => fmtNumber(Number(n) || 0)
   const max = Math.max(...flows.map(f => f.trigger_count || 0), 1)
   return (
     <Card padding="none" className="flex min-w-0 flex-col">
       <CardHeader
-        title={c('chatbots_title')}
+        title={t('chatbots_title')}
         icon={CpuChipIcon}
-        action={<Link href="/dashboard/chatbot" className="text-[13px] font-medium text-link hover:text-link-hover">{c('chatbots_manage')}</Link>}
+        action={<Link href="/dashboard/chatbot" className="text-[13px] font-medium text-link hover:text-link-hover">{t('chatbots_manage')}</Link>}
       />
       <CardBody>
       <ul className="flex flex-col gap-3">
@@ -221,7 +224,7 @@ export function ChatbotCard({ flows }: { flows: { name: string; trigger_count: n
                 <span className={cn('h-2 w-2 shrink-0 rounded-full', f.is_active ? 'bg-brand-green' : 'bg-line-strong')} aria-hidden="true" />
                 <span className="truncate text-ink">{f.name}</span>
               </span>
-              <span className="tabular shrink-0 text-xs text-muted">{c('chatbot_triggers', { n: fmt(f.trigger_count) })}</span>
+              <span className="tabular shrink-0 text-xs text-muted">{t('chatbot_triggers', { n: fmt(f.trigger_count) })}</span>
             </div>
             <ProgressBar value={f.trigger_count || 0} max={max} size="xs" tone="brand" aria-label={f.name} />
           </li>
@@ -244,10 +247,10 @@ const ACTIONS: { href: string; label: HomeCopyKey; icon: React.ElementType; tone
 ]
 
 export function QuickActions() {
-  const { c } = useHomeCopy()
+  const { t } = useT(messages)
   return (
     <Card padding="none" className="flex min-w-0 flex-col">
-      <CardHeader title={c('quick_title')} />
+      <CardHeader title={t('quick_title')} />
       <CardBody>
       <div className="grid grid-cols-2 gap-2">
         {ACTIONS.map(a => (
@@ -259,7 +262,7 @@ export function QuickActions() {
             <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl', a.tone)}>
               <a.icon className="h-[18px] w-[18px]" aria-hidden="true" />
             </span>
-            <span className="min-w-0 flex-1 leading-snug">{c(a.label)}</span>
+            <span className="min-w-0 flex-1 leading-snug">{t(a.label)}</span>
             <ArrowUpRightIcon className="h-4 w-4 shrink-0 text-muted opacity-0 transition group-hover:opacity-100 rtl:-scale-x-100" aria-hidden="true" />
           </Link>
         ))}
@@ -272,6 +275,8 @@ export function QuickActions() {
 /* ── Secondary metrics strip ───────────────────────────────── */
 
 export function MiniStats({ items, loading }: { items: { label: string; value: number; href: string; icon: React.ElementType }[]; loading?: boolean }) {
+  const { fmtNumber } = useT(messages)
+  const fmt = (n?: number | null) => fmtNumber(Number(n) || 0)
   return (
     <div className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-line bg-line sm:grid-cols-3 xl:grid-cols-6">
       {items.map(it => (

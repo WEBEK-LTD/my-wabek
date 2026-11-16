@@ -4,11 +4,11 @@ import { cn } from '@/components/ui/utils'
 import { docsHref, type DocsLang } from './lib/manifest'
 import { docsStrings } from './lib/strings'
 import { rememberDocsLang } from './useDocsLang'
+import { LANGUAGES } from '@/lib/i18n'
 
-const OPTIONS: { code: DocsLang; label: string }[] = [
-  { code: 'ar', label: 'العربية' },
-  { code: 'en', label: 'English' },
-]
+/** Each language is shown by its own name (endonym). */
+const endonym = (code: DocsLang) => LANGUAGES.find(l => l.code === code)?.name || code
+const OPTIONS: { code: DocsLang; label: string }[] = (['ar', 'en'] as DocsLang[]).map(code => ({ code, label: endonym(code) }))
 
 /** Two-way switch to the same page in the other language. */
 export default function DocsLangSwitch({ lang, slug, className }: { lang: DocsLang; slug?: string | null; className?: string }) {

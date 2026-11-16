@@ -1,4 +1,4 @@
-import type { AuthCopyKey } from './copy'
+import type { MessageKey as AuthCopyKey } from '@/locales/auth'
 
 /** Stable per-browser fingerprint (used for "trust this device"). */
 export function getDeviceFingerprint(): string {
@@ -33,7 +33,7 @@ export function validateEmail(email: string): AuthCopyKey | null {
 
 export type AuthErrorView = { title?: AuthCopyKey; body: AuthCopyKey; vars?: Record<string, string | number>; tone: 'danger' | 'warning'; raw?: string }
 
-/** Turn a server auth error into localized copy (unknown messages are shown as-is). */
+/** Turn a server auth error into localized copy (unknown server messages are kept in `raw` and shown only in the English UI). */
 export function describeAuthError(err: any): AuthErrorView {
   if (!err?.response) return { body: 'err_network', tone: 'danger' }
   const status: number = err.response.status

@@ -4,15 +4,22 @@ import { translations, Language, TranslationKey, LANGUAGES, getStoredLang, DEFAU
 
 const SUPPORTED = LANGUAGES.map(l => l.code)
 
+// After the first client render (hydration) components mounted later — e.g.
+// on client-side navigation — can read the stored language right away instead
+// of rendering one frame in the default language (which also leaked into the
+// route announcer / document title).
+let hydrated = false
+
 /**
  * Current UI language. Priority: the signed-in user's profile language, then
  * the language picked on this device (localStorage), then Arabic.
  */
 export function useTranslation() {
   const userLang = useAuthStore(s => s.user?.language)
-  const [deviceLang, setDeviceLang] = useState<string>(DEFAULT_LANG)
+  const [deviceLang, setDeviceLang] = useState<string>(() => (hydrated ? getStoredLang() : DEFAULT_LANG))
 
   useEffect(() => {
+    hydrated = true
     setDeviceLang(getStoredLang())
     const onChange = (e: Event) => {
       const next = (e as CustomEvent<string>).detail

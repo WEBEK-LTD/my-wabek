@@ -62,8 +62,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Check if Railway server is configured
       if (!WA_SERVER) {
         return res.status(400).json({
+          // Language-neutral: the UI translates by `code` (falls back to `message`).
+          code: 'WA_WEB_NOT_CONFIGURED',
           error: 'WA Web server not configured',
-          message: 'لازم تضيف WA_WEB_SERVER_URL في Netlify Environment Variables. شوف الـ docs/baileys-server.md',
+          message: 'Add WA_WEB_SERVER_URL to the server environment variables (see docs/baileys-server.md).',
           docs: 'Add WA_WEB_SERVER_URL and WA_WEB_SERVER_SECRET to Netlify environment variables, then redeploy.',
           configured: false,
         })
