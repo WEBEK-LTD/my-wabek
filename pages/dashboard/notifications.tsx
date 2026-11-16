@@ -3,8 +3,7 @@ import { useRouter } from 'next/router'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { formatDistanceToNow, isToday, isYesterday } from 'date-fns'
-import { ar as arLocale, enUS, fr as frLocale, tr as trLocale } from 'date-fns/locale'
+import { isToday, isYesterday } from 'date-fns'
 import {
   BellIcon, CheckCircleIcon, TrashIcon, ExclamationTriangleIcon, InformationCircleIcon,
   ChatBubbleLeftRightIcon, MegaphoneIcon, Cog6ToothIcon, CheckIcon, ArrowPathIcon, XCircleIcon,
@@ -12,71 +11,8 @@ import {
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { Button, Card, EmptyState, PageHeader, Skeleton, Tabs, Tooltip } from '@/components/ui'
 import { cn } from '@/components/ui/utils'
-import { makeCopy, localeTag } from '@/components/auth/makeCopy'
-
-const useCopy = makeCopy({
-  en: {
-    eyebrow: 'Settings',
-    title: 'Notifications',
-    unread_n: '{n} unread',
-    all_read: 'You’re all caught up',
-    mark_all: 'Mark all as read',
-    marked_all: 'All notifications marked as read',
-    f_all: 'All',
-    f_unread: 'Unread',
-    f_message: 'Messages',
-    f_campaign: 'Campaigns',
-    f_success: 'Success',
-    f_warning: 'Warnings',
-    today: 'Today',
-    yesterday: 'Yesterday',
-    empty: 'No notifications',
-    empty_d: 'New messages, campaign results and account alerts will show up here.',
-    empty_filter: 'Nothing matches this filter',
-    empty_filter_d: 'Try another filter to see more notifications.',
-    show_all: 'Show all',
-    error: 'We couldn’t load your notifications',
-    retry: 'Try again',
-    delete: 'Delete notification',
-    deleted: 'Notification deleted',
-    delete_failed: 'Couldn’t delete the notification',
-    unread: 'Unread',
-    open: 'Open',
-    filters: 'Filter notifications',
-  },
-  ar: {
-    eyebrow: 'الإعدادات',
-    title: 'الإشعارات',
-    unread_n: '{n} غير مقروءة',
-    all_read: 'لا توجد إشعارات جديدة',
-    mark_all: 'تعليم الكل كمقروء',
-    marked_all: 'تم تعليم جميع الإشعارات كمقروءة',
-    f_all: 'الكل',
-    f_unread: 'غير المقروءة',
-    f_message: 'الرسائل',
-    f_campaign: 'الحملات',
-    f_success: 'نجاح',
-    f_warning: 'تنبيهات',
-    today: 'اليوم',
-    yesterday: 'أمس',
-    empty: 'لا توجد إشعارات',
-    empty_d: 'ستظهر هنا الرسائل الجديدة ونتائج الحملات وتنبيهات الحساب.',
-    empty_filter: 'لا شيء يطابق هذا التصنيف',
-    empty_filter_d: 'جرّب تصنيفًا آخر لعرض مزيد من الإشعارات.',
-    show_all: 'عرض الكل',
-    error: 'تعذّر تحميل الإشعارات',
-    retry: 'إعادة المحاولة',
-    delete: 'حذف الإشعار',
-    deleted: 'تم حذف الإشعار',
-    delete_failed: 'تعذّر حذف الإشعار',
-    unread: 'غير مقروء',
-    open: 'فتح',
-    filters: 'تصنيف الإشعارات',
-  },
-})
-
-const DATE_LOCALES: Record<string, Locale> = { ar: arLocale, en: enUS, fr: frLocale, tr: trLocale }
-type Locale = typeof enUS
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/notifications'
 
 interface Notification { id: string; type?: string; title: string; body?: string; link?: string; is_read?: boolean; created_at: string }
 
@@ -93,7 +29,7 @@ const TYPE_STYLE: Record<string, { icon: React.ElementType; tone: string }> = {
 export default function NotificationsPage() {
   const qc = useQueryClient()
   const router = useRouter()
-  const { c, lang } = useCopy()
+  const { t, locale, fmtRelative } = useT(messages)
   const [filter, setFilter] = useState('all')
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery('notifications-all',
@@ -104,7 +40,7 @@ export default function NotificationsPage() {
 
   const markAllMut = useMutation(
     () => axios.put('/api/notifications', { action: 'mark_all_read' }),
-    { onSuccess: () => { invalidate(); toast.success(c('marked_all')) } }
+    { onSuccess: () => { invalidate(); toast.success(t('marked_all')) } }
   )
 
   const markOneMut = useMutation(
@@ -121,8 +57,8 @@ export default function NotificationsPage() {
         qc.setQueryData('notifications-all', (old: any) => ({ ...(old || {}), notifications: (old?.notifications || []).filter((n: Notification) => n.id !== id) }))
         return { prev }
       },
-      onError: (_e, _id, ctx: any) => { if (ctx?.prev) qc.setQueryData('notifications-all', ctx.prev); toast.error(c('delete_failed')) },
-      onSuccess: () => { toast.success(c('deleted')) },
+      onError: (_e, _id, ctx: any) => { if (ctx?.prev) qc.setQueryData('notifications-all', ctx.prev); toast.error(t('delete_failed')) },
+      onSuccess: () => { toast.success(t('deleted')) },
       onSettled: invalidate,
     }
   )
@@ -135,20 +71,20 @@ export default function NotificationsPage() {
     : notifications.filter(n => n.type === filter)
 
   const groups = useMemo(() => {
-    const dayFmt = new Intl.DateTimeFormat(localeTag(lang), { weekday: 'long', day: 'numeric', month: 'long' })
+    const dayFmt = new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'long' })
     const out: { key: string; label: string; items: Notification[] }[] = []
     for (const n of filtered) {
       const d = new Date(n.created_at)
       const key = d.toDateString()
       let g = out.find(x => x.key === key)
       if (!g) {
-        g = { key, label: isToday(d) ? c('today') : isYesterday(d) ? c('yesterday') : dayFmt.format(d), items: [] }
+        g = { key, label: isToday(d) ? t('today') : isYesterday(d) ? t('yesterday') : dayFmt.format(d), items: [] }
         out.push(g)
       }
       g.items.push(n)
     }
     return out
-  }, [filtered, lang])
+  }, [filtered, locale, t])
 
   const open = (n: Notification) => {
     if (!n.is_read) markOneMut.mutate(n.id)
@@ -159,28 +95,28 @@ export default function NotificationsPage() {
 
   const count = (type: string) => notifications.filter(n => n.type === type).length
   const tabs = [
-    { id: 'all', label: c('f_all'), count: notifications.length || undefined },
-    { id: 'unread', label: c('f_unread'), count: unreadCount || undefined },
-    { id: 'message', label: c('f_message'), count: count('message') || undefined },
-    { id: 'campaign', label: c('f_campaign'), count: count('campaign') || undefined },
-    { id: 'success', label: c('f_success'), count: count('success') || undefined },
-    { id: 'warning', label: c('f_warning'), count: count('warning') || undefined },
+    { id: 'all', label: t('f_all'), count: notifications.length || undefined },
+    { id: 'unread', label: t('f_unread'), count: unreadCount || undefined },
+    { id: 'message', label: t('f_message'), count: count('message') || undefined },
+    { id: 'campaign', label: t('f_campaign'), count: count('campaign') || undefined },
+    { id: 'success', label: t('f_success'), count: count('success') || undefined },
+    { id: 'warning', label: t('f_warning'), count: count('warning') || undefined },
   ]
 
   return (
     <DashboardLayout>
       <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5">
         <PageHeader
-          eyebrow={c('eyebrow')}
-          title={c('title')}
-          description={isLoading ? undefined : unreadCount > 0 ? c('unread_n', { n: unreadCount }) : c('all_read')}
+          eyebrow={t('eyebrow')}
+          title={t('title')}
+          description={isLoading ? undefined : unreadCount > 0 ? t('unread_n', { n: unreadCount }) : t('all_read')}
           actions={unreadCount > 0 ? (
-            <Button variant="secondary" icon={CheckIcon} loading={markAllMut.isLoading} onClick={() => markAllMut.mutate()}>{c('mark_all')}</Button>
+            <Button variant="secondary" icon={CheckIcon} loading={markAllMut.isLoading} onClick={() => markAllMut.mutate()}>{t('mark_all')}</Button>
           ) : undefined}
         />
 
         <div className="-mx-1 overflow-x-auto px-1 scrollbar-none">
-          <Tabs variant="pills" size="sm" value={filter} onChange={setFilter} tabs={tabs} aria-label={c('filters')} />
+          <Tabs variant="pills" size="sm" value={filter} onChange={setFilter} tabs={tabs} aria-label={t('filters')} />
         </div>
 
         {isLoading ? (
@@ -193,13 +129,13 @@ export default function NotificationsPage() {
             ))}
           </Card>
         ) : isError ? (
-          <EmptyState variant="card" icon={ExclamationTriangleIcon} title={c('error')}
-            action={<Button variant="secondary" icon={ArrowPathIcon} loading={isFetching} onClick={() => refetch()}>{c('retry')}</Button>} />
+          <EmptyState variant="card" icon={ExclamationTriangleIcon} title={t('error')}
+            action={<Button variant="secondary" icon={ArrowPathIcon} loading={isFetching} onClick={() => refetch()}>{t('retry')}</Button>} />
         ) : filtered.length === 0 ? (
           notifications.length === 0
-            ? <EmptyState variant="card" icon={BellIcon} title={c('empty')} description={c('empty_d')} />
-            : <EmptyState variant="card" icon={BellIcon} title={c('empty_filter')} description={c('empty_filter_d')}
-                action={<Button variant="secondary" onClick={() => setFilter('all')}>{c('show_all')}</Button>} />
+            ? <EmptyState variant="card" icon={BellIcon} title={t('empty')} description={t('empty_d')} />
+            : <EmptyState variant="card" icon={BellIcon} title={t('empty_filter')} description={t('empty_filter_d')}
+                action={<Button variant="secondary" onClick={() => setFilter('all')}>{t('show_all')}</Button>} />
         ) : (
           <div className="flex flex-col gap-5">
             {groups.map(g => (
@@ -220,19 +156,19 @@ export default function NotificationsPage() {
                             <span className="flex w-full items-start justify-between gap-3">
                               <span className={cn('text-sm', n.is_read ? 'text-body' : 'font-semibold text-ink')}>
                                 {n.title}
-                                {!n.is_read && <span className="sr-only"> · {c('unread')}</span>}
+                                {!n.is_read && <span className="sr-only"> · {t('unread')}</span>}
                               </span>
                               <time dateTime={n.created_at} className="tabular shrink-0 text-xs text-muted">
-                                {formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: DATE_LOCALES[lang] || enUS })}
+                                {fmtRelative(n.created_at)}
                               </time>
                             </span>
                             {n.body && <span className="line-clamp-2 text-[13px] text-muted">{n.body}</span>}
                           </button>
                           <div className="flex shrink-0 items-center gap-1 self-center">
                             {!n.is_read && <span className="h-2 w-2 rounded-full bg-brand-teal" aria-hidden="true" />}
-                            <Tooltip content={c('delete')}>
+                            <Tooltip content={t('delete')}>
                               <Button
-                                size="icon-sm" variant="ghost" icon={TrashIcon} aria-label={c('delete')}
+                                size="icon-sm" variant="ghost" icon={TrashIcon} aria-label={t('delete')}
                                 className="text-muted opacity-100 hover:text-danger sm:opacity-0 sm:focus-visible:opacity-100 sm:group-hover:opacity-100"
                                 onClick={() => deleteMut.mutate(n.id)}
                               />

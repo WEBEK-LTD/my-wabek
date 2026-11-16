@@ -11,16 +11,17 @@ import {
 } from '@/components/ui'
 import { useAuthStore } from '@/lib/store'
 import { useWhiteLabel } from '@/hooks/useWhiteLabel'
-import { useHomeCopy } from '@/components/home/copy'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/home'
 import { SetupChecklist } from '@/components/home/SetupChecklist'
 import type { SetupStep } from '@/components/home/SetupChecklist'
 import {
-  ChatbotCard, DeliveryCard, MiniStats, NumbersCard, QuickActions, RecentCampaigns, RepliesCard, fmt,
+  ChatbotCard, DeliveryCard, MiniStats, NumbersCard, QuickActions, RecentCampaigns, RepliesCard,
 } from '@/components/home/HomeWidgets'
-import { localeTag } from '@/components/auth/makeCopy'
 
 export default function DashboardPage() {
-  const { c, lang } = useHomeCopy()
+  const { t, locale, fmtNumber } = useT(messages)
+  const fmt = (n?: number | null) => fmtNumber(Number(n) || 0)
   const user = useAuthStore(s => s.user)
   const { brandName } = useWhiteLabel()
   const brand = brandName || 'WABEK'
@@ -68,7 +69,7 @@ export default function DashboardPage() {
 
   /* Chart */
   const days = range === '7d' ? chart.slice(-7) : chart
-  const dateFmt = new Intl.DateTimeFormat(localeTag(lang), { day: 'numeric', month: 'short' })
+  const dateFmt = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' })
   const chartLabels = days.map(d => { try { return dateFmt.format(new Date(d.date + 'T12:00:00')) } catch { return d.date?.slice(5) || '' } })
   const chartHasData = days.some(d => d.sent || d.received || d.delivered)
 
@@ -96,13 +97,13 @@ export default function DashboardPage() {
     <DashboardLayout>
       <div className="flex flex-col gap-5">
         <PageHeader
-          eyebrow={c('eyebrow')}
-          title={c('title')}
-          description={firstName ? c('greeting', { name: firstName }) : c('greeting_anon')}
+          eyebrow={t('eyebrow')}
+          title={t('title')}
+          description={firstName ? t('greeting', { name: firstName }) : t('greeting_anon')}
           actions={
             <>
-              <Button variant="secondary" icon={ArrowDownTrayIcon} href="/dashboard/contacts">{c('import_contacts')}</Button>
-              <Button variant="dark" icon={PlusIcon} href="/dashboard/campaigns">{c('new_campaign')}</Button>
+              <Button variant="secondary" icon={ArrowDownTrayIcon} href="/dashboard/contacts">{t('import_contacts')}</Button>
+              <Button variant="dark" icon={PlusIcon} href="/dashboard/campaigns">{t('new_campaign')}</Button>
             </>
           }
         />
@@ -111,9 +112,9 @@ export default function DashboardPage() {
           <EmptyState
             variant="card"
             icon={ExclamationTriangleIcon}
-            title={c('error_title')}
-            description={c('error_d')}
-            action={<Button variant="secondary" icon={ArrowPathIcon} loading={isFetching} onClick={() => refetch()}>{c('retry')}</Button>}
+            title={t('error_title')}
+            description={t('error_d')}
+            action={<Button variant="secondary" icon={ArrowPathIcon} loading={isFetching} onClick={() => refetch()}>{t('retry')}</Button>}
           />
         ) : (
           <>
@@ -123,38 +124,38 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 gap-3 sm:gap-3.5 xl:grid-cols-4">
               <StatCard
                 loading={isLoading}
-                label={c('kpi_open')}
+                label={t('kpi_open')}
                 value={fmt(stats.open_conversations)}
-                sub={c('kpi_open_sub')}
+                sub={t('kpi_open_sub')}
                 subTone={(stats.open_conversations || 0) > 0 ? 'warning' : 'muted'}
                 icon={InboxIcon}
                 href="/dashboard/chat"
               />
               <StatCard
                 loading={isLoading}
-                label={c('kpi_month')}
+                label={t('kpi_month')}
                 value={fmt(stats.sent_this_month)}
                 icon={PaperAirplaneIcon}
                 href="/dashboard/analytics"
                 {...(hasPlanCap
-                  ? { sub: c('kpi_month_plan', { max: fmt(maxMonth) }), progress: Math.min(stats.sent_this_month || 0, maxMonth), progressMax: maxMonth }
+                  ? { sub: t('kpi_month_plan', { max: fmt(maxMonth) }), progress: Math.min(stats.sent_this_month || 0, maxMonth), progressMax: maxMonth }
                   : (stats.sent_last_month || 0) > 0
-                    ? { trend: stats.mom_growth || 0, trendLabel: c('kpi_month_vs') }
+                    ? { trend: stats.mom_growth || 0, trendLabel: t('kpi_month_vs') }
                     : { sparkline: sentSpark.some(Boolean) ? sentSpark : undefined })}
               />
               <StatCard
                 loading={isLoading}
-                label={c('kpi_read')}
+                label={t('kpi_read')}
                 value={`${stats.read_rate || 0}%`}
-                sub={c('kpi_read_sub', { rate: stats.delivery_rate || 0 })}
+                sub={t('kpi_read_sub', { rate: stats.delivery_rate || 0 })}
                 icon={EyeIcon}
                 href="/dashboard/analytics"
               />
               <StatCard
                 loading={isLoading}
-                label={c('kpi_contacts')}
+                label={t('kpi_contacts')}
                 value={fmt(stats.total_contacts)}
-                sub={(stats.new_contacts_this_month || 0) > 0 ? c('kpi_contacts_sub', { n: fmt(stats.new_contacts_this_month) }) : undefined}
+                sub={(stats.new_contacts_this_month || 0) > 0 ? t('kpi_contacts_sub', { n: fmt(stats.new_contacts_this_month) }) : undefined}
                 subTone="success"
                 icon={UserGroupIcon}
                 href="/dashboard/contacts"
@@ -164,12 +165,12 @@ export default function DashboardPage() {
             <MiniStats
               loading={isLoading}
               items={[
-                { label: c('mini_campaigns'), value: stats.active_campaigns || 0, href: '/dashboard/campaigns', icon: MegaphoneIcon },
-                { label: c('mini_chatbots'), value: stats.active_flows ?? stats.active_chatbots ?? 0, href: '/dashboard/chatbot', icon: CpuChipIcon },
-                { label: c('mini_ai'), value: aiReplies, href: '/dashboard/ai', icon: SparklesIcon },
-                { label: c('mini_inbound'), value: stats.inbound_this_month || 0, href: '/dashboard/chat', icon: ChatBubbleLeftRightIcon },
-                { label: c('mini_clicks'), value: stats.link_clicks_total || 0, href: '/dashboard/links', icon: LinkIcon },
-                { label: c('mini_total'), value: stats.total_messages || 0, href: '/dashboard/analytics', icon: PaperAirplaneIcon },
+                { label: t('mini_campaigns'), value: stats.active_campaigns || 0, href: '/dashboard/campaigns', icon: MegaphoneIcon },
+                { label: t('mini_chatbots'), value: stats.active_flows ?? stats.active_chatbots ?? 0, href: '/dashboard/chatbot', icon: CpuChipIcon },
+                { label: t('mini_ai'), value: aiReplies, href: '/dashboard/ai', icon: SparklesIcon },
+                { label: t('mini_inbound'), value: stats.inbound_this_month || 0, href: '/dashboard/chat', icon: ChatBubbleLeftRightIcon },
+                { label: t('mini_clicks'), value: stats.link_clicks_total || 0, href: '/dashboard/links', icon: LinkIcon },
+                { label: t('mini_total'), value: stats.total_messages || 0, href: '/dashboard/analytics', icon: PaperAirplaneIcon },
               ]}
             />
 
@@ -177,13 +178,13 @@ export default function DashboardPage() {
             <div className="grid gap-3.5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
               <Card padding="none" className="min-w-0">
                 <CardHeader
-                  title={c('chart_title')}
-                  subtitle={c('chart_sub')}
+                  title={t('chart_title')}
+                  subtitle={t('chart_sub')}
                   action={
                     <Tabs
                       variant="segmented" size="sm" value={range} onChange={v => setRange(v as '7d' | '30d')}
-                      aria-label={c('chart_title')}
-                      tabs={[{ id: '7d', label: c('range_7') }, { id: '30d', label: c('range_30') }]}
+                      aria-label={t('chart_title')}
+                      tabs={[{ id: '7d', label: t('range_7') }, { id: '30d', label: t('range_30') }]}
                     />
                   }
                 />
@@ -196,12 +197,12 @@ export default function DashboardPage() {
                       labels={chartLabels}
                       formatValue={v => fmt(v)}
                       series={[
-                        { name: c('chart_received'), data: days.map(d => d.received || 0), color: CHART_COLORS[0] },
-                        { name: c('chart_sent'), data: days.map(d => d.sent || 0), color: CHART_COLORS[1] },
+                        { name: t('chart_received'), data: days.map(d => d.received || 0), color: CHART_COLORS[0] },
+                        { name: t('chart_sent'), data: days.map(d => d.sent || 0), color: CHART_COLORS[1] },
                       ]}
                     />
                   ) : (
-                    <EmptyState size="sm" icon={ChatBubbleLeftRightIcon} title={c('chart_empty')} className="h-[230px] justify-center" />
+                    <EmptyState size="sm" icon={ChatBubbleLeftRightIcon} title={t('chart_empty')} className="h-[230px] justify-center" />
                   )}
                 </CardBody>
               </Card>
