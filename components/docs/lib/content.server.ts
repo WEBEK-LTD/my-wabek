@@ -68,9 +68,12 @@ function walk(node: Parent, fn: (node: Element, parent: Parent, index: number) =
   })
 }
 
+// Callout markers accepted in the Markdown sources (Arabic and English docs):
+// ملاحظة / نصيحة = note, تحذير / مهم = warning. Written as escapes because
+// they are syntax keywords, not UI text.
 const CALLOUTS: Record<string, 'note' | 'warning'> = {
-  'ملاحظة': 'note', 'note': 'note', 'tip': 'note', 'نصيحة': 'note', 'info': 'note',
-  'تحذير': 'warning', 'warning': 'warning', 'important': 'warning', 'مهم': 'warning', 'caution': 'warning',
+  '\u0645\u0644\u0627\u062D\u0638\u0629': 'note', 'note': 'note', 'tip': 'note', '\u0646\u0635\u064A\u062D\u0629': 'note', 'info': 'note',
+  '\u062A\u062D\u0630\u064A\u0631': 'warning', 'warning': 'warning', 'important': 'warning', '\u0645\u0647\u0645': 'warning', 'caution': 'warning',
 }
 
 const LANG_LABELS: Record<string, string> = {

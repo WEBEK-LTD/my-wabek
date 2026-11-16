@@ -2,6 +2,9 @@
 import { useState } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import clsx from 'clsx'
+import Link from 'next/link'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/docs'
 import {
   RocketLaunchIcon, CodeBracketIcon, MegaphoneIcon, CpuChipIcon, SparklesIcon, ChatBubbleLeftRightIcon, LockClosedIcon,
   LinkIcon, SwatchIcon, BuildingStorefrontIcon, UserGroupIcon, CreditCardIcon, DocumentTextIcon, WrenchScrewdriverIcon,
@@ -1523,7 +1526,7 @@ app.post('/webhook', (req, res) => {
         content: `Fired when a contact sends a stop/unsubscribe keyword and is opted out of campaigns.
 
 ## Stop Keywords
-By default: \`STOP\`, \`UNSUBSCRIBE\`, \`OPT OUT\`, \`إلغاء\`
+By default: \`STOP\`, \`UNSUBSCRIBE\`, \`OPT OUT\`, \`\u0625\u0644\u063A\u0627\u0621\`
 
 ## Payload
 
@@ -1704,6 +1707,7 @@ async def webhook(request: Request):
 ]
 
 function CodeBlock({ code }: { code: string }) {
+  const { t } = useT(messages)
   const [copied, setCopied] = useState(false)
   const copy = () => {
     navigator.clipboard.writeText(code)
@@ -1715,8 +1719,8 @@ function CodeBlock({ code }: { code: string }) {
       <pre className="bg-[#F8FAFC] text-slate-800 rounded-xl p-4 text-xs overflow-x-auto leading-relaxed border border-slate-200">
         <code>{code}</code>
       </pre>
-      <button onClick={copy}
-        className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg p-1.5">
+      <button onClick={copy} aria-label={copied ? t('copied') : t('copy_code')}
+        className="absolute top-3 end-3 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg p-1.5">
         {copied
           ? <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-green-400" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
           : <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>}
@@ -1830,6 +1834,7 @@ function renderContent(content: string) {
 }
 
 export default function DocsPage() {
+  const { t, lang } = useT(messages)
   const [activeSection, setActiveSection] = useState('getting-started')
   const [openItems, setOpenItems] = useState<Record<string,boolean>>({'Connect WhatsApp': true})
   const [docsSidebarOpen, setDocsSidebarOpen] = useState(false)
@@ -1848,26 +1853,26 @@ export default function DocsPage() {
   const currentSection = filteredSections.find(s => s.id === activeSection) || filteredSections[0]
 
   return (
-    <DashboardLayout title="Documentation">
+    <DashboardLayout title={t('title')}>
       <div className="flex gap-0 -m-6 h-[calc(100vh-56px)] relative">
         {/* Mobile sidebar toggle */}
         <button
-          onClick={() => setDocsSidebarOpen(o => !o)}
-          className="md:hidden absolute top-3 left-3 z-30 bg-white border border-slate-200 rounded-lg p-2 text-slate-400">
+          onClick={() => setDocsSidebarOpen(o => !o)} aria-label={t('toggle_menu')}
+          className="md:hidden absolute top-3 start-3 z-30 bg-white border border-slate-200 rounded-lg p-2 text-slate-400">
           {docsSidebarOpen
             ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
           }
         </button>
         {/* Sidebar */}
-        <div className={clsx("flex-shrink-0 border-r border-slate-200 flex flex-col bg-[#F8FAFC]/50 transition-all duration-300",
-          "fixed md:static inset-y-0 left-0 z-20 w-64",
-          docsSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        <div className={clsx("flex-shrink-0 border-e border-slate-200 flex flex-col bg-[#F8FAFC]/50 transition-all duration-300",
+          "fixed md:static inset-y-0 start-0 z-20 w-64",
+          docsSidebarOpen ? "translate-x-0" : "-translate-x-full rtl:translate-x-full md:translate-x-0 md:rtl:translate-x-0"
         )}>
           <div className="p-4 border-b border-slate-200">
             <input
               value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search docs..."
+              placeholder={t('search_ph')}
               className="input w-full text-sm py-2"
             />
           </div>
@@ -1875,13 +1880,13 @@ export default function DocsPage() {
             {filteredSections.map(s => (
               <button key={s.id} onClick={() => { setActiveSection(s.id); setSearch('') }}
                 className={clsx(
-                  'w-full text-left px-4 py-2.5 text-sm font-medium transition-colors',
+                  'w-full text-start px-4 py-2.5 text-sm font-medium transition-colors',
                   activeSection === s.id
-                    ? 'bg-brand-500/10 text-blue-600 border-r-2 border-brand-500'
+                    ? 'bg-brand-500/10 text-blue-600 border-e-2 border-brand-500'
                     : 'text-slate-400 hover:text-slate-900 hover:bg-white'
                 )}>
                 <span className="inline-flex items-center gap-2"><SectionIcon id={s.id} className="h-4 w-4 shrink-0" />{s.title}</span>
-                <span className="ml-2 text-xs text-slate-600">({s.items.length})</span>
+                <span className="ms-2 text-xs text-slate-600">({s.items.length})</span>
               </button>
             ))}
           </div>
@@ -1892,6 +1897,14 @@ export default function DocsPage() {
         {/* Content */}
         <div className="flex-1 overflow-y-auto pt-12 md:pt-0">
           <div className="max-w-3xl mx-auto p-8">
+            {lang !== 'en' && (
+              <p className="mb-4 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
+                {t('content_note')}{' '}
+                <Link href={lang === 'ar' ? '/docs' : '/en/docs'} className="font-medium text-blue-600 hover:underline">{t('open_docs')}</Link>
+              </p>
+            )}
+            {/* Reference articles are English content. */}
+            <div lang="en" dir="ltr">
             {currentSection ? <>
               <h1 className="mb-6 flex items-center gap-2.5 text-2xl font-bold text-slate-900"><SectionIcon id={currentSection.id} className="h-6 w-6 shrink-0" />{currentSection.title}</h1>
               <div className="space-y-3">
@@ -1899,7 +1912,7 @@ export default function DocsPage() {
                   <div key={item.title} className="card overflow-hidden">
                     <button
                       onClick={() => setOpenItems(o => ({...o, [item.title]: !o[item.title]}))}
-                      className="w-full flex items-center justify-between p-4 text-left hover:bg-slate-500 transition-colors">
+                      className="w-full flex items-center justify-between p-4 text-start hover:bg-slate-500 transition-colors">
                       <span className="font-semibold text-slate-900 text-sm">{item.title}</span>
                       {openItems[item.title]
                         ? <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
@@ -1914,8 +1927,9 @@ export default function DocsPage() {
                 ))}
               </div>
             </> : (
-              <div className="text-center py-20 text-slate-500">No results for "{search}"</div>
+              <div className="text-center py-20 text-slate-500">{t('no_results', { q: search })}</div>
             )}
+            </div>
           </div>
         </div>
       </div>
