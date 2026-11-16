@@ -4,6 +4,8 @@ import { ExclamationTriangleIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { cn } from './utils'
 import { Button } from './Button'
 import { useTranslation } from '@/hooks/useTranslation'
+import { useT } from '@/lib/i18n-local'
+import uiMessages from '@/locales/ui'
 
 export interface ModalProps {
   open: boolean
@@ -120,8 +122,7 @@ export interface ConfirmDialogProps {
  *     title="حذف جهة الاتصال؟" description="لا يمكن التراجع عن هذا الإجراء." confirmLabel="حذف" />
  */
 export function ConfirmDialog({ open, onClose, onConfirm, title, description, confirmLabel, cancelLabel, destructive, loading }: ConfirmDialogProps) {
-  const { lang } = useTranslation()
-  const ar = lang === 'ar'
+  const { t } = useT(uiMessages)
   return (
     <Modal
       open={open}
@@ -133,8 +134,8 @@ export function ConfirmDialog({ open, onClose, onConfirm, title, description, co
       sheetOnMobile={false}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={loading}>{cancelLabel ?? (ar ? 'إلغاء' : 'Cancel')}</Button>
-          <Button variant={destructive ? 'danger' : 'primary'} onClick={() => onConfirm()} loading={loading}>{confirmLabel ?? (ar ? 'تأكيد' : 'Confirm')}</Button>
+          <Button variant="secondary" onClick={onClose} disabled={loading}>{cancelLabel ?? t('cancel')}</Button>
+          <Button variant={destructive ? 'danger' : 'primary'} onClick={() => onConfirm()} loading={loading}>{confirmLabel ?? t('confirm')}</Button>
         </>
       }
     />
