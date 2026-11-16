@@ -28,7 +28,7 @@ const en = {
   kpi_contacts_sub: '+{n} this month',
 
   mini_campaigns: 'Active campaigns',
-  mini_chatbots: 'Active chatbots',
+  mini_chatbots: 'Active flows',
   mini_ai: 'AI replies this month',
   mini_inbound: 'Received this month',
   mini_clicks: 'Link clicks',
@@ -54,7 +54,7 @@ const en = {
   campaigns_empty_d: 'Send your first broadcast and follow delivery and reads here.',
 
   replies_title: 'Who replies to customers',
-  replies_sub: 'AI: this month · team: last 30 days',
+  replies_sub: 'Last 30 days',
   replies_ai: 'AI assistant',
   replies_team: 'Team',
   replies_n: '{n} replies',
@@ -133,7 +133,7 @@ const ar: Record<keyof typeof en, string> = {
   kpi_contacts_sub: '+{n} هذا الشهر',
 
   mini_campaigns: 'حملات نشطة',
-  mini_chatbots: 'روبوتات محادثة نشطة',
+  mini_chatbots: 'التدفقات النشطة',
   mini_ai: 'ردود المساعد هذا الشهر',
   mini_inbound: 'رسائل واردة هذا الشهر',
   mini_clicks: 'نقرات الروابط',
@@ -159,7 +159,7 @@ const ar: Record<keyof typeof en, string> = {
   campaigns_empty_d: 'أرسل حملتك الأولى وتابع التسليم والقراءة من هنا.',
 
   replies_title: 'من يرد على العملاء',
-  replies_sub: 'المساعد: هذا الشهر · الفريق: آخر 30 يومًا',
+  replies_sub: 'آخر 30 يومًا',
   replies_ai: 'المساعد الذكي',
   replies_team: 'الفريق',
   replies_n: '{n} ردًا',

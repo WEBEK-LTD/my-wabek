@@ -77,7 +77,7 @@ export default function DashboardPage() {
   const hasPlanCap = Number.isFinite(maxMonth) && maxMonth > 0
   const sentSpark = chart.slice(-14).map(d => d.sent || 0)
 
-  /* Who replies: AI (this month) vs team (30 days), only when data exists */
+  /* Who replies: AI vs team (last 30 days, server head counts), only when data exists */
   const teamRows: { name: string; messages: number }[] = perfQ.data?.mode === 'team'
     ? [
         ...(perfQ.data.owner ? [{ name: user?.name || perfQ.data.owner.name, messages: perfQ.data.owner.messages_sent || 0 }] : []),
@@ -85,7 +85,9 @@ export default function DashboardPage() {
       ].filter(m => m.messages > 0).sort((a, b) => b.messages - a.messages)
     : []
   const aiReplies = stats.ai_replies_this_month || 0
-  const showReplies = aiReplies + teamRows.reduce((s, m) => s + m.messages, 0) > 0
+  const aiReplies30 = stats.ai_replies_30d || 0
+  const teamReplies30 = stats.team_replies_30d || 0
+  const showReplies = aiReplies30 + teamReplies30 > 0
   const hasDelivery = breakdown.sent + breakdown.delivered + breakdown.read + breakdown.failed > 0
 
   const firstName = (user?.name || '').trim().split(/\s+/)[0]
@@ -163,7 +165,7 @@ export default function DashboardPage() {
               loading={isLoading}
               items={[
                 { label: c('mini_campaigns'), value: stats.active_campaigns || 0, href: '/dashboard/campaigns', icon: MegaphoneIcon },
-                { label: c('mini_chatbots'), value: stats.active_chatbots || 0, href: '/dashboard/chatbot', icon: CpuChipIcon },
+                { label: c('mini_chatbots'), value: stats.active_flows ?? stats.active_chatbots ?? 0, href: '/dashboard/chatbot', icon: CpuChipIcon },
                 { label: c('mini_ai'), value: aiReplies, href: '/dashboard/ai', icon: SparklesIcon },
                 { label: c('mini_inbound'), value: stats.inbound_this_month || 0, href: '/dashboard/chat', icon: ChatBubbleLeftRightIcon },
                 { label: c('mini_clicks'), value: stats.link_clicks_total || 0, href: '/dashboard/links', icon: LinkIcon },
@@ -213,7 +215,7 @@ export default function DashboardPage() {
             <div className="grid gap-3.5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
               <RecentCampaigns campaigns={campaigns} loading={isLoading} />
               <div className="flex min-w-0 flex-col gap-3.5">
-                {showReplies ? <RepliesCard ai={aiReplies} team={teamRows} /> : hasDelivery ? <DeliveryCard breakdown={breakdown} /> : null}
+                {showReplies ? <RepliesCard ai={aiReplies30} teamTotal={teamReplies30} team={teamRows} /> : hasDelivery ? <DeliveryCard breakdown={breakdown} /> : null}
                 {chatbotStats.length > 0 && <ChatbotCard flows={chatbotStats} />}
               </div>
             </div>

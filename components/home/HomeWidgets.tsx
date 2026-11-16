@@ -83,9 +83,10 @@ export function RecentCampaigns({ campaigns, loading }: { campaigns: CampaignRow
 
 /* ── Who replies (AI vs team) ──────────────────────────────── */
 
-export function RepliesCard({ ai, team }: { ai: number; team: { name: string; messages: number }[] }) {
+/** `ai` / `teamTotal`: outbound replies of the last 30 days; `team`: optional per-person breakdown. */
+export function RepliesCard({ ai, teamTotal: teamTotalProp, team }: { ai: number; teamTotal?: number; team: { name: string; messages: number }[] }) {
   const { c } = useHomeCopy()
-  const teamTotal = team.reduce((s, m) => s + m.messages, 0)
+  const teamTotal = teamTotalProp ?? team.reduce((s, m) => s + m.messages, 0)
   const total = ai + teamTotal
   const aiPct = pct(ai, total)
   return (
