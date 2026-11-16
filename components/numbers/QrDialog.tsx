@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { ArrowPathIcon, QrCodeIcon, DevicePhoneMobileIcon } from '@heroicons/react/24/outline'
 import { Button, Modal, Spinner, cn } from '@/components/ui'
-import { StepList } from '@/components/settings/Shared'
+import { StepList, rich } from '@/components/settings/Shared'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/instances'
 import type { Instance } from './NumberCard'
 
 /** WhatsApp rotates linking codes roughly every 20–60 s; we count down 60 s per code. */
@@ -23,6 +25,7 @@ export function QrDialog({ instance, onClose, onRefresh, refreshing }: {
   onRefresh: () => void
   refreshing?: boolean
 }) {
+  const { t: tr } = useT(messages)
   const code = instance?.qr_code || null
   const [left, setLeft] = useState(QR_TTL)
 
@@ -43,12 +46,12 @@ export function QrDialog({ instance, onClose, onRefresh, refreshing }: {
       onClose={onClose}
       size="lg"
       icon={QrCodeIcon}
-      title="امسح رمز QR من تطبيق واتساب"
-      description="يُحدَّث الرمز تلقائيًا، وتُغلق هذه النافذة فور اكتمال الربط."
+      title={tr('qrTitle')}
+      description={tr('qrDesc')}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>إلغاء</Button>
-          <Button variant={expired ? 'primary' : 'secondary'} icon={ArrowPathIcon} loading={refreshing} onClick={onRefresh}>تحديث الرمز</Button>
+          <Button variant="secondary" onClick={onClose}>{tr('cancel')}</Button>
+          <Button variant={expired ? 'primary' : 'secondary'} icon={ArrowPathIcon} loading={refreshing} onClick={onRefresh}>{tr('refreshCode')}</Button>
         </>
       }
     >
@@ -59,19 +62,19 @@ export function QrDialog({ instance, onClose, onRefresh, refreshing }: {
               {code ? (
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={qrSrc(code)} alt="رمز QR لربط واتساب" className={cn('h-full w-full object-contain transition', expired && 'opacity-15 blur-[2px]')} />
+                  <img src={qrSrc(code)} alt={tr('qrAlt')} className={cn('h-full w-full object-contain transition', expired && 'opacity-15 blur-[2px]')} />
                   {expired && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
-                      <p className="text-sm font-semibold text-[#04282C]">انتهت صلاحية الرمز</p>
-                      <Button size="sm" variant="dark" icon={ArrowPathIcon} loading={refreshing} onClick={onRefresh}>رمز جديد</Button>
+                      <p className="text-sm font-semibold text-[#04282C]">{tr('codeExpired')}</p>
+                      <Button size="sm" variant="dark" icon={ArrowPathIcon} loading={refreshing} onClick={onRefresh}>{tr('newCode')}</Button>
                     </div>
                   )}
                 </>
               ) : (
                 <div className="flex flex-col items-center gap-3 text-center text-[#3A5A5D]">
                   <Spinner className="h-8 w-8 text-[#12B5BE]" />
-                  <p className="text-sm font-medium">جارٍ إنشاء الرمز…</p>
-                  <p className="max-w-[12rem] text-xs">قد يستغرق ذلك بضع ثوانٍ</p>
+                  <p className="text-sm font-medium">{tr('creatingCode')}</p>
+                  <p className="max-w-[12rem] text-xs">{tr('takesSeconds')}</p>
                 </div>
               )}
             </div>
@@ -81,11 +84,11 @@ export function QrDialog({ instance, onClose, onRefresh, refreshing }: {
             <div className="flex items-center justify-between text-xs text-muted">
               <span className="flex items-center gap-1.5">
                 <span className={cn('h-2 w-2 rounded-full', code && !expired ? 'animate-pulse bg-success' : 'bg-warning')} aria-hidden="true" />
-                {code ? (expired ? 'اطلب رمزًا جديدًا' : 'بانتظار المسح…') : 'بانتظار الخادم…'}
+                {code ? (expired ? tr('requestNew') : tr('waitingScan')) : tr('waitingServer')}
               </span>
-              {code && !expired && <span className="tabular">ينتهي خلال {left} ث</span>}
+              {code && !expired && <span className="tabular">{tr('expiresIn', { s: left })}</span>}
             </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-track" role="progressbar" aria-label="المدة المتبقية للرمز" aria-valuemin={0} aria-valuemax={QR_TTL} aria-valuenow={left}>
+            <div className="h-1.5 overflow-hidden rounded-full bg-track" role="progressbar" aria-label={tr('timeLeft')} aria-valuemin={0} aria-valuemax={QR_TTL} aria-valuenow={left}>
               <div className="h-full rounded-full bg-brand-gradient-x transition-[width] duration-1000 ease-linear" style={{ width: `${pct}%` }} />
             </div>
           </div>
@@ -94,15 +97,15 @@ export function QrDialog({ instance, onClose, onRefresh, refreshing }: {
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-ink">
             <DevicePhoneMobileIcon className="h-5 w-5 text-brand-ink" aria-hidden="true" />
-            على هاتفك
+            {tr('onPhone')}
           </div>
           <StepList steps={[
-            { title: 'افتح واتساب على هاتفك' },
-            { title: 'اضغط القائمة ثم «الأجهزة المرتبطة»', body: 'على iPhone: الإعدادات ← الأجهزة المرتبطة.' },
-            { title: 'اختر «ربط جهاز» ووجّه الكاميرا إلى الرمز' },
+            { title: tr('step1') },
+            { title: tr('step2'), body: tr('step2Body') },
+            { title: tr('step3') },
           ]} />
           <p className="rounded-card bg-surface-2 px-4 py-3 text-xs leading-relaxed text-muted">
-            إذا لم يظهر الرمز، فتأكد من ضبط المتغير <code dir="ltr" className="font-mono">WA_WEB_SERVER_URL</code> في إعدادات الخادم.
+            {rich(tr('qrMissing'), { var: <code dir="ltr" className="font-mono">WA_WEB_SERVER_URL</code> })}
           </p>
         </div>
       </div>
