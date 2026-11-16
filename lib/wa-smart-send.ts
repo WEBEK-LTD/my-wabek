@@ -127,7 +127,7 @@ export interface SendGuardResult {
   error?: string
 }
 
-const planCache = new Map<string, { allowed: boolean; limit: number; current: number; exp: number }>()
+const planCache = new Map<string, { allowed: boolean; limit: number; current: number; exp: number; logged?: boolean }>()
 const roleCache = new Map<string, { role: string; exp: number }>()
 
 async function isPlatformAdmin(userId: string): Promise<boolean> {
@@ -192,9 +192,15 @@ export async function checkSendAllowed(
     planCache.set(userId, entry)
   }
   if (!entry.allowed || (entry.limit > 0 && entry.current >= entry.limit)) {
-    // MESSAGE_LIMIT_MODE=log: rollout switch — log only, do not block.
-    if (process.env.MESSAGE_LIMIT_MODE === 'log') {
-      console.warn(`[send-guard] user ${userId} is over the monthly message limit (${entry.current}/${entry.limit}) — not blocking (MESSAGE_LIMIT_MODE=log)`)
+    // Rollout switch: LOG-ONLY unless MESSAGE_LIMIT_MODE=enforce, so no
+    // existing customer is cut off on the day this ships. Logged once per
+    // cache window (30s) per user to keep logs readable.
+    if (process.env.MESSAGE_LIMIT_MODE !== 'enforce') {
+      if (!entry.logged) {
+        entry.logged = true
+        console.warn(`[send-guard] user ${userId} is over the monthly message limit (${entry.current}/${entry.limit}) — not blocking (MESSAGE_LIMIT_MODE is not 'enforce')`)
+      }
+      entry.current += 1
       return { allowed: true }
     }
     return { allowed: false, code: 'plan_limit', error: 'Monthly message limit reached for your plan' }
