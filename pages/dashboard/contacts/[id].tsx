@@ -1,14 +1,132 @@
-// @ts-nocheck
-import { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import axios from 'axios'
 import { useRouter } from 'next/router'
-import toast from 'react-hot-toast'
-import { ChatBubbleLeftRightIcon, PencilIcon, TrashIcon, TagIcon, PhoneIcon, EnvelopeIcon, XMarkIcon, PaperAirplaneIcon, ArrowLeftIcon, NoSymbolIcon } from '@heroicons/react/24/outline'
-import { CheckCircleIcon } from '@heroicons/react/24/solid'
-import { format } from 'date-fns'
 import Link from 'next/link'
+import toast from 'react-hot-toast'
+import {
+  ChatBubbleLeftRightIcon, PencilIcon, TrashIcon, TagIcon, PhoneIcon, EnvelopeIcon, XMarkIcon, PaperAirplaneIcon,
+  NoSymbolIcon, SparklesIcon, BellSlashIcon, CalendarDaysIcon, UserCircleIcon, VariableIcon, PlusIcon,
+  MegaphoneIcon, InboxIcon, EllipsisHorizontalIcon, LockClosedIcon, CheckBadgeIcon, ArrowDownLeftIcon, ArrowUpRightIcon,
+} from '@heroicons/react/24/outline'
+import { CheckIcon } from '@heroicons/react/20/solid'
+import {
+  Avatar, Badge, Button, Card, CardHeader, ConfirmDialog, Dropdown, EmptyState, Field, Input, Modal, PageHeader,
+  Skeleton, StatusPill, Switch, Textarea, cn,
+} from '@/components/ui'
+import { CopyButton, ErrorState, Notice } from '@/components/settings/Shared'
+import { fmtDate, fmtDateTime, fmtRelative, fmtTime } from '@/components/settings/format'
+import {
+  campaignStatus, errorStatus, fmtNum, friendlyError, isMemberForbidden, useTeamRole, MEMBER_FORBIDDEN_MSG,
+} from '@/components/campaigns/shared'
+
+const TYPE_LABELS: Record<string, string> = {
+  image: 'صورة', video: 'فيديو', audio: 'رسالة صوتية', document: 'مستند', sticker: 'ملصق', location: 'موقع', template: 'قالب',
+}
+
+function dayLabel(d: Date) {
+  const today = new Date()
+  const yest = new Date(); yest.setDate(today.getDate() - 1)
+  if (d.toDateString() === today.toDateString()) return 'اليوم'
+  if (d.toDateString() === yest.toDateString()) return 'أمس'
+  return fmtDate(d)
+}
+
+/* ── Tags editor ─────────────────────────────────────────── */
+
+function TagsEditor({ tags, onSave, saving, disabled }: { tags: string[]; onSave: (t: string[]) => void; saving?: boolean; disabled?: boolean }) {
+  const [draft, setDraft] = useState('')
+  const add = () => {
+    const next = draft.split(',').map(t => t.trim()).filter(Boolean).filter(t => !tags.includes(t))
+    setDraft('')
+    if (next.length) onSave([...tags, ...next].slice(0, 50))
+  }
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-1.5">
+        {tags.length === 0 && <span className="text-sm text-muted">لا توجد وسوم بعد.</span>}
+        {tags.map(t => (
+          <span key={t} className="inline-flex items-center gap-1 rounded-full bg-chip py-1 pe-1 ps-2.5 text-xs font-medium text-chip-ink">
+            {t}
+            {!disabled && (
+              <button type="button" onClick={() => onSave(tags.filter(x => x !== t))} disabled={saving}
+                className="flex h-5 w-5 items-center justify-center rounded-full transition hover:bg-surface/70" aria-label={`إزالة الوسم ${t}`}>
+                <XMarkIcon className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            )}
+          </span>
+        ))}
+      </div>
+      {!disabled && (
+        <form className="flex gap-2" onSubmit={e => { e.preventDefault(); add() }}>
+          <Input size="sm" icon={TagIcon} value={draft} onChange={e => setDraft(e.target.value)} placeholder="أضف وسمًا (Enter)" aria-label="وسم جديد" maxLength={100} wrapperClassName="flex-1" />
+          <Button type="submit" size="sm" variant="secondary" icon={PlusIcon} loading={saving} disabled={!draft.trim()}>إضافة</Button>
+        </form>
+      )}
+    </div>
+  )
+}
+
+/* ── Variables editor ────────────────────────────────────── */
+
+function VariablesEditor({ variables, onSave, saving, disabled }: {
+  variables: Record<string, string>
+  onSave: (v: Record<string, string>) => void
+  saving?: boolean
+  disabled?: boolean
+}) {
+  const entries = Object.entries(variables || {})
+  const [editing, setEditing] = useState(false)
+  const [rows, setRows] = useState<Array<{ k: string; v: string }>>([])
+  const start = () => { setRows(entries.length ? entries.map(([k, v]) => ({ k, v: String(v ?? '') })) : [{ k: '', v: '' }]); setEditing(true) }
+  const save = () => {
+    const out: Record<string, string> = {}
+    for (const r of rows) if (r.k.trim()) out[r.k.trim()] = r.v.slice(0, 1000)
+    onSave(out)
+    setEditing(false)
+  }
+
+  if (!editing) return (
+    <div className="space-y-3">
+      {entries.length === 0 ? (
+        <p className="text-sm text-muted">لا توجد متغيرات. أضف قيمًا مثل المدينة أو رقم العضوية لاستخدامها في الحملات بصيغة <code dir="ltr" className="font-mono">{'{city}'}</code>.</p>
+      ) : (
+        <dl className="divide-y divide-line-soft rounded-card border border-line-soft">
+          {entries.map(([k, v]) => (
+            <div key={k} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
+              <dt><code dir="ltr" className="font-mono text-[12.5px] text-chip-ink">{`{${k}}`}</code></dt>
+              <dd dir="auto" className="min-w-0 truncate text-end text-ink">{String(v ?? '') || '—'}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {!disabled && <Button size="sm" variant="secondary" icon={PencilIcon} onClick={start}>{entries.length ? 'تعديل المتغيرات' : 'إضافة متغير'}</Button>}
+    </div>
+  )
+
+  return (
+    <div className="space-y-2.5">
+      {rows.map((r, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <Input size="sm" dir="ltr" value={r.k} placeholder="city" aria-label="اسم المتغير" className="font-mono"
+            onChange={e => setRows(rs => rs.map((x, j) => (j === i ? { ...x, k: e.target.value.replace(/[^\w.-]/g, '') } : x)))} wrapperClassName="w-32 shrink-0" />
+          <Input size="sm" dir="auto" value={r.v} placeholder="القيمة" aria-label="قيمة المتغير" maxLength={1000}
+            onChange={e => setRows(rs => rs.map((x, j) => (j === i ? { ...x, v: e.target.value } : x)))} wrapperClassName="min-w-0 flex-1" />
+          <Button size="icon-sm" variant="ghost" icon={XMarkIcon} aria-label="حذف المتغير" onClick={() => setRows(rs => rs.filter((_, j) => j !== i))} />
+        </div>
+      ))}
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <Button size="xs" variant="ghost" icon={PlusIcon} onClick={() => setRows(rs => [...rs, { k: '', v: '' }])}>صف جديد</Button>
+        <span className="flex-1" />
+        <Button size="sm" variant="secondary" onClick={() => setEditing(false)}>إلغاء</Button>
+        <Button size="sm" loading={saving} onClick={save}>حفظ</Button>
+      </div>
+    </div>
+  )
+}
+
+/* ── Page ────────────────────────────────────────────────── */
 
 export default function ContactDetailPage() {
   const router = useRouter()
@@ -18,38 +136,75 @@ export default function ContactDetailPage() {
   const [editData, setEditData] = useState({ name: '', email: '', tags: '' })
   const [quickMsg, setQuickMsg] = useState('')
   const [sendingMsg, setSendingMsg] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [aiBusy, setAiBusy] = useState(false)
+  const { canWrite, roleLabel, role } = useTeamRole()
+  const canEdit = canWrite('contacts')
+  const canSend = role !== 'viewer'
 
-  const { data, isLoading } = useQuery(
+  const { data, isLoading, isError, error, refetch } = useQuery(
     ['contact', id],
     () => axios.get(`/api/contacts/${id}`).then(r => r.data),
-    { enabled: !!id, onSuccess: (d) => setEditData({ name: d.contact.name || '', email: d.contact.email || '', tags: d.contact.tags?.join(', ') || '' }) }
+    { enabled: !!id, retry: false, onSuccess: (d: any) => setEditData({ name: d.contact.name || '', email: d.contact.email || '', tags: d.contact.tags?.join(', ') || '' }) }
   )
   const { data: instancesData } = useQuery('instances', () => axios.get('/api/whatsapp/instances').then(r => r.data))
+  const { data: campData } = useQuery('campaigns', () => axios.get('/api/campaigns').then(r => r.data), { retry: false })
 
   const contact = data?.contact
-  const messages = data?.messages || []
-  const instances = instancesData?.instances || []
+  const messages: any[] = data?.messages || []
+  const instances: any[] = instancesData?.instances || []
   const connectedInstance = instances.find(i => i.status === 'connected')
 
   const updateMut = useMutation(
-    (body) => axios.put(`/api/contacts/${id}`, body),
-    { onSuccess: () => { qc.invalidateQueries(['contact', id]); setEditing(false); toast.success('Contact updated') } }
+    (body: any) => axios.put(`/api/contacts/${id}`, body),
+    {
+      onSuccess: () => { qc.invalidateQueries(['contact', id]); setEditing(false); toast.success('حُفظت بيانات جهة الاتصال') },
+      onError: (e: any) => { toast.error(friendlyError(e, 'تعذّر حفظ التعديلات')) },
+    }
+  )
+  // Tags / variables saved inline
+  const patchMut = useMutation(
+    (body: any) => axios.put(`/api/contacts/${id}`, body),
+    {
+      onSuccess: () => { qc.invalidateQueries(['contact', id]); toast.success('تم الحفظ') },
+      onError: (e: any) => { toast.error(friendlyError(e, 'تعذّر الحفظ')) },
+    }
   )
 
   const deleteMut = useMutation(
     () => axios.delete(`/api/contacts/${id}`),
-    { onSuccess: () => { toast.success('Contact deleted'); router.push('/dashboard/contacts') } }
+    {
+      onSuccess: () => { toast.success('حُذفت جهة الاتصال'); router.push('/dashboard/contacts') },
+      onError: (e: any) => { toast.error(friendlyError(e, 'تعذّر حذف جهة الاتصال')) },
+    }
   )
 
   const blockMut = useMutation(
-    (blocked) => axios.put(`/api/contacts/${id}`, { is_blocked: blocked }),
-    { onSuccess: () => qc.invalidateQueries(['contact', id]) }
+    (blocked: boolean) => axios.put(`/api/contacts/${id}`, { is_blocked: blocked }),
+    {
+      onSuccess: (_r, blocked) => { qc.invalidateQueries(['contact', id]); toast.success(blocked ? 'حُظرت جهة الاتصال' : 'أُلغي الحظر') },
+      onError: (e: any) => { toast.error(friendlyError(e, 'تعذّر تغيير حالة الحظر')) },
+    }
   )
 
   const optOutMut = useMutation(
-    (optedOut) => axios.put(`/api/contacts/${id}`, { opted_out: optedOut }),
-    { onSuccess: () => qc.invalidateQueries(['contact', id]), onError: (e) => toast.error(e?.response?.data?.error || 'Failed') }
+    (optedOut: boolean) => axios.put(`/api/contacts/${id}`, { opted_out: optedOut }),
+    {
+      onSuccess: (_r, optedOut) => { qc.invalidateQueries(['contact', id]); toast.success(optedOut ? 'أُلغي اشتراك جهة الاتصال' : 'أُعيد الاشتراك') },
+      onError: (e: any) => { toast.error(friendlyError(e, 'تعذّر تغيير حالة الاشتراك')) },
+    }
   )
+
+  const toggleAi = async () => {
+    setAiBusy(true)
+    try {
+      await axios.post('/api/ai/opt-out', { contact_id: contact.id, opted_out: !contact.ai_opted_out })
+      toast.success(contact.ai_opted_out ? 'فُعّل الرد الآلي لجهة الاتصال' : 'أُوقف الرد الآلي لجهة الاتصال')
+      qc.invalidateQueries(['contact', id])
+    } catch (e) {
+      toast.error(friendlyError(e, 'تعذّر تغيير إعداد الذكاء الاصطناعي'))
+    } finally { setAiBusy(false) }
+  }
 
   const sendMsg = async () => {
     if (!quickMsg.trim() || !connectedInstance) return
@@ -58,163 +213,355 @@ export default function ContactDetailPage() {
       await axios.post('/api/whatsapp/send', { instance_id: connectedInstance.id, to: contact.phone, type: 'text', text: quickMsg.trim() })
       setQuickMsg('')
       qc.invalidateQueries(['contact', id])
-      toast.success('Message sent!')
+      toast.success('أُرسلت الرسالة')
     } catch (e) {
-      toast.error(e?.response?.data?.error || 'Failed to send')
+      toast.error(friendlyError(e, 'تعذّر إرسال الرسالة'))
     } finally { setSendingMsg(false) }
   }
 
-  if (isLoading) return (
+  // Timeline: oldest → newest, grouped by day
+  const timeline = useMemo(() => {
+    const sorted = [...messages].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    const groups: Array<{ day: string; items: any[] }> = []
+    for (const m of sorted) {
+      const label = dayLabel(new Date(m.created_at))
+      const last = groups[groups.length - 1]
+      if (last && last.day === label) last.items.push(m)
+      else groups.push({ day: label, items: [m] })
+    }
+    return groups
+  }, [messages])
+
+  const campaignsById = useMemo(() => {
+    const map = new Map<string, any>()
+    for (const c of campData?.campaigns || []) map.set(c.id, c)
+    return map
+  }, [campData])
+
+  const received = useMemo(() => {
+    const map = new Map<string, { id: string; count: number; last: string; status: string }>()
+    for (const m of messages) {
+      if (!m.campaign_id) continue
+      const cur = map.get(m.campaign_id)
+      if (!cur) map.set(m.campaign_id, { id: m.campaign_id, count: 1, last: m.created_at, status: m.status })
+      else { cur.count++; if (m.created_at > cur.last) { cur.last = m.created_at; cur.status = m.status } }
+    }
+    return Array.from(map.values()).sort((a, b) => (a.last < b.last ? 1 : -1))
+  }, [messages])
+
+  const inbound = messages.filter(m => m.direction !== 'outbound').length
+  const outbound = messages.length - inbound
+
+  if (isLoading || !id) return (
     <DashboardLayout title="Contact">
-      <div className="flex justify-center py-20"><div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" /></div>
+      <div className="space-y-5" aria-busy="true" aria-label="جارٍ تحميل جهة الاتصال">
+        <Skeleton className="h-10 w-64" />
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
+          <div className="space-y-4"><Skeleton className="h-72 rounded-panel" /><Skeleton className="h-40 rounded-panel" /></div>
+          <div className="space-y-4"><Skeleton className="h-32 rounded-panel" /><Skeleton className="h-96 rounded-panel" /></div>
+        </div>
+      </div>
     </DashboardLayout>
   )
 
   if (!contact) return (
     <DashboardLayout title="Contact Not Found">
-      <div className="card text-center py-16">
-        <p className="text-slate-400">Contact not found</p>
-        <Link href="/dashboard/contacts" className="btn-primary mt-4 inline-flex">← Back to Contacts</Link>
+      <div className="space-y-6">
+        <PageHeader back={{ href: '/dashboard/contacts', label: 'جهات الاتصال' }} title="جهة الاتصال" />
+        {isError && errorStatus(error) !== 404 ? (
+          <ErrorState
+            title={isMemberForbidden(error) ? 'لا يمكنك عرض جهة الاتصال' : 'تعذّر تحميل جهة الاتصال'}
+            message={isMemberForbidden(error) ? MEMBER_FORBIDDEN_MSG : friendlyError(error)}
+            onRetry={() => refetch()}
+          />
+        ) : (
+          <EmptyState variant="card" icon={UserCircleIcon} title="لم يُعثر على جهة الاتصال"
+            description="ربما حُذفت أو لا تنتمي إلى حسابك."
+            action={<Button href="/dashboard/contacts">العودة إلى جهات الاتصال</Button>} />
+        )}
       </div>
     </DashboardLayout>
   )
 
+  const displayName = contact.name || contact.phone
+  const state = contact.is_blocked ? { label: 'محظور', tone: 'danger' as const } : contact.opted_out ? { label: 'ألغى الاشتراك', tone: 'warning' as const } : { label: 'نشط', tone: 'success' as const }
+  const lastActivity = messages[0]?.created_at
+
   return (
-    <DashboardLayout title={contact.name || contact.phone}>
-      <div className="max-w-4xl">
-        {/* Back */}
-        <Link href="/dashboard/contacts" className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-900 mb-6 transition-colors w-fit">
-          <ArrowLeftIcon className="w-4 h-4" /> Back to Contacts
-        </Link>
+    <DashboardLayout title={displayName}>
+      <div className="space-y-6">
+        <PageHeader
+          back={{ href: '/dashboard/contacts', label: 'جهات الاتصال' }}
+          eyebrow="ملف جهة الاتصال"
+          title={contact.name || <span dir="ltr">{contact.phone}</span>}
+          actions={
+            <>
+              <Button icon={ChatBubbleLeftRightIcon} href={`/dashboard/chat?contact=${id}`}>فتح المحادثة</Button>
+              {canEdit && <Button variant="secondary" icon={PencilIcon} onClick={() => setEditing(true)}>تعديل</Button>}
+              {canEdit && (
+                <Dropdown label="مزيد من الإجراءات" align="end"
+                  trigger={<span className="flex h-11 w-11 items-center justify-center rounded-btn border border-line bg-surface text-muted transition hover:text-ink"><EllipsisHorizontalIcon className="h-5 w-5" aria-hidden="true" /></span>}
+                  items={[
+                    { label: contact.is_blocked ? 'إلغاء الحظر' : 'حظر جهة الاتصال', icon: NoSymbolIcon, onClick: () => blockMut.mutate(!contact.is_blocked) },
+                    { label: 'حذف جهة الاتصال', icon: TrashIcon, danger: true, divider: true, onClick: () => setConfirmDelete(true) },
+                  ]} />
+              )}
+            </>
+          }
+        />
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left: Contact info */}
+        {!canEdit && (
+          <Notice tone="info" icon={LockClosedIcon}>صلاحيتك في الفريق ({roleLabel}) تتيح العرض فقط؛ لا يمكنك تعديل جهة الاتصال أو مراسلتها.</Notice>
+        )}
+        {contact.is_blocked && (
+          <Notice tone="danger" icon={NoSymbolIcon} title="جهة الاتصال محظورة"
+            action={canEdit ? <Button size="sm" variant="secondary" loading={blockMut.isLoading} onClick={() => blockMut.mutate(false)}>إلغاء الحظر</Button> : undefined}>
+            لا تصلها الحملات ولا الرسائل، ولا تُدرج في أي جمهور.
+          </Notice>
+        )}
+
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
+          {/* ── Profile column ─────────────────────────── */}
           <div className="space-y-4">
-            {/* Profile card */}
-            <div className="card text-center">
-              <div className="w-20 h-20 rounded-full bg-[#F8FAFC] flex items-center justify-center text-3xl font-bold text-slate-900 mx-auto mb-3">
-                {(contact.name || contact.phone)[0].toUpperCase()}
+            <Card padding="none" className="overflow-hidden">
+              <div className="relative h-20 bg-deep-hero" aria-hidden="true">
+                <div className="absolute -end-8 -top-10 h-32 w-32 rounded-full bg-brand-green/25 blur-2xl" />
               </div>
-              <h2 className="font-display font-bold text-xl text-slate-900">{contact.name || 'No name'}</h2>
-              <p className="text-slate-400 text-sm mt-1">{contact.phone}</p>
-              {contact.email && <p className="text-slate-500 text-xs mt-0.5">{contact.email}</p>}
-              <div className="flex items-center justify-center gap-1 mt-2">
-                {contact.is_blocked ? <span className="badge-red">Blocked</span> : contact.opted_out ? <span className="badge-yellow">Opted out</span> : <span className="badge-green">Active</span>}
-                {contact.ai_opted_out && <span className="text-xs px-2 py-0.5 rounded-full bg-purple-900/30 text-purple-400">🧠 AI Off</span>}
-              </div>
-              <div className="flex gap-2 mt-4">
-                <button onClick={() => axios.post('/api/ai/opt-out', { contact_id: contact.id, opted_out: !contact.ai_opted_out }).then(() => { toast.success(contact.ai_opted_out ? 'AI enabled' : 'AI disabled'); refetch() })}
-                  className={contact.ai_opted_out ? 'btn-secondary text-xs py-1' : 'btn-secondary text-xs py-1 text-purple-400'}>
-                  🧠 {contact.ai_opted_out ? 'Enable AI' : 'Disable AI'}
-                </button>
-                <button onClick={() => setEditing(true)} className="btn-secondary flex-1 text-sm py-2"><PencilIcon className="w-4 h-4" /> Edit</button>
-                <Link href={`/dashboard/chat?contact=${id}`} className="btn-primary flex-1 text-sm py-2 justify-center"><ChatBubbleLeftRightIcon className="w-4 h-4" /> Chat</Link>
-              </div>
-            </div>
-
-            {/* Details */}
-            <div className="card space-y-3">
-              <h3 className="font-semibold text-slate-900 text-sm">Contact Details</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2 text-slate-300"><PhoneIcon className="w-4 h-4 text-slate-500" />{contact.phone}</div>
-                {contact.email && <div className="flex items-center gap-2 text-slate-300"><EnvelopeIcon className="w-4 h-4 text-slate-500" />{contact.email}</div>}
-                <div className="flex items-start gap-2"><TagIcon className="w-4 h-4 text-slate-500 mt-0.5 flex-shrink-0" />
-                  <div className="flex flex-wrap gap-1">
-                    {contact.tags?.length > 0 ? contact.tags.map(t => <span key={t} className="badge-gray">{t}</span>) : <span className="text-slate-500">No tags</span>}
+              <div className="-mt-10 px-5 pb-5">
+                <div className="rounded-full ring-4 ring-surface w-fit">
+                  <Avatar name={displayName} size="xl" />
+                </div>
+                <h2 className="mt-3 text-lg font-bold text-ink">{contact.name || 'بدون اسم'}</h2>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <StatusPill tone={state.tone}>{state.label}</StatusPill>
+                  {contact.ai_opted_out && <Badge tone="violet" icon={SparklesIcon}>الرد الآلي متوقف</Badge>}
+                </div>
+                <dl className="mt-4 space-y-2.5 text-sm">
+                  <div className="flex items-center gap-2.5">
+                    <PhoneIcon className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
+                    <dt className="sr-only">الهاتف</dt>
+                    <dd dir="ltr" className="min-w-0 flex-1 truncate text-start font-mono text-[13px] text-ink">{contact.phone}</dd>
+                    <CopyButton text={contact.phone} label="نسخ الرقم" />
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <EnvelopeIcon className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
+                    <dt className="sr-only">البريد الإلكتروني</dt>
+                    <dd dir="ltr" className={cn('min-w-0 flex-1 truncate text-start text-[13px]', contact.email ? 'text-ink' : 'text-muted')}>{contact.email || '—'}</dd>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <CalendarDaysIcon className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
+                    <dt className="sr-only">تاريخ الإضافة</dt>
+                    <dd className="text-[13px] text-muted">أُضيفت {fmtDate(contact.created_at)}{lastActivity ? ` · آخر نشاط ${fmtRelative(lastActivity)}` : ''}</dd>
+                  </div>
+                </dl>
+                <div className="mt-4 grid grid-cols-2 gap-2 border-t border-line-soft pt-4 text-center">
+                  <div className="rounded-card bg-surface-2 py-2.5">
+                    <p className="flex items-center justify-center gap-1 text-lg font-bold text-ink tabular"><ArrowDownLeftIcon className="h-4 w-4 text-brand-ink" aria-hidden="true" />{fmtNum(inbound)}</p>
+                    <p className="text-[11.5px] text-muted">واردة</p>
+                  </div>
+                  <div className="rounded-card bg-surface-2 py-2.5">
+                    <p className="flex items-center justify-center gap-1 text-lg font-bold text-ink tabular"><ArrowUpRightIcon className="h-4 w-4 text-brand-ink" aria-hidden="true" />{fmtNum(outbound)}</p>
+                    <p className="text-[11.5px] text-muted">صادرة</p>
                   </div>
                 </div>
               </div>
-              <p className="text-xs text-slate-600">Added {format(new Date(contact.created_at), 'MMM d, yyyy')}</p>
-            </div>
+            </Card>
 
-            {/* Actions */}
-            <div className="card space-y-2">
-              <h3 className="font-semibold text-slate-900 text-sm mb-3">Actions</h3>
-              <button onClick={() => blockMut.mutate(!contact.is_blocked)} className="btn-secondary w-full text-sm justify-start">
-                <NoSymbolIcon className="w-4 h-4" />
-                {contact.is_blocked ? 'Unblock Contact' : 'Block Contact'}
-              </button>
-              <button onClick={() => optOutMut.mutate(!contact.opted_out)} className="btn-secondary w-full text-sm justify-start">
-                {contact.opted_out ? '✅ Re-subscribe (opt in)' : '🚫 Mark as opted out'}
-              </button>
-              <button onClick={() => { if (confirm('Delete this contact?')) deleteMut.mutate() }} className="btn-danger w-full text-sm">
-                <TrashIcon className="w-4 h-4" /> Delete Contact
-              </button>
-            </div>
+            <Card>
+              <CardHeader title="حالة المراسلة" icon={BellSlashIcon} />
+              <div className="mt-4 space-y-4">
+                <Switch
+                  checked={!contact.opted_out}
+                  onChange={v => optOutMut.mutate(!v)}
+                  disabled={!canEdit || optOutMut.isLoading}
+                  label="مشترك في الرسائل"
+                  description={contact.opted_out ? 'ألغى الاشتراك: لا تصله الحملات، ويعود بإرسال START.' : 'عند الإيقاف يُعامل كمن أرسل STOP ولا تصله الحملات.'}
+                />
+                <Switch
+                  checked={!!contact.is_blocked}
+                  onChange={v => blockMut.mutate(v)}
+                  disabled={!canEdit || blockMut.isLoading}
+                  label="محظور"
+                  description="لا تصله أي رسائل ولا يُدرج في الحملات."
+                />
+                <Switch
+                  checked={!contact.ai_opted_out}
+                  onChange={() => toggleAi()}
+                  disabled={!canEdit || aiBusy}
+                  label="الرد الآلي بالذكاء الاصطناعي"
+                  description="يرد المساعد الذكي على رسائل جهة الاتصال هذه."
+                />
+              </div>
+            </Card>
+
+            <Card>
+              <CardHeader title="الوسوم" icon={TagIcon} subtitle="تُستخدم في الشرائح واستهداف الحملات" />
+              <div className="mt-4">
+                <TagsEditor tags={contact.tags || []} saving={patchMut.isLoading} disabled={!canEdit} onSave={tags => patchMut.mutate({ tags })} />
+              </div>
+            </Card>
+
+            <Card>
+              <CardHeader title="المتغيرات" icon={VariableIcon} subtitle="قيم مخصّصة تُستبدل في الحملات والقوالب" />
+              <div className="mt-4">
+                <VariablesEditor key={JSON.stringify(contact.variables || {})} variables={contact.variables || {}} saving={patchMut.isLoading} disabled={!canEdit}
+                  onSave={variables => patchMut.mutate({ variables })} />
+              </div>
+            </Card>
           </div>
 
-          {/* Right: Messages */}
-          <div className="lg:col-span-2 space-y-4">
-            {/* Quick send */}
-            {connectedInstance && !contact.is_blocked && !contact.opted_out && (
-              <div className="card">
-                <h3 className="font-semibold text-slate-900 text-sm mb-3">Quick Message</h3>
-                <div className="flex gap-2">
-                  <textarea value={quickMsg} onChange={e => setQuickMsg(e.target.value)} placeholder={`Send a message to ${contact.name || contact.phone}…`} rows={2} className="input flex-1 resize-none text-sm" onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg() } }} />
-                  <button onClick={sendMsg} disabled={!quickMsg.trim() || sendingMsg} className="btn-primary self-end">
-                    {sendingMsg ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <PaperAirplaneIcon className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Message history */}
-            <div className="card p-0 overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-                <h3 className="font-semibold text-slate-900">Message History</h3>
-                <span className="badge-gray">{messages.length} messages</span>
-              </div>
-              <div className="max-h-96 overflow-y-auto">
-                {messages.length === 0 ? (
-                  <div className="text-center py-12 text-slate-500 text-sm">No messages yet</div>
-                ) : messages.map((msg) => (
-                  <div key={msg.id} className={`flex py-3 px-5 border-b border-slate-200/50 gap-3 ${msg.direction === 'outbound' ? 'flex-row-reverse' : ''}`}>
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${msg.direction === 'outbound' ? 'bg-blue-50 text-blue-600' : 'bg-[#F8FAFC] text-slate-300'}`}>
-                      {msg.direction === 'outbound' ? 'Me' : (contact.name || contact.phone)[0].toUpperCase()}
+          {/* ── Activity column ────────────────────────── */}
+          <div className="min-w-0 space-y-4">
+            <Card>
+              <CardHeader title="رسالة سريعة" icon={PaperAirplaneIcon}
+                subtitle={connectedInstance ? `من ${connectedInstance.display_name || connectedInstance.phone_number}` : undefined} />
+              <div className="mt-4">
+                {!connectedInstance ? (
+                  <Notice tone="warning" action={<Button size="sm" variant="secondary" href="/dashboard/instances">ربط رقم</Button>}>لا يوجد رقم واتساب متصل للإرسال منه.</Notice>
+                ) : contact.is_blocked ? (
+                  <p className="text-sm text-muted">لا يمكن مراسلة جهة اتصال محظورة.</p>
+                ) : contact.opted_out ? (
+                  <p className="text-sm text-muted">ألغت جهة الاتصال اشتراكها؛ لا يمكن مراسلتها حتى تعيد الاشتراك.</p>
+                ) : !canSend ? (
+                  <p className="text-sm text-muted">لا يسمح دورك في الفريق بإرسال الرسائل.</p>
+                ) : (
+                  <div className="flex items-end gap-2">
+                    <div className="min-w-0 flex-1">
+                      <Textarea rows={2} value={quickMsg} onChange={e => setQuickMsg(e.target.value)} className="w-full resize-none"
+                        placeholder={`اكتب رسالة إلى ${displayName}…`} aria-label="نص الرسالة"
+                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg() } }} />
                     </div>
-                    <div className={`max-w-xs ${msg.direction === 'outbound' ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
-                      <div className={`px-3 py-2 rounded-xl text-sm text-slate-900 ${msg.direction === 'outbound' ? 'bg-brand-700/50 rounded-br-none' : 'bg-[#F8FAFC] rounded-bl-none'}`}>
-                        {msg.content}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] text-slate-600">{format(new Date(msg.created_at), 'MMM d, HH:mm')}</span>
-                        {msg.direction === 'outbound' && (
-                          msg.status === 'read' ? <CheckCircleIcon className="w-3 h-3 text-blue-400" /> :
-                          msg.status === 'delivered' ? <CheckCircleIcon className="w-3 h-3 text-slate-500" /> :
-                          <span className="text-[10px] text-slate-600">{msg.status}</span>
-                        )}
-                      </div>
-                    </div>
+                    <Button size="icon" icon={PaperAirplaneIcon} loading={sendingMsg} disabled={!quickMsg.trim()} onClick={sendMsg} aria-label="إرسال" className="rtl:-scale-x-100" />
                   </div>
-                ))}
+                )}
+                {connectedInstance && !contact.is_blocked && !contact.opted_out && canSend && (
+                  <p className="mt-2 text-xs text-muted">Enter للإرسال، وShift+Enter لسطر جديد. خارج نافذة الـ 24 ساعة لا يصل النص الحر إلى أرقام Cloud API.</p>
+                )}
               </div>
-            </div>
+            </Card>
+
+            <Card padding="none">
+              <CardHeader className="px-5 pt-5 sm:px-6" title="سجل المحادثة" icon={InboxIcon}
+                subtitle={messages.length ? `آخر ${fmtNum(messages.length)} رسالة` : undefined}
+                action={messages.length ? <Button size="sm" variant="ghost" href={`/dashboard/chat?contact=${id}`}>المحادثة الكاملة</Button> : undefined} />
+              <div className="mt-4 max-h-[560px] overflow-y-auto border-t border-line-soft bg-surface-2/50 px-4 py-4 sm:px-6">
+                {messages.length === 0 ? (
+                  <EmptyState size="sm" icon={ChatBubbleLeftRightIcon} title="لا توجد رسائل بعد"
+                    description="ابدأ المحادثة برسالة سريعة أو من صندوق المحادثات." />
+                ) : (
+                  <ol className="space-y-4">
+                    {timeline.map(g => (
+                      <li key={g.day}>
+                        <p className="mb-3 flex justify-center"><span className="rounded-full bg-surface px-3 py-1 text-[11px] text-muted shadow-sm">{g.day}</span></p>
+                        <ul className="space-y-2">
+                          {g.items.map(msg => {
+                            const out = msg.direction === 'outbound'
+                            const camp = msg.campaign_id ? campaignsById.get(msg.campaign_id) : null
+                            const typeLabel = msg.type && msg.type !== 'text' ? TYPE_LABELS[msg.type] || msg.type : null
+                            return (
+                              <li key={msg.id} className={cn('flex', out ? 'justify-end' : 'justify-start')}>
+                                <div className={cn('max-w-[85%] rounded-2xl px-3.5 py-2 text-sm shadow-sm sm:max-w-[70%]',
+                                  out ? 'rounded-se-md bg-chip text-ink' : 'rounded-ss-md bg-surface text-ink',
+                                  msg.status === 'failed' && 'ring-1 ring-danger/40')}>
+                                  {(camp || msg.campaign_id) && (
+                                    <p className="mb-1 flex items-center gap-1 text-[11px] font-medium text-chip-ink">
+                                      <MegaphoneIcon className="h-3.5 w-3.5" aria-hidden="true" />{camp?.name || 'حملة'}
+                                    </p>
+                                  )}
+                                  {typeLabel && <p className="mb-0.5 text-[11px] text-muted">{typeLabel}</p>}
+                                  <p dir="auto" className="whitespace-pre-wrap break-words">{msg.content || (typeLabel ? '' : '—')}</p>
+                                  <p className="mt-1 flex items-center justify-end gap-1 text-[10.5px] text-muted">
+                                    <span className="tabular">{fmtTime(msg.created_at)}</span>
+                                    {out && (msg.status === 'read' ? (
+                                      <span className="flex -space-x-1.5 text-brand-ink rtl:space-x-reverse" aria-label="قُرئت"><CheckIcon className="h-3.5 w-3.5" /><CheckIcon className="h-3.5 w-3.5" /></span>
+                                    ) : msg.status === 'delivered' ? (
+                                      <span className="flex -space-x-1.5 rtl:space-x-reverse" aria-label="وصلت"><CheckIcon className="h-3.5 w-3.5" /><CheckIcon className="h-3.5 w-3.5" /></span>
+                                    ) : msg.status === 'sent' ? (
+                                      <CheckIcon className="h-3.5 w-3.5" aria-label="أُرسلت" />
+                                    ) : msg.status === 'failed' ? (
+                                      <span className="text-danger">فشلت</span>
+                                    ) : msg.status ? <span>{msg.status}</span> : null)}
+                                  </p>
+                                </div>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            </Card>
+
+            <Card padding="none">
+              <CardHeader className="px-5 pt-5 sm:px-6" title="الحملات المستلمة" icon={MegaphoneIcon}
+                subtitle={received.length ? `${fmtNum(received.length)} حملة ضمن آخر الرسائل` : undefined} />
+              <div className="mt-3">
+                {received.length === 0 ? (
+                  <EmptyState size="sm" icon={MegaphoneIcon} title="لم تصل جهة الاتصال أي حملة بعد"
+                    description="تظهر هنا الحملات التي أُرسلت إليها ضمن آخر 50 رسالة." />
+                ) : (
+                  <ul className="divide-y divide-line-soft border-t border-line-soft">
+                    {received.map(r => {
+                      const camp = campaignsById.get(r.id)
+                      const cs = campaignStatus(camp?.status)
+                      return (
+                        <li key={r.id}>
+                          <Link href={`/dashboard/campaigns/${r.id}`} className="flex items-center gap-3 px-5 py-3 transition hover:bg-surface-2 sm:px-6">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-chip text-brand-ink">
+                              {camp?.template_name ? <CheckBadgeIcon className="h-[18px] w-[18px]" aria-hidden="true" /> : <MegaphoneIcon className="h-[18px] w-[18px]" aria-hidden="true" />}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium text-ink">{camp?.name || 'حملة محذوفة'}</span>
+                              <span className="block text-xs text-muted">{fmtDateTime(r.last)}{r.count > 1 ? ` · ${fmtNum(r.count)} رسائل` : ''}</span>
+                            </span>
+                            <span className="flex shrink-0 flex-col items-end gap-1">
+                              <StatusPill status={r.status} tone={r.status === 'failed' ? 'danger' : r.status === 'read' || r.status === 'delivered' ? 'success' : 'brand'}>
+                                {r.status === 'read' ? 'قُرئت' : r.status === 'delivered' ? 'وصلت' : r.status === 'failed' ? 'فشلت' : 'أُرسلت'}
+                              </StatusPill>
+                              {camp && <span className="text-[11px] text-muted">{cs.label}</span>}
+                            </span>
+                          </Link>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </div>
+            </Card>
           </div>
         </div>
       </div>
 
       {/* Edit modal */}
-      {editing && (
-        <div className="modal-backdrop" onClick={() => setEditing(false)}>
-          <div className="modal-panel" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-5 border-b border-slate-200">
-              <h3 className="font-display font-semibold text-slate-900">Edit Contact</h3>
-              <button onClick={() => setEditing(false)} className="text-slate-400 hover:text-slate-900"><XMarkIcon className="w-5 h-5" /></button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div><label className="label">Name</label><input value={editData.name} onChange={e => setEditData(d => ({...d, name: e.target.value}))} className="input" /></div>
-              <div><label className="label">Email</label><input value={editData.email} onChange={e => setEditData(d => ({...d, email: e.target.value}))} type="email" className="input" /></div>
-              <div><label className="label">Tags <span className="text-slate-500">(comma-separated)</span></label><input value={editData.tags} onChange={e => setEditData(d => ({...d, tags: e.target.value}))} placeholder="vip, customer" className="input" /></div>
-              <div className="flex justify-end gap-3 pt-2">
-                <button onClick={() => setEditing(false)} className="btn-secondary">Cancel</button>
-                <button onClick={() => updateMut.mutate({ name: editData.name, email: editData.email, tags: editData.tags.split(',').map(t => t.trim()).filter(Boolean) })} disabled={updateMut.isLoading} className="btn-primary">
-                  {updateMut.isLoading ? 'Saving…' : 'Save'}
-                </button>
-              </div>
-            </div>
-          </div>
+      <Modal open={editing} onClose={() => setEditing(false)} title="تعديل جهة الاتصال" icon={PencilIcon}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditing(false)}>إلغاء</Button>
+            <Button loading={updateMut.isLoading}
+              onClick={() => updateMut.mutate({ name: editData.name, email: editData.email, tags: editData.tags.split(',').map(t => t.trim()).filter(Boolean) })}>
+              حفظ
+            </Button>
+          </>
+        }>
+        <div className="space-y-4">
+          <Field label="الاسم"><Input value={editData.name} onChange={e => setEditData(d => ({ ...d, name: e.target.value }))} maxLength={200} /></Field>
+          <Field label="البريد الإلكتروني"><Input type="email" dir="ltr" value={editData.email} onChange={e => setEditData(d => ({ ...d, email: e.target.value }))} placeholder="name@company.com" /></Field>
+          <Field label="الوسوم" hint="افصل بين الوسوم بفاصلة"><Input value={editData.tags} onChange={e => setEditData(d => ({ ...d, tags: e.target.value }))} placeholder="vip, عملاء" /></Field>
         </div>
-      )}
+      </Modal>
+
+      <ConfirmDialog
+        destructive
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={() => deleteMut.mutate()}
+        loading={deleteMut.isLoading}
+        title="حذف جهة الاتصال؟"
+        description={`ستُحذف «${displayName}» نهائيًا من جهات الاتصال. لا يمكن التراجع عن هذا الإجراء.`}
+        confirmLabel="حذف"
+      />
     </DashboardLayout>
   )
 }
