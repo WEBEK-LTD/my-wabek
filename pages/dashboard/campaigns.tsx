@@ -118,7 +118,7 @@ export default function CampaignsPage() {
 
         {isLoading ? (
           <>
-            <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-3.5">
               {[0, 1, 2, 3].map(i => <StatCard key={i} label="" value="" loading />)}
             </div>
             <div className="space-y-3" aria-busy="true" aria-label="جارٍ تحميل الحملات">
@@ -141,7 +141,7 @@ export default function CampaignsPage() {
           />
         ) : (
           <>
-            <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-3.5">
               <StatCard label="الحملات" value={fmtNum(campaigns.length)} icon={MegaphoneIcon}
                 sub={counts.running ? `${fmtNum(counts.running)} قيد الإرسال الآن` : counts.scheduled ? `${fmtNum(counts.scheduled)} مجدولة` : 'لا يوجد إرسال جارٍ'}
                 subTone={counts.running ? 'brand' : counts.scheduled ? 'warning' : 'muted'} />

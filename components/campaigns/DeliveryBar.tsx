@@ -28,11 +28,12 @@ export function funnel({ total, sent, delivered, read, failed }: DeliveryCounts)
  * Layered delivery bar: read | delivered (not read) | sent (not delivered) | failed,
  * proportional to the audience. Grows from the start side.
  */
-export function DeliveryBar({ counts, size = 'md', legend = false, className }: {
+export function DeliveryBar({ counts, size = 'md', legend = false, className, trackClassName = 'bg-track' }: {
   counts: DeliveryCounts
   size?: 'sm' | 'md' | 'lg'
   legend?: boolean
   className?: string
+  trackClassName?: string
 }) {
   const f = funnel(counts)
   const base = f.total || 1
@@ -54,7 +55,7 @@ export function DeliveryBar({ counts, size = 'md', legend = false, className }: 
         aria-valuenow={processed}
         aria-valuetext={summary}
         aria-label="تقدّم الإرسال"
-        className={cn('flex w-full overflow-hidden rounded-full bg-track', h)}
+        className={cn('flex w-full overflow-hidden rounded-full', trackClassName, h)}
       >
         {segs.map(s => s.value > 0 && (
           <span

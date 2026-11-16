@@ -138,7 +138,7 @@ export default function CampaignDetailPage() {
       <div className="space-y-5" aria-busy="true" aria-label="جارٍ تحميل الحملة">
         <Skeleton className="h-10 w-72" />
         <Skeleton className="h-40 w-full rounded-panel" />
-        <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5 xl:gap-3.5">
           {[0, 1, 2, 3, 4].map(i => <StatCard key={i} label="" value="" loading />)}
         </div>
         <Skeleton className="h-72 w-full rounded-panel" />
@@ -241,7 +241,7 @@ export default function CampaignDetailPage() {
                 <span className="text-sm text-deep-muted">تمت معالجة <span className="tabular">{fmtNum(processed)}</span> من <span className="tabular">{fmtNum(f.total)}</span></span>
                 {running && <ArrowPathIcon className="h-4 w-4 animate-spin text-deep-muted" aria-label="يتحدّث تلقائيًا" />}
               </p>
-              <DeliveryBar className="mt-4" size="lg" counts={f} />
+              <DeliveryBar className="mt-4" size="lg" counts={f} trackClassName="bg-white/15" />
               <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-deep-muted">
                 {[
                   { label: 'قُرئت', v: f.read, c: DELIVERY_COLORS.read },
@@ -264,7 +264,7 @@ export default function CampaignDetailPage() {
         </Card>
 
         {/* Funnel stat cards */}
-        <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5 xl:gap-3.5">
           <StatCard label="المستهدفون" value={fmtNum(f.total)} icon={UsersIcon} sub={`${fmtNum(stats.total)} رسالة مسجّلة`} />
           <StatCard label="أُرسلت" value={fmtNum(f.sent)} icon={PaperAirplaneIcon} progress={pct(f.sent, f.total)} sub={`${pct(f.sent, f.total)}% من المستهدفين`} />
           <StatCard label="وصلت" value={fmtNum(f.delivered)} icon={CheckCircleIcon} progress={pct(f.delivered, f.sent)} sub={`${pct(f.delivered, f.sent)}% من المرسلة`} subTone="success" />
@@ -272,7 +272,7 @@ export default function CampaignDetailPage() {
           <StatCard label="فشلت" value={fmtNum(f.failed)} icon={XCircleIcon} sub={f.failed ? `${pct(f.failed, processed)}% من المعالجة` : 'لا إخفاقات'} subTone={f.failed ? 'danger' : 'success'} />
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <Card>
             <CardHeader title="مسار التسليم" subtitle="النسبة بجوار كل مرحلة محسوبة من المرحلة السابقة" icon={MegaphoneIcon} />
             <div className="mt-5">
@@ -392,7 +392,7 @@ export default function CampaignDetailPage() {
         </Card>
 
         {/* Settings + message */}
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <Card>
             <CardHeader title="إعدادات الحملة" icon={Cog6ToothIcon} />
             <div className="mt-3">

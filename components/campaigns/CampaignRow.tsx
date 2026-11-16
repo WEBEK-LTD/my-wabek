@@ -44,7 +44,7 @@ export function CampaignRow({ c, canWrite, busy, onAction, onDelete }: {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="min-w-0 truncate text-[15px] font-semibold text-ink">
-              <Link href={href} className="hover:text-link focus-visible:text-link">{c.name}</Link>
+              <Link href={href} className="text-ink hover:text-link focus-visible:text-link">{c.name}</Link>
             </h3>
             <StatusPill status={c.status} tone={st.tone} pulse={running}>
               {st.label}{running && f.total > 0 ? ` · ${progress}%` : ''}

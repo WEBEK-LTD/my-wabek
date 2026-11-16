@@ -256,7 +256,7 @@ export default function ContactDetailPage() {
     <DashboardLayout title="Contact">
       <div className="space-y-5" aria-busy="true" aria-label="جارٍ تحميل جهة الاتصال">
         <Skeleton className="h-10 w-64" />
-        <div className="grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
           <div className="space-y-4"><Skeleton className="h-72 rounded-panel" /><Skeleton className="h-40 rounded-panel" /></div>
           <div className="space-y-4"><Skeleton className="h-32 rounded-panel" /><Skeleton className="h-96 rounded-panel" /></div>
         </div>
@@ -320,7 +320,7 @@ export default function ContactDetailPage() {
           </Notice>
         )}
 
-        <div className="grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
           {/* ── Profile column ─────────────────────────── */}
           <div className="space-y-4">
             <Card padding="none" className="overflow-hidden">
@@ -426,9 +426,11 @@ export default function ContactDetailPage() {
                   <p className="text-sm text-muted">لا يسمح دورك في الفريق بإرسال الرسائل.</p>
                 ) : (
                   <div className="flex items-end gap-2">
-                    <Textarea rows={2} value={quickMsg} onChange={e => setQuickMsg(e.target.value)} className="flex-1 resize-none"
-                      placeholder={`اكتب رسالة إلى ${displayName}…`} aria-label="نص الرسالة"
-                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg() } }} />
+                    <div className="min-w-0 flex-1">
+                      <Textarea rows={2} value={quickMsg} onChange={e => setQuickMsg(e.target.value)} className="w-full resize-none"
+                        placeholder={`اكتب رسالة إلى ${displayName}…`} aria-label="نص الرسالة"
+                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg() } }} />
+                    </div>
                     <Button size="icon" icon={PaperAirplaneIcon} loading={sendingMsg} disabled={!quickMsg.trim()} onClick={sendMsg} aria-label="إرسال" className="rtl:-scale-x-100" />
                   </div>
                 )}

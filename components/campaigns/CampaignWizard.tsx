@@ -293,7 +293,7 @@ export function CampaignWizard({ onClose }: { onClose: () => void }) {
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold text-ink">المعاينة</h3>
         <label className="flex items-center gap-2 text-xs text-muted">
-          <span>الاسم في المعاينة</span>
+          <span>اسم للمعاينة</span>
           <Input size="sm" value={previewContact} onChange={e => setPreviewContact(e.target.value)} className="w-28" aria-label="اسم جهة الاتصال في المعاينة" />
         </label>
       </div>
@@ -309,7 +309,7 @@ export function CampaignWizard({ onClose }: { onClose: () => void }) {
   )
 
   return (
-    <div className="space-y-5" ref={topRef}>
+    <div className="scroll-mt-28 space-y-5" ref={topRef}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-[13px] text-muted">الحملات</p>
@@ -322,7 +322,7 @@ export function CampaignWizard({ onClose }: { onClose: () => void }) {
 
       {/* ── Step 1: audience ─────────────────────────────── */}
       {step === 1 && (
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-5">
             <Card>
               <CardHeader title="أساسيات الحملة" subtitle="اسم داخلي يظهر لفريقك فقط، والرقم الذي تُرسل منه" icon={PencilSquareIcon} />
@@ -430,7 +430,7 @@ export function CampaignWizard({ onClose }: { onClose: () => void }) {
 
       {/* ── Step 2: message ─────────────────────────────── */}
       {step === 2 && (
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
           <div className="space-y-5">
             <Card>
               <CardHeader title="نوع الرسالة" icon={ChatBubbleLeftEllipsisIcon}
@@ -566,7 +566,7 @@ export function CampaignWizard({ onClose }: { onClose: () => void }) {
 
       {/* ── Step 3: schedule ────────────────────────────── */}
       {step === 3 && (
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
           <Card>
             <CardHeader title="متى تُرسل الحملة؟" icon={CalendarDaysIcon} subtitle={`المنطقة الزمنية لجهازك: ${tz.zone} (${tz.offset})`} />
             <div className="mt-4 grid gap-3 md:grid-cols-2" role="radiogroup" aria-label="موعد الإرسال">
@@ -623,7 +623,7 @@ export function CampaignWizard({ onClose }: { onClose: () => void }) {
 
       {/* ── Step 4: review ──────────────────────────────── */}
       {step === 4 && (
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
           <div className="space-y-4">
             <Card>
               <CardHeader title="ملخّص الحملة" icon={RocketLaunchIcon} subtitle="راجع التفاصيل قبل الإنشاء" />
@@ -659,6 +659,11 @@ export function CampaignWizard({ onClose }: { onClose: () => void }) {
               </Notice>
             )}
             {recipientCount === 0 && <Notice tone="warning">لا يوجد مستلمون مطابقون حاليًا؛ ستكتمل الحملة دون إرسال إن بدأت الآن.</Notice>}
+            {emptyVars > 0 && (
+              <Notice tone="warning" action={<Button size="sm" variant="secondary" onClick={() => go(2)}>تعديل</Button>}>
+                {fmtNum(emptyVars)} من متغيرات القالب فارغ؛ قد ترفض Meta الرسالة إن كان المتغير مطلوبًا.
+              </Notice>
+            )}
 
             <Card variant="muted" className="space-y-3">
               {scheduleMode === 'later' ? (
