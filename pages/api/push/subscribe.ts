@@ -8,14 +8,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const user = await requireAuth(req, res)
     if (!user) return
 
-    const { subscription } = req.body
-    if (!subscription) return res.status(400).json({ error: 'subscription required' })
+    const { subscription } = req.body || {}
+    if (!subscription || typeof subscription !== 'object') return res.status(400).json({ error: 'subscription required' })
+    // Must look like a Web Push subscription with an https push-service endpoint
+    let endpointOk = false
+    try { endpointOk = new URL(String(subscription.endpoint)).protocol === 'https:' } catch {}
+    const serialized = JSON.stringify(subscription)
+    if (!endpointOk || typeof subscription.keys?.p256dh !== 'string' || typeof subscription.keys?.auth !== 'string' || serialized.length > 4096) {
+      return res.status(400).json({ error: 'Invalid subscription' })
+    }
 
     const db = supabaseAdmin()
     await db.from('push_subscriptions').upsert({
       id: uuidv4(),
       user_id: user.userId,
-      subscription: JSON.stringify(subscription),
+      subscription: serialized,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' })
 

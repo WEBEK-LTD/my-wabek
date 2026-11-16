@@ -12,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!contact_id) return res.status(400).json({ error: 'contact_id required' })
 
   await db.from('contacts')
-    .update({ ai_opted_out: opted_out ?? true })
+    .update({ ai_opted_out: opted_out !== false })
     .eq('id', contact_id)
     .eq('user_id', user.userId)
 

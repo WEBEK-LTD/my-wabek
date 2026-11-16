@@ -41,8 +41,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    const { name, description, trigger_type, trigger_keywords, instance_id, nodes, edges } = req.body
-    if (!name) return res.status(400).json({ error: 'name required' })
+    const { name, description, trigger_type, trigger_keywords, instance_id, nodes, edges } = req.body || {}
+    if (!name || typeof name !== 'string') return res.status(400).json({ error: 'name required' })
+    if (nodes !== undefined && !Array.isArray(nodes)) return res.status(400).json({ error: 'nodes must be an array' })
+    if (edges !== undefined && !Array.isArray(edges)) return res.status(400).json({ error: 'edges must be an array' })
+    if (trigger_keywords !== undefined && !Array.isArray(trigger_keywords)) return res.status(400).json({ error: 'trigger_keywords must be an array' })
+
+    if (instance_id) {
+      const { data: inst } = await db.from('whatsapp_instances').select('id')
+        .eq('id', String(instance_id)).eq('user_id', user.userId).maybeSingle()
+      if (!inst) return res.status(400).json({ error: 'Instance not found' })
+    }
 
     const { data, error } = await db.from('chatbot_flows').insert({
       id: uuidv4(),
@@ -56,7 +65,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       is_active: true,
     }).select().single()
 
-    if (error) return res.status(500).json({ error: error.message })
+    if (error) {
+      console.error('[chatbot] create error:', error.message)
+      return res.status(500).json({ error: 'Failed to create flow' })
+    }
     return res.status(201).json({ flow: data })
   }
 

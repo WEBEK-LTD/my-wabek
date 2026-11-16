@@ -6,29 +6,55 @@ export default function RedirectPage() {
   return <div>Redirecting...</div>
 }
 
+// Only plain web links may be redirected to (blocks javascript:, data:, etc.)
+function safeHttpUrl(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  try {
+    const u = new URL(raw.trim())
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null
+    return u.toString()
+  } catch {
+    return null
+  }
+}
+
 export const getServerSideProps: GetServerSideProps = async (context) => {
   const { code } = context.params as { code: string }
+  if (!code || !/^[A-Za-z0-9_-]{1,64}$/.test(code)) return { redirect: { destination: '/', permanent: false } }
   const db = supabaseAdmin()
 
-  const { data: link } = await db.from('tracked_links').select('*').eq('short_code', code).single()
+  // Atomic click increment (migration 026); falls back to a plain lookup.
+  let link: { id: string; original_url: string } | null = null
+  let counted = false
+  const { data: rpcRows, error: rpcErr } = await db.rpc('increment_link_clicks', { p_code: code })
+  if (!rpcErr) {
+    link = (Array.isArray(rpcRows) ? rpcRows[0] : rpcRows) || null
+    counted = true
+  } else {
+    const { data } = await db.from('tracked_links').select('id, original_url, click_count').eq('short_code', code).maybeSingle()
+    if (data) {
+      link = data
+      await db.from('tracked_links').update({ click_count: (data.click_count || 0) + 1 }).eq('id', data.id)
+      counted = true
+    }
+  }
 
   if (!link) return { redirect: { destination: '/', permanent: false } }
 
+  const destination = safeHttpUrl(link.original_url)
+  if (!destination) return { redirect: { destination: '/', permanent: false } }
+
   // Record click
-  const ip = (context.req.headers['x-forwarded-for'] as string)?.split(',')[0] || context.req.socket.remoteAddress || ''
-  const ua = context.req.headers['user-agent'] || ''
+  if (counted) {
+    const ip = (context.req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || context.req.socket.remoteAddress || ''
+    const ua = String(context.req.headers['user-agent'] || '').slice(0, 500)
+    await db.from('link_clicks').insert({
+      id: uuidv4(),
+      link_id: link.id,
+      ip_address: ip.slice(0, 64),
+      user_agent: ua,
+    })
+  }
 
-  await db.from('link_clicks').insert({
-    id: uuidv4(),
-    link_id: link.id,
-    ip_address: ip,
-    user_agent: ua,
-  })
-
-  // Update click count
-  await db.from('tracked_links').update({
-    click_count: (link.click_count || 0) + 1,
-  }).eq('id', link.id)
-
-  return { redirect: { destination: link.original_url, permanent: false } }
+  return { redirect: { destination, permanent: false } }
 }

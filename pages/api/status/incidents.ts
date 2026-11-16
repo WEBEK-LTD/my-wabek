@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/auth'
+import { pick } from '@/lib/security'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const db = supabaseAdmin()
@@ -17,13 +18,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { title, status, duration, incident_date } = req.body
     if (!title || !incident_date) return res.status(400).json({ error: 'title and incident_date required' })
     const { data, error } = await db.from('status_incidents').insert({ title, status: status || 'resolved', duration, incident_date }).select().single()
-    if (error) return res.status(500).json({ error: error.message })
+    if (error) {
+      console.error('[status/incidents] insert error:', error.message)
+      return res.status(500).json({ error: 'Failed to create incident' })
+    }
     return res.status(200).json({ incident: data })
   }
 
   if (req.method === 'PUT') {
-    const { id, ...fields } = req.body
-    await db.from('status_incidents').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', id)
+    const { id } = req.body || {}
+    if (!id) return res.status(400).json({ error: 'id required' })
+    const fields = pick(req.body, ['title', 'status', 'duration', 'incident_date'])
+    await db.from('status_incidents').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', String(id))
     return res.status(200).json({ success: true })
   }
 

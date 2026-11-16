@@ -1,6 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuth } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { checkPlanFeature } from '@/lib/middleware'
+import { consumeAiQuota, AI_MAX_TOKENS_CAP } from '@/lib/ai-engine'
 
 const DEFAULT_KNOWLEDGE = `
 You are WABEK AI, the support assistant for WABEK — a WhatsApp Business automation platform owned by webek.org.
@@ -27,11 +29,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await requireAuth(req, res)
   if (!user) return
 
-  const { ticket_id, message } = req.body
-  if (!ticket_id || !message) return res.status(400).json({ error: 'ticket_id and message required' })
+  const { ticket_id, message } = req.body || {}
+  if (!ticket_id || !message || typeof message !== 'string') return res.status(400).json({ error: 'ticket_id and message required' })
+  if (message.length > 4000) return res.status(400).json({ error: 'message too long' })
 
   const apiKey = process.env.DEEPSEEK_API_KEY
   if (!apiKey) return res.status(500).json({ error: 'AI not configured' })
+
+  if (!(await checkPlanFeature(user.userId, 'allow_ai'))) {
+    return res.status(403).json({
+      error: 'Upgrade required',
+      detail: 'AI replies are available on Pro and Business plans. Our support team will reply during business hours.',
+      upgrade_required: true,
+    })
+  }
 
   const db = supabaseAdmin()
 
@@ -48,6 +59,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .eq('user_id', user.userId)
     .maybeSingle()
   if (!ticket) return res.status(404).json({ error: 'Ticket not found' })
+
+  if (!(await consumeAiQuota(user.userId))) {
+    return res.status(429).json({ error: 'Daily AI limit reached. Our support team will reply during business hours.' })
+  }
 
   // Load admin-defined custom knowledge
   const { data: settingsRow } = await db
@@ -75,10 +90,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const { default: OpenAI } = await import('openai') as any
-    const deepseek = new OpenAI({ apiKey, baseURL: 'https://api.deepseek.com' })
+    const deepseek = new OpenAI({ apiKey, baseURL: 'https://api.deepseek.com', timeout: 20000, maxRetries: 1 })
     const completion = await deepseek.chat.completions.create({
       model: 'deepseek-v4-flash',
-      max_tokens: 500,
+      max_tokens: AI_MAX_TOKENS_CAP,
       temperature: 0.6,
       messages: [{ role: 'system', content: systemPrompt }, ...messages],
     })
@@ -95,6 +110,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ reply })
   } catch (e: any) {
     console.error('[support AI] error:', e.message)
-    return res.status(500).json({ error: e.message })
+    return res.status(500).json({ error: 'AI reply failed' })
   }
 }

@@ -18,7 +18,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .in('status', ['connected', 'active'])
     .order('created_at', { ascending: true })
 
-  if (error) return res.status(500).json({ error: error.message })
+  if (error) {
+    console.error('[inbox/inboxes] error:', error.message)
+    return res.status(500).json({ error: 'Failed to load inboxes' })
+  }
 
   // Check if this user has instance-level restrictions
   const isSubAccount = !!user.actualUserId
@@ -39,22 +42,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   )
 
   // Unread counts per inbox
+  // (head-only exact counts — never load the rows themselves)
   const unreadCounts: Record<string, number> = {}
-  if (accessible.length > 0) {
-    const instanceIds = accessible.map(i => i.id)
-    const { data: unreadMsgs } = await db
+  await Promise.all(accessible.map(async inst => {
+    const { count } = await db
       .from('messages')
-      .select('instance_id')
+      .select('id', { count: 'exact', head: true })
       .eq('user_id', ownerId)
+      .eq('instance_id', inst.id)
       .eq('direction', 'inbound')
       .eq('status', 'delivered')
-      .in('instance_id', instanceIds)
-
-    for (const msg of unreadMsgs || []) {
-      const iid = msg.instance_id as string
-      unreadCounts[iid] = (unreadCounts[iid] || 0) + 1
-    }
-  }
+    unreadCounts[inst.id] = count || 0
+  }))
 
   const inboxes = accessible.map(inst => ({
     id: inst.id,
