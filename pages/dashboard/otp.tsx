@@ -373,7 +373,7 @@ export default function OTPPage() {
         {/* API docs */}
         <Card padding="none">
           <div className="px-5 pt-5 sm:px-6 sm:pt-6">
-            <CardHeader className="!p-0" title={t('api_title')} subtitle={t('api_sub')} icon={CodeBracketIcon} />
+            <CardHeader className="!p-0" title={t('api_title')} subtitle={rich(t('api_sub'), { otpId: <code dir="ltr" className="font-mono">otpId</code> })} icon={CodeBracketIcon} />
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-b border-line-soft px-5 sm:px-6">
             <Tabs idPrefix="otp-doc" value={docTab} onChange={setDocTab} aria-label={t('docs_aria')}
@@ -396,6 +396,7 @@ export default function OTPPage() {
                       purpose: <code dir="ltr" className="font-mono text-ink">purpose</code>,
                       instance: <code dir="ltr" className="font-mono text-ink">instance_id</code>,
                       brand: <code dir="ltr" className="font-mono text-ink">brand_name</code>,
+                      values: <code dir="ltr" className="font-mono text-ink">verification | login | transaction</code>,
                     })}
                   </p>
                 ) : (

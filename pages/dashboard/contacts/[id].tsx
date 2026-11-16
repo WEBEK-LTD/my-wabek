@@ -368,11 +368,11 @@ export default function ContactDetailPage() {
                 </dl>
                 <div className="mt-4 grid grid-cols-2 gap-2 border-t border-line-soft pt-4 text-center">
                   <div className="rounded-card bg-surface-2 py-2.5">
-                    <p className="flex items-center justify-center gap-1 text-lg font-bold text-ink tabular"><ArrowDownLeftIcon className="h-4 w-4 text-brand-ink" aria-hidden="true" />{fmtNum(inbound)}</p>
+                    <p className="flex items-center justify-center gap-1 text-lg font-bold text-ink tabular"><ArrowDownLeftIcon className="h-4 w-4 text-brand-ink rtl:-scale-x-100" aria-hidden="true" />{fmtNum(inbound)}</p>
                     <p className="text-[11.5px] text-muted">{t('inbound')}</p>
                   </div>
                   <div className="rounded-card bg-surface-2 py-2.5">
-                    <p className="flex items-center justify-center gap-1 text-lg font-bold text-ink tabular"><ArrowUpRightIcon className="h-4 w-4 text-brand-ink" aria-hidden="true" />{fmtNum(outbound)}</p>
+                    <p className="flex items-center justify-center gap-1 text-lg font-bold text-ink tabular"><ArrowUpRightIcon className="h-4 w-4 text-brand-ink rtl:-scale-x-100" aria-hidden="true" />{fmtNum(outbound)}</p>
                     <p className="text-[11.5px] text-muted">{t('outbound')}</p>
                   </div>
                 </div>

@@ -63,6 +63,7 @@ export default defineMessages({
 
     // Automation guides
     trigger_title: 'Send a message: trigger URL',
+    header_label: 'Header',
     trigger_sub: 'Use this URL in Zapier, Make or any automation tool to send WhatsApp messages',
     trigger_note: 'Replace {key} with a key from the {link} page (the full key is shown once, when it’s created). Outside the 24-hour window, free text doesn’t reach Cloud API numbers; use {send} with an approved template.',
     zapier_title: 'Set up Zapier',
@@ -220,6 +221,7 @@ export default defineMessages({
     api_note: 'تحتاج كل هذه التكاملات إلى مفتاح API. أنشئ مفتاحًا مستقلًا لكل تكامل لتتمكن من إلغائه منفردًا.',
 
     trigger_title: 'إرسال رسالة: رابط التشغيل',
+    header_label: 'الترويسة',
     trigger_sub: 'استخدم هذا الرابط في Zapier أو Make أو أي أداة أتمتة لإرسال رسائل واتساب',
     trigger_note: 'استبدل {key} بمفتاح من صفحة {link} (يظهر المفتاح كاملًا مرة واحدة عند إنشائه). خارج نافذة الـ 24 ساعة لا يصل النص الحر إلى أرقام Cloud API؛ استخدم {send} مع قالب معتمد.',
     zapier_title: 'إعداد Zapier',
@@ -375,6 +377,7 @@ export default defineMessages({
     api_note: 'Toutes ces intégrations nécessitent une clé API. Créez une clé distincte par intégration pour pouvoir la révoquer séparément.',
 
     trigger_title: 'Envoyer un message : URL de déclenchement',
+    header_label: 'En-tête',
     trigger_sub: 'Utilisez cette URL dans Zapier, Make ou tout outil d’automatisation pour envoyer des messages WhatsApp',
     trigger_note: 'Remplacez {key} par une clé de la page {link} (la clé complète n’est affichée qu’une fois, à sa création). Hors de la fenêtre de 24 heures, le texte libre n’atteint pas les numéros Cloud API ; utilisez {send} avec un modèle approuvé.',
     zapier_title: 'Configurer Zapier',
@@ -530,6 +533,7 @@ export default defineMessages({
     api_note: 'Tüm bu entegrasyonlar bir API anahtarı gerektirir. Her entegrasyon için ayrı bir anahtar oluşturun; böylece tek tek iptal edebilirsiniz.',
 
     trigger_title: 'Mesaj gönder: tetikleme URL’si',
+    header_label: 'Başlık',
     trigger_sub: 'WhatsApp mesajı göndermek için bu URL’yi Zapier, Make veya herhangi bir otomasyon aracında kullanın',
     trigger_note: '{key} yerine {link} sayfasından bir anahtar yazın (anahtarın tamamı yalnızca oluşturulduğunda bir kez gösterilir). 24 saatlik pencerenin dışında serbest metin Cloud API numaralarına ulaşmaz; onaylı bir şablonla {send} kullanın.',
     zapier_title: 'Zapier kurulumu',

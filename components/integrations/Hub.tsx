@@ -133,7 +133,7 @@ export function AutomationGuides({ appUrl }: { appUrl: string }) {
           action={<Button size="sm" variant="ghost" icon={BookOpenIcon} href="/docs/integrations/zapier-webhooks">{t('guide')}</Button>} />
         <div className="mt-4 space-y-3">
           <CopyField label="POST" value={trigger} />
-          <CopyField label="Header" value={`X-API-Key: ${apiKey}`} />
+          <CopyField label={t('header_label')} value={`X-API-Key: ${apiKey}`} />
           <CodeBlock label="Body (JSON)" code={`{
   "to": "201234567890",
   "message": "Hello {{name}}!",
