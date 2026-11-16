@@ -97,6 +97,11 @@ jobs:
           echo "$(date +%Y) WEBEK LTD" > "$M/copyright.txt"
           echo "BUSINESS" > "$M/primary_category.txt"
           echo "PRODUCTIVITY" > "$M/secondary_category.txt"
+          # The first version has no "App Review" record yet; deliver needs one to exist
+          # (otherwise it fails with "No data"). Notes only — contact and demo account
+          # are filled in App Store Connect.
+          mkdir -p "$M/review_information"
+          echo "WABEK is a WhatsApp Business inbox for existing WABEK customers (waabek.com). Sign in with a WABEK account; the demo account details are in the Sign-In Information section." > "$M/review_information/notes.txt"
           find build/ios -type f | sort
       - name: App Store Connect API key
         env:
