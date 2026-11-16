@@ -1,11 +1,19 @@
-import { smartSend, smartSendWAWeb } from '@/lib/wa-smart-send'
+import { smartSend, smartSendWAWeb, resolveProvider } from '@/lib/wa-smart-send'
 import axios from 'axios'
 import { supabaseAdmin } from './supabase'
-import { sendTextMessage } from './whatsapp'
 
+// The WHMCS_* env credentials are the PLATFORM's own WHMCS. They may only be
+// used for the WABEK account that owns that WHMCS (WHMCS_OWNER_USER_ID) —
+// never to look up clients/invoices on behalf of arbitrary tenants. Tenants'
+// own WHMCS installs (the WABEK addon) send the data they want delivered.
 const WHMCS_URL = process.env.WHMCS_URL
 const WHMCS_IDENTIFIER = process.env.WHMCS_API_IDENTIFIER
 const WHMCS_SECRET = process.env.WHMCS_API_SECRET
+const WHMCS_OWNER_USER_ID = process.env.WHMCS_OWNER_USER_ID
+
+function platformWhmcsAllowed(userId: string): boolean {
+  return !!(WHMCS_URL && WHMCS_IDENTIFIER && WHMCS_SECRET && WHMCS_OWNER_USER_ID && userId === WHMCS_OWNER_USER_ID)
+}
 
 async function whmcsRequest(action: string, params: Record<string, unknown> = {}) {
   if (!WHMCS_URL || !WHMCS_IDENTIFIER || !WHMCS_SECRET) {
@@ -22,6 +30,7 @@ async function whmcsRequest(action: string, params: Record<string, unknown> = {}
 
   const { data } = await axios.post(`${WHMCS_URL}/includes/api.php`, formData.toString(), {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    timeout: 10000,
   })
 
   if (data.result === 'error') {
@@ -48,15 +57,17 @@ export async function sendWHMCSNotification(params: {
 }) {
   const db = supabaseAdmin()
 
-  // Get user's WhatsApp instance
-  const { data: instance } = await db
+  // The user's default connected instance (several may exist)
+  const { data: instances } = await db
     .from('whatsapp_instances')
-    .select('*')
+    .select('id, user_id, status, is_default, instance_type, type, phone_number_id, access_token, created_at')
     .eq('user_id', params.userId)
     .eq('status', 'connected')
-    .single()
+    .order('created_at', { ascending: true })
+    .limit(10)
+  const instance = instances?.find(i => i.is_default) || instances?.[0]
 
-  if (!instance?.phone_number_id || !instance?.access_token) {
+  if (!instance) {
     throw new Error('No connected WhatsApp instance')
   }
 
@@ -74,13 +85,16 @@ export async function sendWHMCSNotification(params: {
 
   let message = templates[params.event] || 'WHMCS notification'
 
-  // Replace variables
+  // Replace variables (plain string replacement — no regex built from input)
   for (const [key, value] of Object.entries(params.variables)) {
-    message = message.replace(new RegExp(`{{${key}}}`, 'g'), value)
+    message = message.split(`{{${key}}}`).join(String(value ?? ''))
   }
 
-  // Send via WhatsApp
-  return smartSend({ userId: (instance as any)?.user_id || (instance as any)?.userId || '', instanceId: (instance as any)?.id || '', phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: params.phone, text: message, source: 'notification' as any })
+  // Send via WhatsApp (plan limit / opt-out applied in smartSend*)
+  if (resolveProvider(instance) === 'wa_web') {
+    return smartSendWAWeb({ userId: params.userId, instanceId: instance.id, to: params.phone, text: message, source: 'notification' })
+  }
+  return smartSend({ userId: params.userId, instanceId: instance.id, phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: params.phone, text: message, source: 'notification' })
 }
 
 export interface WHMCSWebhookPayload {
@@ -89,21 +103,34 @@ export interface WHMCSWebhookPayload {
   ticketid?: string
   userid?: string
   serviceid?: string
+  // Data a tenant's own WHMCS can send directly
+  phone?: string
+  phonenumber?: string
+  client_name?: string
+  amount?: string
+  currency?: string
+  due_date?: string
+  invoice_url?: string
+  subject?: string
+  ticket_url?: string
 }
+
+const str = (v: unknown) => (v === undefined || v === null ? '' : String(v).slice(0, 500))
 
 export async function processWHMCSWebhook(
   userId: string,
   payload: WHMCSWebhookPayload
 ): Promise<void> {
-  const db = supabaseAdmin()
+  const usePlatformWhmcs = platformWhmcsAllowed(userId)
 
-  // Get the contact's phone from WHMCS
-  let phone: string | null = null
-  let variables: Record<string, string> = {}
+  // Phone + names: from the platform WHMCS only for its owner; otherwise
+  // only what the caller (their own WHMCS) sent.
+  let phone: string | null = str(payload.phone || payload.phonenumber).replace(/\D/g, '') || null
+  let variables: Record<string, string> = { client_name: str(payload.client_name) }
 
-  if (payload.userid) {
-    const client = await getWHMCSClient(payload.userid)
-    phone = client?.phonenumber?.replace(/\D/g, '') || null
+  if (usePlatformWhmcs && payload.userid) {
+    const client = await getWHMCSClient(String(payload.userid))
+    phone = client?.phonenumber?.replace(/\D/g, '') || phone
     variables.client_name = `${client.firstname} ${client.lastname}`
   }
 
@@ -112,17 +139,23 @@ export async function processWHMCSWebhook(
   const action = payload.action
   let event: Parameters<typeof sendWHMCSNotification>[0]['event'] | null = null
 
-  if (action === 'InvoiceCreated' && payload.invoiceid) {
-    const invoice = await getWHMCSInvoice(payload.invoiceid)
-    event = 'invoice_created'
-    variables = { ...variables, invoice_id: payload.invoiceid, amount: invoice.total, currency: invoice.currencycode, due_date: invoice.duedate, invoice_url: `${WHMCS_URL}/viewinvoice.php?id=${payload.invoiceid}` }
-  } else if (action === 'InvoicePaid' && payload.invoiceid) {
-    const invoice = await getWHMCSInvoice(payload.invoiceid)
-    event = 'invoice_paid'
-    variables = { ...variables, invoice_id: payload.invoiceid, amount: invoice.total, currency: invoice.currencycode }
+  if ((action === 'InvoiceCreated' || action === 'InvoicePaid') && payload.invoiceid) {
+    const invoiceId = str(payload.invoiceid)
+    let amount = str(payload.amount), currency = str(payload.currency), dueDate = str(payload.due_date)
+    let invoiceUrl = str(payload.invoice_url)
+    if (usePlatformWhmcs) {
+      const invoice = await getWHMCSInvoice(invoiceId)
+      amount = invoice.total; currency = invoice.currencycode; dueDate = invoice.duedate
+      invoiceUrl = `${WHMCS_URL}/viewinvoice.php?id=${encodeURIComponent(invoiceId)}`
+    }
+    event = action === 'InvoiceCreated' ? 'invoice_created' : 'invoice_paid'
+    variables = { ...variables, invoice_id: invoiceId, amount, currency, due_date: dueDate, invoice_url: invoiceUrl }
   } else if (action === 'TicketOpen' && payload.ticketid) {
     event = 'ticket_open'
-    variables = { ...variables, ticket_id: payload.ticketid, subject: 'Support Request', ticket_url: `${WHMCS_URL}/supporttickets.php` }
+    variables = {
+      ...variables, ticket_id: str(payload.ticketid), subject: str(payload.subject) || 'Support Request',
+      ticket_url: usePlatformWhmcs ? `${WHMCS_URL}/supporttickets.php` : str(payload.ticket_url),
+    }
   }
 
   if (event) {

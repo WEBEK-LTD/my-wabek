@@ -1,7 +1,16 @@
 import axios from 'axios'
+import { createHmac } from 'crypto'
+import { safeEqual } from './security'
 
-const WA_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v21.0'
-const WA_BASE_URL = `https://graph.facebook.com/${WA_API_VERSION}`
+// ── Graph API version: ONE place for the whole app ──────────────────────────
+// Every Graph call (messages, media, templates, OAuth, catalog) uses this.
+export const WA_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v21.0'
+export const GRAPH_BASE_URL = `https://graph.facebook.com/${WA_API_VERSION}`
+// /{waba}/subscribed_apps was observed to reject older versions with #200, so
+// it keeps its own (env-overridable) version instead of WA_API_VERSION.
+export const WA_SUBSCRIBE_API_VERSION = process.env.WHATSAPP_SUBSCRIBE_API_VERSION || 'v25.0'
+export const GRAPH_SUBSCRIBE_BASE_URL = `https://graph.facebook.com/${WA_SUBSCRIBE_API_VERSION}`
+const WA_BASE_URL = GRAPH_BASE_URL
 
 export interface SendTextMessageParams {
   phoneNumberId: string
@@ -54,7 +63,7 @@ export async function sendTextMessage({
 }: SendTextMessageParams): Promise<WAMessage> {
   const client = waAxios(accessToken)
   const url = `/${phoneNumberId}/messages`
-  console.log(`[whatsapp] sendTextMessage URL=https://graph.facebook.com/${WA_API_VERSION}${url} to=${formatPhone(to)} tokenPrefix=${accessToken?.slice(0,10)}...`)
+  console.log(`[whatsapp] sendTextMessage phone_number_id=${phoneNumberId} to=${formatPhone(to)}`)
   try {
     const { data } = await client.post(url, {
       messaging_product: 'whatsapp',
@@ -200,13 +209,38 @@ export function verifyWebhook(
   token: string,
   challenge: string
 ): string | null {
-  if (
-    mode === 'subscribe' &&
-    token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN
-  ) {
+  // Fail closed: with no verify token configured, never echo the challenge.
+  const expected = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN
+  if (!expected) {
+    console.error('[whatsapp] WHATSAPP_WEBHOOK_VERIFY_TOKEN is not set — rejecting webhook verification')
+    return null
+  }
+  if (mode === 'subscribe' && safeEqual(token, expected) && typeof challenge === 'string') {
     return challenge
   }
   return null
+}
+
+/** App secrets that may sign Meta webhooks: META_APP_SECRET plus the comma-separated META_APP_SECRETS. */
+export function getMetaAppSecrets(): string[] {
+  const list = [process.env.META_APP_SECRET || '', ...(process.env.META_APP_SECRETS || '').split(',')]
+  return Array.from(new Set(list.map(s => s.trim()).filter(Boolean)))
+}
+
+/**
+ * Verify X-Hub-Signature-256 (HMAC-SHA256 of the RAW body with the app secret).
+ * Returns 'valid', 'invalid', or 'unconfigured' (no app secret in env).
+ */
+export function verifyMetaSignature(rawBody: Buffer, header: unknown): 'valid' | 'invalid' | 'unconfigured' {
+  const secrets = getMetaAppSecrets()
+  if (!secrets.length) return 'unconfigured'
+  if (typeof header !== 'string' || !header.startsWith('sha256=')) return 'invalid'
+  const received = header.slice(7).trim().toLowerCase()
+  for (const secret of secrets) {
+    const expected = createHmac('sha256', secret).update(rawBody).digest('hex')
+    if (safeEqual(received, expected)) return 'valid'
+  }
+  return 'invalid'
 }
 
 export function parseWebhookPayload(body: unknown): {
@@ -293,4 +327,21 @@ function formatPhone(phone: string): string {
   const digits = phone.replace(/\D/g, '')
   // Remove leading zeros only (don't add any country code)
   return digits.replace(/^0+/, '') || digits
+}
+
+// ── Instance rows sent to the browser ───────────────────────────────────────
+// Never include access_token, session data or verify tokens. An allowlist (not
+// a SELECT list) so that optional columns missing in older schemas never make
+// the query fail.
+const PUBLIC_INSTANCE_FIELDS = [
+  'id', 'user_id', 'name', 'display_name', 'phone_number', 'phone_number_id', 'waba_id',
+  'status', 'instance_type', 'type', 'is_default', 'qr_code', 'webhook_url',
+  'last_seen_at', 'battery_level', 'is_phone_connected', 'created_at', 'updated_at',
+] as const
+
+export function toPublicInstance(row: Record<string, unknown> | null | undefined): Record<string, unknown> | null {
+  if (!row) return null
+  const out: Record<string, unknown> = {}
+  for (const k of PUBLIC_INSTANCE_FIELDS) if (k in row) out[k] = row[k]
+  return out
 }

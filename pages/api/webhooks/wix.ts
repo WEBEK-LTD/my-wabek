@@ -1,34 +1,25 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { createHash } from 'crypto'
 import { supabaseAdmin } from '@/lib/supabase'
-import { notifyServiceNotification, notifyInvoiceCreated, notifyInvoiceOverdue, notifyPaymentReminder } from '@/lib/wa-notifications'
-import { smartSend, smartSendWAWeb } from '@/lib/wa-smart-send'
-import { v4 as uuidv4 } from 'uuid'
+import { smartSend, smartSendWAWeb, resolveProvider } from '@/lib/wa-smart-send'
+import { authenticateApiKey } from '@/lib/api-key-auth'
 
 export const config = { api: { bodyParser: true } }
+
+// NOTE: this is NOT a Wix-app webhook (those are signed JWTs, see
+// /api/wix/webhook). It is the URL tenants paste into Wix Automations
+// ("send HTTP request" with key/value pairs) and is authenticated with the
+// tenant's WABEK API key: X-API-Key / Bearer header, or ?api_key= for
+// existing automations (deprecated, see lib/api-key-auth).
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  // API key from query string
-  const apiKey = (req.query.api_key as string) || (req.headers['x-api-key'] as string)
-  if (!apiKey) return res.status(401).json({ error: 'api_key required' })
+  const auth = await authenticateApiKey(req, { route: '/api/webhooks/wix' })
+  if (!auth) return res.status(401).json({ error: 'Invalid or missing API key' })
 
-  const db = supabaseAdmin()
-
-  // Lookup by hash
-  const keyHash = createHash('sha256').update(apiKey).digest('hex')
-  const { data: keyRow } = await db
-    .from('api_keys')
-    .select('user_id, is_active')
-    .eq('key_hash', keyHash)
-    .eq('is_active', true)
-    .maybeSingle()
-
-  if (!keyRow) return res.status(401).json({ error: 'Invalid API key' })
-
-  const userId = keyRow.user_id
-  const body   = req.body as Record<string, unknown>
+  const userId = auth.userId
+  const db     = supabaseAdmin()
+  const body   = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>
 
   // Wix sends key-value pairs — support both flat and nested
   // event field is required
@@ -44,7 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Get connected instance
   const { data: instances } = await db
     .from('whatsapp_instances')
-    .select('*')
+    .select('id, user_id, status, is_default, instance_type, type, phone_number_id, access_token')
     .eq('user_id', userId)
     .order('created_at', { ascending: true })
     .limit(10)
@@ -64,36 +55,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const message = buildMessage(event, body, customTemplates)
   if (!message) return res.status(200).json({ success: true, skipped: `event "${event}" not recognized` })
 
-  // Send
-  try {
-    const isWAWeb = (instance.instance_type || instance.type) === 'wa_web'
-    let waMessageId = ''
+  // Send — smartSend / smartSendWAWeb apply the plan/opt-out guard and
+  // insert the outbound message row (no second insert here).
+  const r = resolveProvider(instance) === 'wa_web'
+    ? await smartSendWAWeb({ userId, instanceId: instance.id, to: phone, text: message, source: 'notification' })
+    : await smartSend({ userId, instanceId: instance.id, phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: phone, text: message, forceTemplate: false, source: 'notification' })
 
-    if (isWAWeb) {
-      const r = await notifyServiceNotification(userId, phone, 'Customer', message)
-      waMessageId = r?.messageId || ''
-    } else {
-      const r = await smartSend({ userId: userId, instanceId: instance?.id || '', phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: phone, text: message, forceTemplate: false })
-      waMessageId = r?.messageId || ''
-    }
-
-    await db.from('messages').insert({
-      id:            uuidv4(),
-      user_id:       userId,
-      instance_id:   instance.id,
-      direction:     'outbound',
-      type:          'text',
-      content:       message,
-      wa_message_id: waMessageId,
-      status:        'sent',
-    })
-
-    return res.status(200).json({ success: true, event, phone, wa_message_id: waMessageId })
-  } catch (err: unknown) {
-    const e = err as { message?: string }
-    console.error('[wix webhook] error:', e?.message)
-    return res.status(500).json({ error: 'Failed to send', detail: e?.message })
+  if (r.error) {
+    console.error('[wix webhook] send failed:', r.error)
+    return res.status(r.blocked ? 403 : 502).json({ error: 'Failed to send', code: r.blocked })
   }
+  return res.status(200).json({ success: true, event, phone, wa_message_id: r.messageId || '' })
 }
 
 function buildMessage(event: string, d: Record<string, unknown>, custom: Record<string, string> = {}): string {

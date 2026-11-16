@@ -1,46 +1,14 @@
-import { smartSend, smartSendWAWeb, resolveProvider, isInWindow } from '@/lib/wa-smart-send'
-import { sendWAWebMessage } from '@/lib/wa-web'
+import { smartSend, smartSendWAWeb, resolveProvider, isInWindow, checkSendAllowed } from '@/lib/wa-smart-send'
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
 import { handleCors, apiRateLimit } from '@/lib/middleware'
-import { sendTextMessage } from '@/lib/whatsapp'
+import { authenticateApiKey } from '@/lib/api-key-auth'
+import { insertMessage } from '@/lib/message-insert'
 import { v4 as uuidv4 } from 'uuid'
-import crypto from 'crypto'
 
-async function authenticateApiKey(req: NextApiRequest): Promise<{ userId: string } | null> {
-  const authHeader = req.headers.authorization
-  let bearerToken: string | null = null
-
-  // Support JWT auth (from dashboard)
-  if (authHeader?.startsWith('Bearer ')) {
-    bearerToken = authHeader.slice(7).trim()
-    const { verifyToken } = await import('@/lib/auth')
-    const payload = await verifyToken(bearerToken)
-    if (payload) return { userId: payload.userId }
-  }
-
-  // External integrations (e.g. WHMCS) commonly send `Authorization: Bearer <api_key>`
-  // instead of `x-api-key`. If the Bearer token wasn't a valid JWT, also try it
-  // as a raw API key below.
-  const apiKey = (req.headers['x-api-key'] as string) || (req.query.api_key as string) || bearerToken
-  if (!apiKey) return null
-
-  const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex')
-  const db = supabaseAdmin()
-
-  // Check api_keys table
-  const { data: keyRecord } = await db.from('api_keys').select('*').eq('key_hash', keyHash).eq('is_active', true).single()
-  if (keyRecord) {
-    await db.from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', keyRecord.id)
-    return { userId: keyRecord.user_id }
-  }
-
-  // Also check user's default api_key
-  const { data: user } = await db.from('users').select('id').eq('api_key', apiKey).eq('is_active', true).single()
-  if (user) return { userId: user.id }
-
-  return null
-}
+// Auth: `X-API-Key: <key>` or `Authorization: Bearer <key|session JWT>`.
+// `?api_key=` still works for existing installs (deprecated, logged) unless
+// ALLOW_QUERY_API_KEY=0.
 
 /**
  * The verification code of an OTP send: the `code` field (4-8 digits), or
@@ -61,7 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (handleCors(req, res)) return
   if (!apiRateLimit(req, res)) return
 
-  const auth = await authenticateApiKey(req)
+  const auth = await authenticateApiKey(req, { allowJwt: true, route: '/api/v1' })
   if (!auth) return res.status(401).json({ error: 'Invalid API key' })
 
   const { action } = req.query
@@ -79,7 +47,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   if (!body || typeof body !== 'object') body = {}
   // Also fall back to query-string params (?phone=..., ?to=..., etc.)
-  body = { ...req.query, ...body }
+  const { api_key: _k, key: _k2, ...queryParams } = req.query
+  body = { ...queryParams, ...body }
+  delete body.api_key
   req.body = body
 
   // Accept "phone" and "to" interchangeably across all actions in this file
@@ -89,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // POST /api/v1/send - Send a message
   if (req.method === 'POST' && action === 'send') {
     const { to, message, instance_id } = req.body
-    if (!to || !message) return res.status(400).json({ error: 'to and message required' })
+    if (!to || !message || typeof to !== 'string' || typeof message !== 'string') return res.status(400).json({ error: 'to and message required' })
 
     // Get instance — specific or first available (any status)
     let instanceQuery = db.from('whatsapp_instances').select('*')
@@ -102,20 +72,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const instance = instances?.find(i => i.status === 'connected') || instances?.[0] || null
 
     if (!instance) {
-      // Debug: return what we found
-      const { data: allInstances } = await db.from('whatsapp_instances').select('id,status,user_id').eq('user_id', auth.userId)
-      return res.status(404).json({ 
-        error: 'No connected WhatsApp instance',
-        debug: { userId: auth.userId, instancesFound: allInstances?.length || 0, instances: allInstances }
-      })
+      return res.status(404).json({ error: 'No connected WhatsApp instance' })
     }
 
+    // Plan limit + opt-out, checked once here because some paths below send
+    // templates directly (the inner smartSend calls are told it is done).
+    const guard = await checkSendAllowed(auth.userId, to)
+    if (!guard.allowed) return res.status(403).json({ error: guard.error, code: guard.code })
+
     try {
-      let result
-      if ((instance.instance_type || instance.type) === 'wa_web') {
-        const { sendWAWebMessage } = await import('@/lib/wa-web')
-        const webResult = await sendWAWebMessage({ instanceId: instance.id, to, text: message })
-        result = { messages: [{ id: webResult.messageId }] }
+      let result: { messageId?: string | null; error?: string } | undefined
+      // true when smartSend / smartSendWAWeb already stored the message row
+      let saved = false
+      if (resolveProvider(instance) === 'wa_web') {
+        result = await smartSendWAWeb({ userId: auth.userId, instanceId: instance.id, to, text: message, source: 'api', bypassLimits: true /* checked above */ })
+        saved = true
       } else if (otpCode(body)) {
         // A sign-in code (`type: "otp"` or a `code` field): always through the
         // approved Authentication template, which WhatsApp delivers inside or
@@ -145,7 +116,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             })
           }
           console.error('[v1/send] OTP template failed, sending text inside the 24h window:', JSON.stringify(otpResult.attempts))
-          result = await smartSend({ userId: (instance as any)?.user_id || (instance as any)?.userId || '', instanceId: (instance as any)?.id || '', phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: to, text: message, source: 'api' as any })
+          result = await smartSend({ userId: auth.userId, instanceId: instance.id, phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: to, text: message, source: 'api', bypassLimits: true /* checked above */ })
+          saved = true
         }
       } else {
         // Outside the 24h customer-service window, WhatsApp requires an
@@ -263,19 +235,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             }
           }
         } else {
-          result = await smartSend({ userId: (instance as any)?.user_id || (instance as any)?.userId || '', instanceId: (instance as any)?.id || '', phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: to, text: message, source: 'api' as any })
+          result = await smartSend({ userId: auth.userId, instanceId: instance.id, phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: to, text: message, source: 'api', bypassLimits: true /* checked above */ })
+          saved = true
         }
       }
-      await db.from('messages').insert({ id: uuidv4(), user_id: auth.userId, instance_id: instance.id, direction: 'outbound', type: 'text', content: message, wa_message_id: result?.messageId, status: 'sent' })
+      if (result?.error) return res.status(502).json({ error: 'Failed to send message', detail: result.error })
+      // Template paths above send directly — store their row once here
+      if (!saved) {
+        await insertMessage({ user_id: auth.userId, instance_id: instance.id, contact_id: null, direction: 'outbound', type: 'text', content: message, wa_message_id: result?.messageId || null, status: 'sent', meta: { source: 'api' } })
+      }
       return res.status(200).json({ success: true, message_id: result?.messageId })
     } catch (err: unknown) {
       const e = err as { message?: string; response?: { data?: unknown } }
       console.error('[v1/send] error:', e?.message, e?.response?.data)
-      return res.status(500).json({ 
-        error: 'Failed to send message',
-        detail: e?.message || 'Unknown error',
-        meta: e?.response?.data || null
-      })
+      return res.status(500).json({ error: 'Failed to send message' })
     }
   }
 
@@ -290,7 +263,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { phone, name, email, tags } = req.body
     if (!phone) return res.status(400).json({ error: 'phone required' })
     const { data, error } = await db.from('contacts').upsert({ id: uuidv4(), user_id: auth.userId, phone, name, email, tags: tags || [] }, { onConflict: 'user_id,phone' }).select().single()
-    if (error) return res.status(500).json({ error: error.message })
+    if (error) return res.status(500).json({ error: 'Failed to save contact' })
     return res.status(200).json({ contact: data })
   }
 
@@ -307,6 +280,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === 'POST' && action === 'otp-verify') {
     const { otp_id, otp } = req.body
     if (!otp_id || !otp) return res.status(400).json({ error: 'otp_id and otp required' })
+    // Only OTPs issued for this API key's account can be verified with it
+    const { data: owned } = await db.from('otp_codes').select('id').eq('id', String(otp_id)).eq('user_id', auth.userId).maybeSingle()
+    if (!owned) return res.status(200).json({ valid: false, reason: 'OTP not found' })
     const { verifyOTP } = await import('@/lib/otp')
     const result = await verifyOTP({ otpId: otp_id, otp })
     return res.status(200).json(result)
@@ -315,7 +291,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // POST /api/v1/whmcs-webhook - WHMCS webhook receiver
   if (req.method === 'POST' && action === 'whmcs-webhook') {
     const { processWHMCSWebhook } = await import('@/lib/whmcs')
-    await processWHMCSWebhook(auth.userId, req.body)
+    try {
+      await processWHMCSWebhook(auth.userId, req.body)
+    } catch (e: any) {
+      console.error('[v1/whmcs-webhook] error:', e?.message)
+      return res.status(502).json({ success: false, error: 'Failed to process webhook' })
+    }
     return res.status(200).json({ success: true })
   }
 
