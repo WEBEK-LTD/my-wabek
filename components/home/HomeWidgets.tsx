@@ -258,7 +258,7 @@ export function QuickActions() {
             <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl', a.tone)}>
               <a.icon className="h-[18px] w-[18px]" aria-hidden="true" />
             </span>
-            <span className="min-w-0 flex-1 truncate">{c(a.label)}</span>
+            <span className="min-w-0 flex-1 leading-snug">{c(a.label)}</span>
             <ArrowUpRightIcon className="h-4 w-4 shrink-0 text-muted opacity-0 transition group-hover:opacity-100 rtl:-scale-x-100" aria-hidden="true" />
           </Link>
         ))}

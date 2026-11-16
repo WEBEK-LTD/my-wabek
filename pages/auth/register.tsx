@@ -249,10 +249,10 @@ export default function RegisterPage() {
           <Input icon={UserIcon} autoComplete="name" placeholder={c('name_ph')} value={form.name} onChange={e => update('name', e.target.value)} />
         </Field>
         <Field label={c('email')} error={fieldErrors.email ? c(fieldErrors.email) : undefined}>
-          <Input type="email" inputMode="email" autoComplete="email" dir="ltr" className="text-start" icon={EnvelopeIcon} placeholder={c('email_ph')} value={form.email} onChange={e => update('email', e.target.value)} />
+          <div dir="ltr"><Input type="email" inputMode="email" autoComplete="email" icon={EnvelopeIcon} placeholder={c('email_ph')} value={form.email} onChange={e => update('email', e.target.value)} /></div>
         </Field>
         <Field label={c('password')} hint={form.password ? undefined : c('password_hint')} error={fieldErrors.password ? c(fieldErrors.password) : undefined}>
-          <PasswordInput autoComplete="new-password" placeholder={c('password_hint')} value={form.password} onChange={e => update('password', e.target.value)} />
+          <PasswordInput autoComplete="new-password" placeholder={c('password_ph')} value={form.password} onChange={e => update('password', e.target.value)} />
         </Field>
         <PasswordStrength password={form.password} />
         <Field
@@ -260,7 +260,7 @@ export default function RegisterPage() {
           hint={c('phone_hint')}
           error={fieldErrors.phone ? c(fieldErrors.phone) : undefined}
         >
-          <Input type="tel" inputMode="tel" autoComplete="tel" dir="ltr" className="text-start" icon={PhoneIcon} placeholder="+201234567890" value={form.phone} onChange={e => update('phone', e.target.value)} />
+          <div dir="ltr"><Input type="tel" inputMode="tel" autoComplete="tel" icon={PhoneIcon} placeholder="+201234567890" value={form.phone} onChange={e => update('phone', e.target.value)} /></div>
         </Field>
 
         {/* Invite code */}
@@ -284,13 +284,13 @@ export default function RegisterPage() {
                 hint={inviteState === 'invalid' ? undefined : c('invite_hint')}
                 error={inviteState === 'invalid' ? c('invite_invalid') : undefined}
               >
-                <Input
-                  dir="ltr" className="text-start uppercase tracking-wider" placeholder={c('invite_ph')}
+                <div dir="ltr"><Input
+                  className="uppercase tracking-wider placeholder:normal-case placeholder:tracking-normal" placeholder={c('invite_ph')}
                   value={inviteCode}
                   onChange={e => { setInviteCode(e.target.value); if (inviteState !== 'idle') setInviteState('idle'); checkedCode.current = '' }}
                   onBlur={() => validateInvite(inviteCode)}
                   endAdornment={inviteState === 'checking' ? <Spinner label={c('invite_checking')} /> : undefined}
-                />
+                /></div>
               </Field>
             </div>
           )}

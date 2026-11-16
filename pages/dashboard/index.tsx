@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from 'react-query'
 import axios from 'axios'
 import {
@@ -26,6 +26,8 @@ export default function DashboardPage() {
   const brand = brandName || 'WABEK'
   const isOwner = !!user && !user.sub_account_of
   const [range, setRange] = useState<'7d' | '30d'>('30d')
+  // Phones: 30 daily labels don't fit, start on the 7-day view.
+  useEffect(() => { if (window.matchMedia('(max-width: 639px)').matches) setRange('7d') }, [])
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery('dashboard-stats',
     () => axios.get('/api/dashboard/stats').then(r => r.data),
@@ -116,7 +118,7 @@ export default function DashboardPage() {
             {checklistReady && <SetupChecklist steps={steps} brand={brand} />}
 
             {/* KPIs */}
-            <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]">
+            <div className="grid grid-cols-2 gap-3 sm:gap-3.5 xl:grid-cols-4">
               <StatCard
                 loading={isLoading}
                 label={c('kpi_open')}
@@ -201,7 +203,10 @@ export default function DashboardPage() {
                   )}
                 </CardBody>
               </Card>
-              <NumbersCard instances={instances} loading={isLoading} />
+              <div className="flex min-w-0 flex-col gap-3.5">
+                <NumbersCard instances={instances} loading={isLoading} />
+                <QuickActions />
+              </div>
             </div>
 
             {/* Campaigns + replies */}
@@ -210,7 +215,6 @@ export default function DashboardPage() {
               <div className="flex min-w-0 flex-col gap-3.5">
                 {showReplies ? <RepliesCard ai={aiReplies} team={teamRows} /> : hasDelivery ? <DeliveryCard breakdown={breakdown} /> : null}
                 {chatbotStats.length > 0 && <ChatbotCard flows={chatbotStats} />}
-                <QuickActions />
               </div>
             </div>
           </>

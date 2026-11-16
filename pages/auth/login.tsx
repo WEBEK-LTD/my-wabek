@@ -150,12 +150,14 @@ export default function LoginPage() {
 
           <form onSubmit={e => { e.preventDefault(); submitLogin() }} noValidate className="flex flex-col gap-4">
             <Field label={c('email')} error={fieldErrors.email ? c(fieldErrors.email) : undefined}>
-              <Input
-                type="email" inputMode="email" autoComplete="email" dir="ltr" autoFocus
-                icon={EnvelopeIcon} placeholder={c('email_ph')} className="text-start"
-                value={form.email}
-                onChange={e => { setForm(d => ({ ...d, email: e.target.value })); setFieldErrors(f => ({ ...f, email: undefined })) }}
-              />
+              <div dir="ltr">
+                <Input
+                  type="email" inputMode="email" autoComplete="email" autoFocus
+                  icon={EnvelopeIcon} placeholder={c('email_ph')}
+                  value={form.email}
+                  onChange={e => { setForm(d => ({ ...d, email: e.target.value })); setFieldErrors(f => ({ ...f, email: undefined })) }}
+                />
+              </div>
             </Field>
             <Field
               label={c('password')}

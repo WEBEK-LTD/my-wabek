@@ -45,7 +45,7 @@ export function AuthLayout({ title, children, width = 'sm' }: AuthLayoutProps) {
       <Head><title>{`${title} | ${brand}`}</title></Head>
       <div dir={dir} lang={lang} className="min-h-[100dvh] bg-canvas text-ink lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.08fr)] xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
         {/* Brand panel */}
-        <aside className="relative hidden overflow-hidden bg-deep-landing lg:flex lg:flex-col lg:justify-between lg:p-10 xl:p-14" aria-label={brand}>
+        <aside className="relative hidden overflow-hidden bg-deep-landing lg:sticky lg:top-0 lg:flex lg:h-[100dvh] lg:flex-col lg:justify-between lg:p-10 xl:p-14" aria-label={brand}>
           <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 -bottom-64 mx-auto h-[640px] w-[640px] rounded-full border border-white/[0.07]" />
           <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 -bottom-40 mx-auto h-[420px] w-[420px] rounded-full border border-white/[0.08]" />
           <span aria-hidden="true" className="pointer-events-none absolute -top-24 end-[-120px] h-[340px] w-[340px] rounded-full bg-brand-green/10 blur-3xl" />

@@ -20,29 +20,32 @@ const FacebookMark = () => (
 )
 
 const PROVIDERS = {
-  google: { mark: GoogleMark, label: 'continue_google' },
-  github: { mark: GitHubMark, label: 'continue_github' },
-  facebook: { mark: FacebookMark, label: 'continue_facebook' },
+  google: { mark: GoogleMark, label: 'continue_google', name: 'Google' },
+  github: { mark: GitHubMark, label: 'continue_github', name: 'GitHub' },
+  facebook: { mark: FacebookMark, label: 'continue_facebook', name: 'Facebook' },
 } as const
 
 /** OAuth buttons — plain links to /api/auth/oauth/<provider> (server-side redirect). */
 export function OAuthButtons({ providers }: { providers: (keyof typeof PROVIDERS)[] }) {
   const { c } = useAuthCopy()
   const [pending, setPending] = useState<string | null>(null)
+  const compact = providers.length > 1
   return (
-    <div className={cn('grid gap-2.5', providers.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-1')}>
+    <div className={cn('grid gap-2.5', providers.length === 2 && 'grid-cols-2', providers.length === 3 && 'grid-cols-3')}>
       {providers.map(p => {
-        const { mark: Mark, label } = PROVIDERS[p]
+        const { mark: Mark, label, name } = PROVIDERS[p]
         return (
           <a
             key={p}
             href={`/api/auth/oauth/${p}`}
             onClick={() => setPending(p)}
             aria-busy={pending === p || undefined}
-            className="inline-flex h-11 items-center justify-center gap-2.5 rounded-btn border border-line bg-surface px-4 text-sm font-medium text-ink transition hover:border-line-strong hover:bg-surface-2 hover:text-ink"
+            aria-label={compact ? c(label) : undefined}
+            title={compact ? c(label) : undefined}
+            className="inline-flex h-11 min-w-0 items-center justify-center gap-2 rounded-btn border border-line bg-surface px-3 text-sm font-medium text-ink shadow-[0_1px_2px_rgb(var(--shadow)/0.04)] transition hover:border-line-strong hover:bg-surface-2 hover:text-ink"
           >
             {pending === p ? <Spinner className="h-4 w-4" /> : <Mark />}
-            <span className="truncate">{c(label)}</span>
+            <span className="truncate">{compact ? name : c(label)}</span>
           </a>
         )
       })}
@@ -70,7 +73,6 @@ export const PasswordInput = forwardRef<HTMLInputElement, Omit<InputProps, 'type
       ref={ref}
       {...props}
       type={show ? 'text' : 'password'}
-      dir="ltr"
       className={cn('text-start', props.className)}
       endAdornment={
         <button

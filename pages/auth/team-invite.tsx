@@ -46,7 +46,7 @@ export default function TeamInvitePage() {
     if (!router.isReady) return
     if (!token) { setStep('invalid'); return }
     axios.get(`/api/team/invite?token=${encodeURIComponent(String(token))}`)
-      .then(r => { setInvite(r.data.invite); setStep('info') })
+      .then(r => { if (r.data?.invite) { setInvite(r.data.invite); setStep('info') } else setStep('invalid') })
       .catch(() => setStep('invalid'))
   }, [router.isReady, token])
 

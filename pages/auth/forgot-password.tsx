@@ -38,11 +38,13 @@ export default function ForgotPasswordPage() {
           <AuthHeading icon={KeyIcon} title={c('fp_title')} subtitle={c('fp_subtitle')} />
           <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
             <Field label={c('email')} error={fieldError ? c(fieldError) : undefined}>
-              <Input
-                type="email" inputMode="email" autoComplete="email" dir="ltr" autoFocus className="text-start"
-                icon={EnvelopeIcon} placeholder={c('email_ph')}
-                value={email} onChange={e => { setEmail(e.target.value); setFieldError(null) }}
-              />
+              <div dir="ltr">
+                <Input
+                  type="email" inputMode="email" autoComplete="email" autoFocus
+                  icon={EnvelopeIcon} placeholder={c('email_ph')}
+                  value={email} onChange={e => { setEmail(e.target.value); setFieldError(null) }}
+                />
+              </div>
             </Field>
             <Button type="submit" size="lg" fullWidth loading={loading}>
               {loading ? c('sending') : c('send_link')}
