@@ -41,7 +41,7 @@ show.call('reviewSubmissions', subs)
 eu = %w[AUT BEL BGR HRV CYP CZE DNK EST FIN FRA DEU GRC HUN IRL ITA LVA LTU LUX MLT NLD POL PRT ROU SVK SVN ESP SWE]
 ta = g.call("v2/appAvailabilities/#{app.id}/territoryAvailabilities", { limit: 200, include: 'territory' })
 on = (ta['data'] || []).select { |t| t.dig('attributes', 'available') }.map { |t| t.dig('relationships', 'territory', 'data', 'id') }
-puts "available territories: #{on.size}; EU still on: #{(on & eu).inspect}#{ta['error'] ? ' ERR ' + ta['error'] : ''}"
+puts "available territories: #{on.size}; China on: #{on.include?('CHN')}; EU still on: #{(on & eu).inspect}#{ta['error'] ? ' ERR ' + ta['error'] : ''}"
 
 # Try to add the version to a review submission (draft only — NOT submitted) to get Apple's detailed reason.
 pc = rc
@@ -50,6 +50,7 @@ post = lambda do |path, body|
 rescue => e
   [0, { 'error' => e.message[0, 2000] }]
 end
+exit 0 unless ENV['TRY_DRAFT'] == '1'
 existing = (subs['data'] || []).find { |x| %w[READY_FOR_REVIEW].include?(x.dig('attributes', 'state')) }
 if existing
   sub = { 'data' => existing }; st = 'reuse'
