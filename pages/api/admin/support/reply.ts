@@ -1,4 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
+import { sendMobilePush } from '@/lib/mobile-push'
 import { requireAdmin } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { sendEmail } from '@/lib/email'
@@ -165,5 +166,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   await logAction({ userId: admin.userId, action: 'admin_support_reply', resource: 'support_ticket', resourceId: ticket_id, details: { status: 'pending' }, ipAddress: getClientIp(req) })
+  if (ticketUser?.id) await sendMobilePush(ticketUser.id, 'support_answered', { number: String(ticketNum ?? ''), preview: content.slice(0, 160) }, { ticket_id: String(ticket_id) })
   return res.status(200).json({ success: true, results })
 }

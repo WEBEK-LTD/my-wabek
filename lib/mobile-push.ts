@@ -9,6 +9,10 @@ import { isMissingDbObject, warnMissingOnce } from './db-compat'
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send'
 
 export type MobilePushKind = 'message' | 'number_disconnected' | 'number_connected' | 'campaign_done'
+  // admins only (sendAdminPush)
+  | 'support_ticket' | 'support_reply' | 'deletion_request'
+  // the customer: support answered their ticket
+  | 'support_answered'
 
 type Vars = Record<string, string | number>
 
@@ -18,12 +22,20 @@ const TEXT: Record<'en' | 'ar', Record<MobilePushKind, { title: string; body: st
     number_disconnected: { title: 'WhatsApp number disconnected', body: '{phone} is offline. Tap to reconnect.' },
     number_connected: { title: 'WhatsApp number connected', body: '{phone} is ready to send.' },
     campaign_done: { title: 'Campaign finished', body: '"{name}": {sent} sent, {failed} failed.' },
+    support_ticket: { title: 'New support ticket #{number}', body: '{from}: {subject}' },
+    support_reply: { title: 'Customer replied on #{number}', body: '{from}: {preview}' },
+    deletion_request: { title: 'Account deletion requested', body: '{email} asked to delete their account.' },
+    support_answered: { title: 'Support replied to #{number}', body: '{preview}' },
   },
   ar: {
     message: { title: '{from}', body: '{preview}' },
     number_disconnected: { title: 'رقم واتساب فصل', body: '{phone} غير متصل. اضغط لإعادة الربط.' },
     number_connected: { title: 'تم ربط رقم واتساب', body: '{phone} جاهز للإرسال.' },
     campaign_done: { title: 'الحملة خلصت', body: '«{name}»: اتبعت {sent}، وفشل {failed}.' },
+    support_ticket: { title: 'تذكرة دعم جديدة #{number}', body: '{from}: {subject}' },
+    support_reply: { title: 'رد العميل على #{number}', body: '{from}: {preview}' },
+    deletion_request: { title: 'طلب حذف حساب', body: '{email} طلب حذف حسابه.' },
+    support_answered: { title: 'الدعم رد على #{number}', body: '{preview}' },
   },
 }
 
@@ -33,6 +45,10 @@ const ROUTE: Record<MobilePushKind, string> = {
   number_disconnected: 'numbers',
   number_connected: 'numbers',
   campaign_done: 'analytics',
+  support_ticket: 'admin_support',
+  support_reply: 'admin_support',
+  deletion_request: 'admin_users',
+  support_answered: 'support',
 }
 
 const PREF: Record<MobilePushKind, string> = {
@@ -40,6 +56,10 @@ const PREF: Record<MobilePushKind, string> = {
   number_disconnected: 'numbers',
   number_connected: 'numbers',
   campaign_done: 'campaigns',
+  support_ticket: 'admin',
+  support_reply: 'admin',
+  deletion_request: 'admin',
+  support_answered: 'messages',
 }
 
 const fill = (s: string, vars: Vars) => s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] === undefined ? m : String(vars[k])))
@@ -100,5 +120,15 @@ export async function sendMobilePush(userId: string, kind: MobilePushKind, vars:
     if (dead.length) await db.from('mobile_push_tokens').delete().in('token', dead)
   } catch (e) {
     console.error('[mobile-push] send failed:', e instanceof Error ? e.message : e)
+  }
+}
+
+/** Admin alerts (support tickets, deletion requests) to every admin's app. Never throws. */
+export async function sendAdminPush(kind: Extract<MobilePushKind, 'support_ticket' | 'support_reply' | 'deletion_request'>, vars: Vars, extra: Record<string, string> = {}): Promise<void> {
+  try {
+    const { data } = await supabaseAdmin().from('users').select('id').eq('role', 'admin').eq('is_active', true).limit(20)
+    await Promise.all((data || []).map(a => sendMobilePush(a.id as string, kind, vars, extra)))
+  } catch (e) {
+    console.error('[mobile-push] admin push failed:', e instanceof Error ? e.message : e)
   }
 }

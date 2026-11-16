@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuth, comparePassword, bumpTokenVersion } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { hitRateLimit, logAction, getClientIp } from '@/lib/middleware'
+import { sendAdminPush } from '@/lib/mobile-push'
 
 // POST /api/mobile/delete-account {password, confirm: "DELETE"}
 // In-app account deletion (App Store 5.1.1(v) / Google Play). The owner
@@ -52,6 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       is_read: false,
     })))
   }
+  await sendAdminPush('deletion_request', { email: row.email })
   await logAction({ userId: user.userId, action: 'account_deletion_requested', ipAddress: getClientIp(req) })
   return res.status(200).json({ success: true })
 }
