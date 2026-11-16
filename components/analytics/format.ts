@@ -1,22 +1,26 @@
 import Papa from 'papaparse'
+import { localeFor } from '@/lib/i18n-local'
+import { currentLang, errorBody, knownCodeMessage, tc, translateServerMessage } from '@/components/campaigns/shared'
 
-/** Arabic month names with Latin digits, as in the dashboard mock ("7 نوفمبر"). */
-const LOCALE = 'ar-u-nu-latn'
-
-export function formatDate(value: string | number | Date | null | undefined, opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' }): string {
+/**
+ * Date helpers for the analytics-style pages. Pass `locale` from useT(); when
+ * it is omitted the current UI language is used (Latin digits in Arabic).
+ */
+export function formatDate(value: string | number | Date | null | undefined, opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' }, locale?: string): string {
   if (!value) return '—'
   const d = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(d.getTime())) return '—'
-  return new Intl.DateTimeFormat(LOCALE, opts).format(d)
+  const loc = locale || localeFor(currentLang())
+  try { return new Intl.DateTimeFormat(loc, opts).format(d) } catch { return new Intl.DateTimeFormat('en-GB', opts).format(d) }
 }
 
-/** "7 نوفمبر" — short day label for chart axes. */
-export function formatDay(value: string | Date): string {
-  return formatDate(value, { day: 'numeric', month: 'short' })
+/** "7 Nov" — short day label for chart axes. */
+export function formatDay(value: string | Date, locale?: string): string {
+  return formatDate(value, { day: 'numeric', month: 'short' }, locale)
 }
 
-export function formatDateTime(value: string | Date | null | undefined): string {
-  return formatDate(value, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+export function formatDateTime(value: string | Date | null | undefined, locale?: string): string {
+  return formatDate(value, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }, locale)
 }
 
 /** Percentage helper that never divides by zero. */
@@ -38,11 +42,19 @@ export function downloadCSV(filename: string, rows: Array<Array<string | number 
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-/** Readable message from an axios error. */
-export function apiError(e: unknown, fallback = 'حدث خطأ غير متوقع'): string {
-  const data = (e as { response?: { data?: { error?: string; detail?: string } } })?.response?.data
+/**
+ * Readable message from an axios error, in the UI language: known error
+ * codes (member_forbidden, plan_limit, …) and messages are translated; other
+ * server text is shown as-is, then `fallback`.
+ */
+export function apiError(e: unknown, fallback?: string): string {
+  const data = errorBody(e)
+  const known = knownCodeMessage(data)
+  if (known) return known
   if (data?.detail) return data.detail
-  return data?.error || fallback
+  if (data?.error) return translateServerMessage(String(data.error))
+  if (!data && (e as Error)?.message === 'Network Error') return tc('err_network')
+  return fallback ?? tc('err_unexpected')
 }
 
 export const todayStamp = () => new Date().toISOString().split('T')[0]
