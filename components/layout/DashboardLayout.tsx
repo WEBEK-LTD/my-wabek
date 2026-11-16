@@ -83,7 +83,7 @@ export default function DashboardLayout({ children, title: titleProp, bleed, hid
   /* ── Push notifications ───────────────────────────────── */
   useEffect(() => {
     // Load VAPID key and check subscription state
-    fetch('/api/admin/seo').then(r => r.json()).then(d => {
+    fetch('/api/seo/public').then(r => r.json()).then(d => {
       if (d.push?.vapid_public) getPushStatus().catch(() => {})
     }).catch(() => {})
   }, [])
@@ -96,7 +96,7 @@ export default function DashboardLayout({ children, title: titleProp, bleed, hid
       if (perm !== 'granted') return
       try {
         const reg = await navigator.serviceWorker.ready
-        const { data: seoData } = await axios.get('/api/admin/seo').catch(() => ({ data: {} as any }))
+        const { data: seoData } = await axios.get('/api/seo/public').catch(() => ({ data: {} as any }))
         const vapidKey = seoData?.push?.vapid_public || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
         if (!vapidKey) return
         const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKey })
