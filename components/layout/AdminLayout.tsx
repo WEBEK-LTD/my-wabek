@@ -9,6 +9,7 @@ import { useAdminAuth } from '@/hooks/useAuth'
 import { useTranslation } from '@/hooks/useTranslation'
 import { BRAND_ASSETS } from '@/hooks/useWhiteLabel'
 import { setStoredLang } from '@/lib/i18n'
+import SessionLoading from './SessionLoading'
 import { ADMIN_SECTIONS, findActive } from './nav'
 import {
   AccountCard, CommandPalette, LanguageMenu, ShellFrame, Sidebar, SubNav,
@@ -31,7 +32,8 @@ export default function AdminLayout({ children, title: titleProp, bleed }: Admin
   const router = useRouter()
   const { t, lang, dir } = useTranslation()
   const [searchOpen, setSearchOpen] = useState(false)
-  useAdminAuth()
+  // Waits for /api/auth/me and checks the server-side role before rendering.
+  const { ready } = useAdminAuth()
 
   const { section, item } = findActive(ADMIN_SECTIONS, router.pathname)
   const itemLabel = item ? t(item.labelKey) : t('admin_overview')
@@ -88,6 +90,18 @@ export default function AdminLayout({ children, title: titleProp, bleed }: Admin
       }
     />
   )
+
+  if (!ready) {
+    return (
+      <>
+        <Head>
+          <title>{`${title} | ${BRAND_ASSETS.name} Admin`}</title>
+          <meta name="robots" content="noindex, nofollow" />
+        </Head>
+        <SessionLoading label={t('ui_loading')} dir={dir} />
+      </>
+    )
+  }
 
   return (
     <>
