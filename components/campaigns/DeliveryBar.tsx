@@ -1,6 +1,9 @@
 import React from 'react'
 import { cn } from '@/components/ui'
-import { DELIVERY_COLORS, fmtNum, pct } from './shared'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/campaign-components'
+import common from '@/locales/dashboard/common-a'
+import { DELIVERY_COLORS, pct } from './shared'
 
 export interface DeliveryCounts {
   total: number
@@ -35,17 +38,20 @@ export function DeliveryBar({ counts, size = 'md', legend = false, className, tr
   className?: string
   trackClassName?: string
 }) {
+  const { t, fmtNumber } = useT(messages)
+  const { t: tc } = useT(common)
+  const fmtNum = (n: number) => fmtNumber(Number(n) || 0)
   const f = funnel(counts)
   const base = f.total || 1
   const segs = [
-    { key: 'read', label: 'قُرئت', value: f.read, color: DELIVERY_COLORS.read },
-    { key: 'delivered', label: 'وصلت', value: f.delivered - f.read, color: DELIVERY_COLORS.delivered },
-    { key: 'sent', label: 'أُرسلت', value: f.sent - f.delivered, color: DELIVERY_COLORS.sent },
-    { key: 'failed', label: 'فشلت', value: f.failed, color: DELIVERY_COLORS.failed },
+    { key: 'read', label: tc('ms_read'), value: f.read, color: DELIVERY_COLORS.read },
+    { key: 'delivered', label: tc('ms_delivered'), value: f.delivered - f.read, color: DELIVERY_COLORS.delivered },
+    { key: 'sent', label: tc('ms_sent'), value: f.sent - f.delivered, color: DELIVERY_COLORS.sent },
+    { key: 'failed', label: tc('ms_failed'), value: f.failed, color: DELIVERY_COLORS.failed },
   ]
   const h = size === 'sm' ? 'h-1.5' : size === 'lg' ? 'h-3' : 'h-2'
   const processed = f.sent + f.failed
-  const summary = `تمت معالجة ${fmtNum(processed)} من ${fmtNum(f.total)}: قُرئت ${fmtNum(f.read)}، وصلت ${fmtNum(f.delivered)}، أُرسلت ${fmtNum(f.sent)}، فشلت ${fmtNum(f.failed)}`
+  const summary = t('bar_summary', { processed: fmtNum(processed), total: fmtNum(f.total), read: fmtNum(f.read), delivered: fmtNum(f.delivered), sent: fmtNum(f.sent), failed: fmtNum(f.failed) })
   return (
     <div className={className}>
       <div
@@ -54,7 +60,7 @@ export function DeliveryBar({ counts, size = 'md', legend = false, className, tr
         aria-valuemax={f.total}
         aria-valuenow={processed}
         aria-valuetext={summary}
-        aria-label="تقدّم الإرسال"
+        aria-label={t('bar_aria')}
         className={cn('flex w-full overflow-hidden rounded-full', trackClassName, h)}
       >
         {segs.map(s => s.value > 0 && (
@@ -68,10 +74,10 @@ export function DeliveryBar({ counts, size = 'md', legend = false, className, tr
       {legend && (
         <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted">
           {[
-            { label: 'قُرئت', value: f.read, color: DELIVERY_COLORS.read },
-            { label: 'وصلت', value: f.delivered, color: DELIVERY_COLORS.delivered },
-            { label: 'أُرسلت', value: f.sent, color: DELIVERY_COLORS.sent },
-            { label: 'فشلت', value: f.failed, color: DELIVERY_COLORS.failed },
+            { label: tc('ms_read'), value: f.read, color: DELIVERY_COLORS.read },
+            { label: tc('ms_delivered'), value: f.delivered, color: DELIVERY_COLORS.delivered },
+            { label: tc('ms_sent'), value: f.sent, color: DELIVERY_COLORS.sent },
+            { label: tc('ms_failed'), value: f.failed, color: DELIVERY_COLORS.failed },
           ].map(s => (
             <li key={s.label} className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-[3px]" style={{ background: s.color }} aria-hidden="true" />
