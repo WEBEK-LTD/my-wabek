@@ -8,7 +8,7 @@
 #            GOOGLE_SERVICES_JSON          Firebase google-services.json (push)
 #            PLAY_SERVICE_ACCOUNT_JSON     Google Play upload (only for "upload")
 #   iOS      ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8   App Store Connect API key (role Admin)
-#            APPLE_TEAM_ID — signing is done by mobile/fastlane/Fastfile, no devices needed
+#            APPLE_TEAM_ID — Apple cloud signing: no devices, no certificates created
 name: Mobile app — build & publish
 
 on:
@@ -111,10 +111,6 @@ jobs:
           cache-dependency-path: mobile/package-lock.json
       - run: npm ci
       - run: npm run typecheck && npm run i18n:check
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.3'
-      - run: gem install fastlane --no-document
       - name: Check the App Store Connect secrets
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
@@ -125,20 +121,67 @@ jobs:
           for v in ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8 APPLE_TEAM_ID; do
             if [ -z "${!v}" ]; then echo "::error::Missing secret $v."; exit 1; fi
           done
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$ASC_KEY_P8" > ~/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8
       - name: Generate the native iOS project
         run: npx expo prebuild --platform ios --clean
-      - name: Sign, build and upload (no registered devices needed)
+      # Cloud signing: the archive is signed ad hoc (keeps the entitlements, needs no
+      # certificate or device); the export re-signs it with Apple's cloud-managed
+      # distribution certificate through the API key. No certificates are created
+      # in the account and no devices are needed.
+      - name: Archive (no certificate needed)
+        working-directory: mobile/ios
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -o pipefail
+          xcodebuild -workspace WABEK.xcworkspace -scheme WABEK -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/WABEK.xcarchive" \
+            DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO PROVISIONING_PROFILE_SPECIFIER="" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" archive | tail -n 60
+      - name: Export the IPA (Apple cloud signing)
+        working-directory: mobile/ios
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          UPLOAD: ${{ inputs.upload }}
-          FASTLANE_OPT_OUT_USAGE: '1'
-          FASTLANE_SKIP_UPDATE_CHECK: '1'
-        run: fastlane ios release
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -o pipefail
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>destination</key><string>export</string>
+            <key>uploadSymbols</key><true/>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/WABEK.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8 \
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" | tail -n 60
+      - name: Check the signed app (push entitlement, App Store signature)
+        run: |
+          set -euo pipefail
+          IPA=$(ls "$RUNNER_TEMP"/export/*.ipa)
+          rm -rf "$RUNNER_TEMP/ipa" && mkdir "$RUNNER_TEMP/ipa" && unzip -q "$IPA" -d "$RUNNER_TEMP/ipa"
+          APP=$(ls -d "$RUNNER_TEMP"/ipa/Payload/*.app)
+          codesign -d --entitlements - --xml "$APP" > "$RUNNER_TEMP/ent.plist" 2>/dev/null || codesign -d --entitlements :- "$APP" > "$RUNNER_TEMP/ent.plist"
+          codesign -dvv "$APP" 2>&1 | grep -E "Authority|TeamIdentifier" || true
+          if ! grep -q "aps-environment" "$RUNNER_TEMP/ent.plist"; then echo "::error::The signed app has no push entitlement."; cat "$RUNNER_TEMP/ent.plist"; exit 1; fi
+          echo "Push entitlement present."
       - uses: actions/upload-artifact@v5
         with:
           name: wabek-ios-${{ github.run_number }}
           path: ${{ runner.temp }}/export/*.ipa
           retention-days: 30
+      - name: Upload to TestFlight
+        if: inputs.upload
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: xcrun altool --upload-app --type ios --file "$(ls "$RUNNER_TEMP"/export/*.ipa)" --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
