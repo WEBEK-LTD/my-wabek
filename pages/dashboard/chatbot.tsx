@@ -41,7 +41,6 @@ export default function ChatbotPage() {
   const { data: teamData } = useQuery<{ members: Array<{ id: string; user_id: string; name: string }> }>('team', () => axios.get('/api/team').then(r => r.data))
 
   const flows = flowsData?.flows || []
-  const instances = (instData?.instances || []).filter(i => i.status === 'connected')
   const allInstances = instData?.instances || []
   const teamMembers = teamData?.members || []
   const activeCount = flows.filter(f => f.is_active).length
@@ -122,7 +121,7 @@ export default function ChatbotPage() {
         <ChatbotFlowEditor
           key={editing.id || 'new'}
           initial={editing}
-          instances={instances}
+          instances={allInstances.filter(i => i.status === 'connected' || i.id === editing.instance_id)}
           teamMembers={teamMembers}
           saving={saving}
           onBack={() => setEditing(null)}
