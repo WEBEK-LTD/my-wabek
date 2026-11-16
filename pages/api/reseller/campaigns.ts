@@ -1,11 +1,11 @@
 import { smartSend, smartSendWAWeb } from '@/lib/wa-smart-send'
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireOwnerOrRole } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { v4 as uuidv4 } from 'uuid'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireOwnerOrRole(req, res)
   if (!user) return
   const db = supabaseAdmin()
 
@@ -42,12 +42,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    const { instance_id, message, target, scheduled_at, delay_seconds = 3 } = req.body
+    const { instance_id, message, target, scheduled_at, delay_seconds = 3 } = req.body || {}
     // target: 'all' | 'active' | specific user_ids[]
 
-    if (!instance_id || !message) {
+    if (typeof instance_id !== 'string' || typeof message !== 'string' || !instance_id || !message.trim()) {
       return res.status(400).json({ error: 'instance_id and message required' })
     }
+    if (message.length > 4096) return res.status(400).json({ error: 'Message too long' })
+    const delay = Math.min(Math.max(Number(delay_seconds) || 0, 1), 60)
 
     // Verify instance belongs to reseller
     const { data: instance } = await db
@@ -61,17 +63,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (instance.status !== 'connected') return res.status(400).json({ error: 'Instance is not connected' })
 
     // Get target users
-    let targetUserIds: string[] = []
+    // Only the reseller's OWN referrals can ever be targeted.
+    const { data: refs } = await db
+      .from('reseller_referrals')
+      .select('referred_user_id')
+      .eq('reseller_id', user.userId)
+      .eq('status', 'active')
+    const ownReferrals = new Set((refs || []).map(r => r.referred_user_id as string))
 
-    if (target === 'all' || !target) {
-      const { data: refs } = await db
-        .from('reseller_referrals')
-        .select('referred_user_id')
-        .eq('reseller_id', user.userId)
-        .eq('status', 'active')
-      targetUserIds = (refs || []).map(r => r.referred_user_id)
+    let targetUserIds: string[] = []
+    if (target === 'all' || target === 'active' || !target) {
+      targetUserIds = Array.from(ownReferrals)
     } else if (Array.isArray(target)) {
-      targetUserIds = target
+      targetUserIds = Array.from(new Set(target.filter((id: unknown): id is string => typeof id === 'string' && ownReferrals.has(id))))
     }
 
     if (targetUserIds.length === 0) {
@@ -102,7 +106,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!scheduled_at) {
       // Send immediately in background
-      sendToContacts(contacts, message, instance_id, campaignId, delay_seconds, user.userId)
+      sendToContacts(contacts, message, instance_id, campaignId, delay, user.userId)
     }
 
     return res.status(201).json({

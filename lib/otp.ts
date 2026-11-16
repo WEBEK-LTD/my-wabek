@@ -2,8 +2,14 @@ import { smartSend, smartSendWAWeb, isInWindow } from '@/lib/wa-smart-send'
 import { supabaseAdmin } from './supabase'
 import { sendOtpTemplate } from './otp-template'
 import { sendWAWebMessage } from './wa-web'
-import { randomInt } from 'crypto'
 import { createHash } from 'crypto'
+import { randomDigits, safeEqual } from './security'
+
+export const MAX_OTP_ATTEMPTS = 5
+
+function sha256(v: string): string {
+  return createHash('sha256').update(v).digest('hex')
+}
 
 const OTP_EXPIRY = parseInt(process.env.OTP_EXPIRY_MINUTES || '10') * 60 * 1000
 
@@ -15,9 +21,9 @@ export async function sendOTP(params: {
 }): Promise<{ success: boolean; otpId: string }> {
   const db = supabaseAdmin()
 
-  const otp = randomInt(100000, 999999).toString()
+  const otp = randomDigits(6)
   const expiresAt = new Date(Date.now() + OTP_EXPIRY).toISOString()
-  const otpHash = createHash('sha256').update(otp).digest('hex')
+  const otpHash = sha256(otp)
 
   const { data, error } = await db.from('otp_codes').insert({
     user_id: params.userId,
@@ -28,7 +34,10 @@ export async function sendOTP(params: {
     is_used: false,
   }).select().single()
 
-  if (error) throw new Error(`DB error: ${error.message}`)
+  if (error) {
+    console.error('[otp] insert failed:', error.message)
+    throw new Error('Failed to create OTP')
+  }
 
   // Get WhatsApp instance for OTP:
   // 1. Check if admin configured a global OTP instance (WABEK's own number)
@@ -109,16 +118,100 @@ export async function sendOTP(params: {
 export async function verifyOTP(params: {
   otpId: string
   otp: string
+  userId?: string // when given, the OTP must belong to this user
 }): Promise<{ valid: boolean; reason?: string }> {
   const db = supabaseAdmin()
-  const otpHash = createHash('sha256').update(params.otp).digest('hex')
-  const { data } = await db.from('otp_codes').select('*').eq('id', params.otpId).single()
+  const otpHash = sha256(String(params.otp ?? ''))
+  const { data } = await db.from('otp_codes').select('*').eq('id', params.otpId).maybeSingle()
 
   if (!data) return { valid: false, reason: 'OTP not found' }
+  if (params.userId && data.user_id !== params.userId) return { valid: false, reason: 'OTP not found' }
   if (data.is_used) return { valid: false, reason: 'OTP already used' }
   if (new Date(data.expires_at) < new Date()) return { valid: false, reason: 'OTP expired' }
-  if (data.otp_hash !== otpHash) return { valid: false, reason: 'Invalid OTP' }
+  const attempts = typeof data.attempts === 'number' ? data.attempts : 0
+  if (attempts >= MAX_OTP_ATTEMPTS) {
+    await db.from('otp_codes').update({ is_used: true }).eq('id', params.otpId)
+    return { valid: false, reason: 'Too many attempts' }
+  }
+  if (!safeEqual(otpHash, data.otp_hash)) {
+    const next = attempts + 1
+    await db.from('otp_codes').update({ attempts: next, ...(next >= MAX_OTP_ATTEMPTS ? { is_used: true } : {}) }).eq('id', params.otpId)
+    return { valid: false, reason: 'Invalid OTP' }
+  }
 
-  await db.from('otp_codes').update({ is_used: true, used_at: new Date().toISOString() }).eq('id', params.otpId)
+  // Single use: only the request that flips is_used wins.
+  const { data: consumed } = await db.from('otp_codes')
+    .update({ is_used: true, used_at: new Date().toISOString() })
+    .eq('id', params.otpId).eq('is_used', false)
+    .select('id')
+  if (!consumed?.length) return { valid: false, reason: 'OTP already used' }
   return { valid: true }
+}
+
+// ── Pending OTPs for login / registration / phone change (otp_pending) ────────
+export type PendingOtpPurpose = 'login' | 'registration' | 'phone_change'
+
+/** Create a fresh code, invalidating any earlier unused code for the same purpose. */
+export async function createPendingOtp(params: {
+  userId: string
+  phone: string | null | undefined
+  purpose: PendingOtpPurpose
+  expiryMinutes: number
+}): Promise<string> {
+  const db = supabaseAdmin()
+  await db.from('otp_pending').update({ is_used: true })
+    .eq('user_id', params.userId).eq('purpose', params.purpose).eq('is_used', false)
+
+  const code = randomDigits(6)
+  const { error } = await db.from('otp_pending').insert({
+    user_id: params.userId,
+    phone: params.phone || '',
+    otp_hash: sha256(code),
+    purpose: params.purpose,
+    expires_at: new Date(Date.now() + params.expiryMinutes * 60 * 1000).toISOString(),
+  })
+  if (error) {
+    console.error('[otp] pending insert failed:', error.message)
+    throw new Error('Failed to create verification code')
+  }
+  return code
+}
+
+/** Verify a pending code: attempts counter, invalidation after 5 failures, single use. */
+export async function verifyPendingOtp(params: {
+  userId: string
+  purpose: PendingOtpPurpose
+  otp: unknown
+  phone?: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const db = supabaseAdmin()
+  let q = db.from('otp_pending')
+    .select('*')
+    .eq('user_id', params.userId)
+    .eq('purpose', params.purpose)
+    .eq('is_used', false)
+    .gt('expires_at', new Date().toISOString())
+  if (params.phone !== undefined) q = q.eq('phone', params.phone)
+  const { data: pending } = await q.order('created_at', { ascending: false }).limit(1)
+
+  const rec = pending?.[0]
+  if (!rec) return { ok: false, error: 'Code expired or not found. Request a new one.' }
+
+  const attempts = typeof rec.attempts === 'number' ? rec.attempts : 0
+  if (attempts >= MAX_OTP_ATTEMPTS) {
+    await db.from('otp_pending').update({ is_used: true }).eq('id', rec.id)
+    return { ok: false, error: 'Too many attempts. Request a new code.' }
+  }
+
+  const code = typeof params.otp === 'string' || typeof params.otp === 'number' ? String(params.otp).trim() : ''
+  if (!/^\d{4,8}$/.test(code) || !safeEqual(sha256(code), rec.otp_hash)) {
+    const next = attempts + 1
+    await db.from('otp_pending').update({ attempts: next, ...(next >= MAX_OTP_ATTEMPTS ? { is_used: true } : {}) }).eq('id', rec.id)
+    return { ok: false, error: next >= MAX_OTP_ATTEMPTS ? 'Too many attempts. Request a new code.' : 'Invalid verification code' }
+  }
+
+  const { data: consumed } = await db.from('otp_pending')
+    .update({ is_used: true }).eq('id', rec.id).eq('is_used', false).select('id')
+  if (!consumed?.length) return { ok: false, error: 'Code already used. Request a new one.' }
+  return { ok: true }
 }
