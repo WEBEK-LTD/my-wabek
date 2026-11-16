@@ -1,46 +1,31 @@
-// @ts-nocheck
-import Link from 'next/link'
-import { LockClosedIcon } from '@heroicons/react/24/outline'
+import { LockClosedIcon, SparklesIcon } from '@heroicons/react/24/outline'
+import { Button } from '@/components/ui/Button'
+import { useTranslation } from '@/hooks/useTranslation'
 
 interface Props {
   feature: string
   requiredPlan?: string
 }
 
-const FEATURE_LABELS = {
-  allow_api_access: 'API Access',
-  allow_chatbot: 'Chatbot Builder',
-  allow_automation: 'Automation',
-  allow_analytics: 'Advanced Analytics',
-  allow_white_label: 'White Label',
-  allow_sub_accounts: 'Sub-Accounts',
-  allow_reseller: 'Reseller System',
-}
-
+/** Shown instead of a page when the current plan turns the feature off. */
 export default function UpgradeWall({ feature, requiredPlan }: Props) {
-  const label = FEATURE_LABELS[feature] || feature
+  const { t } = useTranslation()
+  const label = t(`feature_${feature}`, feature)
 
   return (
-    <div className="flex-1 flex items-center justify-center min-h-[60vh]">
-      <div className="text-center max-w-md mx-auto px-6">
-        <div className="w-16 h-16 bg-brand-900/30 border border-brand-800/50 rounded-2xl flex items-center justify-center mx-auto mb-5">
-          <LockClosedIcon className="w-8 h-8 text-blue-600" />
-        </div>
-        <h2 className="font-display text-2xl font-bold text-slate-900 mb-2">
-          Upgrade to unlock {label}
-        </h2>
-        <p className="text-slate-400 text-sm mb-6 leading-relaxed">
-          {requiredPlan
-            ? `This feature is available on the ${requiredPlan} plan and above.`
-            : 'This feature is not included in your current plan.'
-          } Upgrade to get access.
+    <div className="flex min-h-[60vh] flex-1 items-center justify-center py-10">
+      <div className="relative mx-auto w-full max-w-lg overflow-hidden rounded-panel border border-line bg-surface p-8 text-center shadow-card sm:p-10">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-brand-gradient opacity-[0.12]" />
+        <span className="relative mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-gradient text-[#04282C] shadow-glow">
+          <LockClosedIcon className="h-8 w-8" aria-hidden="true" />
+        </span>
+        <h2 className="relative mb-2 text-2xl font-bold text-ink">{t('upgrade_title').replace('{feature}', label)}</h2>
+        <p className="relative mb-7 text-sm leading-relaxed text-muted">
+          {requiredPlan ? t('upgrade_desc_plan').replace('{plan}', requiredPlan) : t('upgrade_desc')}
         </p>
-        <Link href="/dashboard/billing" className="btn-primary justify-center">
-          View Plans & Upgrade →
-        </Link>
-        <p className="text-xs text-gray-600 mt-3">
-          Current plan doesn't include this feature
-        </p>
+        <Button href="/dashboard/billing" icon={SparklesIcon} size="lg" className="relative">
+          {t('upgrade_cta')}
+        </Button>
       </div>
     </div>
   )

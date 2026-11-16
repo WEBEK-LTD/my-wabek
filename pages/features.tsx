@@ -38,7 +38,7 @@ export default function FeaturesPage() {
   return (
     <>
       <Head>
-      <link rel="icon" href="https://res.cloudinary.com/dkl7ntpgw/image/upload/f_auto,q_auto/%D8%AA%D8%B5%D9%85%D9%8A%D9%85_%D8%A8%D8%AF%D9%88%D9%86_%D8%B9%D9%86%D9%88%D8%A7%D9%86_1_kejdrs" /><title>{t(lang,'feat_title')} | {name}</title></Head>
+      <link rel="icon" href="/brand/favicon-32.png" /><title>{t(lang,'feat_title')} | {name}</title></Head>
       <style>{`*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fff;color:#111b21}.badge{display:inline-block;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:700;background:#dcfce7;color:#166534;margin-bottom:10px}.card{background:#fff;border:1px solid #e9edef;border-radius:14px;padding:24px;transition:all .2s}.card:hover{border-color:#25D366;box-shadow:0 4px 20px rgba(37,211,102,.1);transform:translateY(-2px)}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}@media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:600px){.grid{grid-template-columns:1fr}}`}</style>
 
       <PublicNav active="/features" onLangChange={setLang} />

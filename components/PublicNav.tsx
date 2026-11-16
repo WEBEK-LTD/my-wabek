@@ -1,149 +1,210 @@
-// @ts-nocheck
 import Link from 'next/link'
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/router'
+import { Bars3Icon, XMarkIcon, LanguageIcon } from '@heroicons/react/24/outline'
 import { useWhiteLabel } from '@/hooks/useWhiteLabel'
-import { LANGUAGES, getStoredLang, setStoredLang, t } from '@/lib/i18n'
+import { useAuthStore } from '@/lib/store'
+import { LANGUAGES, getStoredLang, setStoredLang, t, isRtlLang } from '@/lib/i18n'
+import { Logo } from '@/components/ui/Logo'
+import { Button } from '@/components/ui/Button'
+import { Dropdown } from '@/components/ui/Dropdown'
+import { cn } from '@/components/ui/utils'
 
-export default function PublicNav({ active = '', lang: langProp = '', onLangChange = null }: any) {
-  const { brandName, brandLogo } = useWhiteLabel()
-  const name = brandName || 'WABEK'
-  const [lang, setLang] = useState('en')
-  const [showLang, setShowLang] = useState(false)
+export interface PublicNavProps {
+  /** Path of the current page, highlighted in the nav (e.g. "/pricing"). */
+  active?: string
+  /** Controlled language (optional — defaults to the stored language). */
+  lang?: string
+  /** Called after the visitor picks a language. */
+  onLangChange?: ((code: string) => void) | null
+  /**
+   * light — white bar on light pages (default)
+   * deep  — transparent bar for the deep-teal hero (wrap header + hero in `.bg-deep-landing`)
+   */
+  variant?: 'light' | 'deep'
+}
+
+export default function PublicNav({ active = '', lang: langProp = '', onLangChange = null, variant = 'light' }: PublicNavProps) {
+  const router = useRouter()
+  const { brandName, customLogo } = useWhiteLabel()
+  const user = useAuthStore(s => s.user)
+  const [lang, setLang] = useState(langProp || 'ar')
+  const [mounted, setMounted] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const dropRef = useRef<HTMLDivElement>(null)
+  const [scrolled, setScrolled] = useState(false)
 
+  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => { setLang(langProp || getStoredLang()) }, [langProp])
   useEffect(() => {
-    const stored = langProp || getStoredLang()
-    setLang(stored)
-  }, [langProp])
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setShowLang(false)
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
+    const onChange = (e: Event) => { const d = (e as CustomEvent<string>).detail; if (typeof d === 'string') setLang(d) }
+    window.addEventListener('langchange', onChange)
+    return () => window.removeEventListener('langchange', onChange)
   }, [])
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+  useEffect(() => {
+    const close = () => setMenuOpen(false)
+    router.events.on('routeChangeStart', close)
+    return () => router.events.off('routeChangeStart', close)
+  }, [router.events])
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menuOpen])
 
   const changeLang = (code: string) => {
     setLang(code)
     setStoredLang(code)
-    setShowLang(false)
     onLangChange?.(code)
     window.dispatchEvent(new CustomEvent('langchange', { detail: code }))
   }
 
+  const deep = variant === 'deep'
+  const dir = isRtlLang(lang) ? 'rtl' : 'ltr'
   const current = LANGUAGES.find(l => l.code === lang) || LANGUAGES[0]
+  const signedIn = mounted && !!user
 
-  const navLinks = [
-    [t(lang,'home'), '/'],
-    [t(lang,'features'), '/features'],
-    [t(lang,'integrations'), '/integrations'],
-    [t(lang,'pricing'), '/pricing'],
-    [t(lang,'about'), '/about'],
-    [t(lang,'support'), '/support'],
+  const links: [string, string][] = [
+    [t(lang, 'pub_product'), '/features'],
+    [t(lang, 'integrations'), '/integrations'],
+    [t(lang, 'pricing'), '/pricing'],
+    [t(lang, 'pub_docs'), '/docs'],
   ]
+  const isActive = (href: string) => active === href || (href !== '/' && active.startsWith(href + '/'))
 
   return (
-    <>
-      <style>{`
-        .pnav{position:sticky;top:0;z-index:100;background:rgba(255,255,255,.97);backdrop-filter:blur(12px);border-bottom:1px solid #e9edef}
-        .pnav-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:68px;padding:0 20px}
-        .pnav-links{display:flex;gap:20px;align-items:center}
-        .pnav-link{color:#54656f;text-decoration:none;font-size:14px;font-weight:500;white-space:nowrap;transition:color .15s}
-        .pnav-link:hover,.pnav-link.active{color:#25D366;font-weight:700}
-        .pnav-btn{background:#25D366;color:#fff;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;white-space:nowrap}
-        .lang-btn{display:flex;align-items:center;gap:6px;background:#f3f4f6;border:1px solid #e9edef;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:13px;font-weight:600;color:#374151}
-        .lang-drop{position:absolute;top:calc(100% + 8px);right:0;background:#fff;border:1px solid #e9edef;border-radius:12px;padding:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:150px;z-index:200}
-        .lang-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;background:transparent;border:none;border-radius:8px;cursor:pointer;font-size:14px;text-align:left}
-        .lang-item:hover{background:#f3f4f6}
-        .lang-item.sel{background:#f0fdf4;color:#25D366;font-weight:700}
-        .ham{display:none;background:none;border:none;font-size:24px;cursor:pointer;color:#111b21;padding:4px;line-height:1}
-        .mob-menu{display:none;flex-direction:column;gap:2px;background:#fff;border-top:1px solid #e9edef;padding:12px 20px 20px}
-        .mob-link{color:#374151;text-decoration:none;font-size:16px;font-weight:500;padding:12px 0;border-bottom:1px solid #f3f4f6;display:block}
-        .mob-link.active{color:#25D366;font-weight:700}
-        .mob-langs{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
-        .mob-lang{display:flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid #e9edef;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;background:#fff;color:#374151}
-        .mob-lang.sel{background:#25D366;color:#fff;border-color:#25D366}
-        .flag-img{width:20px;height:14px;object-fit:cover;border-radius:2px;flex-shrink:0}
-        @media(max-width:900px){.pnav-links{display:none!important}.ham{display:block!important}}
-        @media(max-width:900px){.mob-menu.open{display:flex!important}}
-      `}</style>
+    <header
+      dir={dir}
+      className={cn(
+        'sticky top-0 z-40 transition-[background-color,box-shadow,border-color] duration-200',
+        deep
+          ? cn('text-[#EAF7F5]', scrolled || menuOpen ? 'bg-[#04282C]/90 shadow-[0_10px_40px_rgba(0,0,0,0.25)] backdrop-blur-md' : 'bg-transparent')
+          : cn('border-b bg-surface/90 text-ink backdrop-blur-md', scrolled ? 'border-line shadow-card' : 'border-transparent'),
+      )}
+    >
+      <div className="mx-auto flex h-[76px] max-w-[1280px] items-center justify-between gap-5 px-4 sm:px-8">
+        <Logo href="/" src={customLogo} name={brandName} tone={deep ? 'light' : 'auto'} size={42} />
 
-      <nav className="pnav">
-        <div className="pnav-inner">
-
-          {/* Logo — always LTR */}
-          <Link href="/" style={{display:'flex',alignItems:'center',gap:10,textDecoration:'none',flexShrink:0}}>
-            {brandLogo
-              ? <img src={brandLogo} alt={name} style={{height:52,maxWidth:180,objectFit:'contain'}} />
-              : <>
-                  <div style={{width:34,height:34,background:'#25D366',borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>💬</div>
-                  <span style={{fontWeight:800,fontSize:22,color:'#111b21'}}>{name}</span>
-                </>
-            }
-          </Link>
-
-          {/* Desktop links — text direction only, layout stays LTR */}
-          <div className="pnav-links">
-            {navLinks.map(([l, h]) => (
-              <Link key={h} href={h} className={`pnav-link${active===h?' active':''}`}
-                style={{direction: lang==='ar' ? 'rtl' : 'ltr'}}>{l}</Link>
-            ))}
-            <Link href="/auth/login" className="pnav-link"
-              style={{direction: lang==='ar' ? 'rtl' : 'ltr'}}>{t(lang,'sign_in')}</Link>
-            <Link href="/auth/register" className="pnav-btn">{t(lang,'get_started')}</Link>
-
-            {/* Language switcher */}
-            <div ref={dropRef} style={{position:'relative',flexShrink:0}}>
-              <button className="lang-btn" onClick={()=>setShowLang(!showLang)}>
-                <img className="flag-img" src={current.flag} alt={current.label} />
-                <span>{current.label}</span>
-                <span style={{fontSize:9,opacity:.5,transform:showLang?'rotate(180deg)':'none',transition:'transform .15s'}}>▼</span>
-              </button>
-              {showLang && (
-                <div className="lang-drop">
-                  {LANGUAGES.map(l => (
-                    <button key={l.code} onClick={()=>changeLang(l.code)} className={`lang-item${lang===l.code?' sel':''}`}>
-                      <img className="flag-img" src={l.flag} alt={l.label} />
-                      <span>{l.name}</span>
-                      {lang===l.code && <span style={{marginLeft:'auto',color:'#25D366',fontSize:12}}>✓</span>}
-                    </button>
-                  ))}
-                </div>
+        <nav aria-label={t(lang, 'shell_main_nav')} className="hidden items-center gap-[30px] text-[15px] lg:flex">
+          {links.map(([label, href]) => (
+            <Link
+              key={href}
+              href={href}
+              aria-current={isActive(href) ? 'page' : undefined}
+              className={cn(
+                'relative py-2 transition-colors',
+                deep
+                  ? isActive(href) ? 'text-white' : 'text-[#B5D3D0] hover:text-white'
+                  : isActive(href) ? 'font-medium text-ink' : 'text-muted hover:text-ink',
+                isActive(href) && 'after:absolute after:inset-x-0 after:-bottom-0.5 after:h-0.5 after:rounded-full after:bg-brand-gradient',
               )}
-            </div>
-          </div>
+            >
+              {label}
+            </Link>
+          ))}
+        </nav>
 
-          {/* Hamburger */}
-          <button className="ham" onClick={()=>setMenuOpen(!menuOpen)}>
-            {menuOpen ? '✕' : '☰'}
-          </button>
+        <div className="hidden items-center gap-2.5 lg:flex">
+          <Dropdown
+            label={`${t(lang, 'shell_language')}: ${current.name}`}
+            width="w-44"
+            triggerClassName={cn('h-10 px-3 text-sm', deep ? 'text-[#EAF7F5] hover:bg-white/10' : 'text-body hover:bg-surface-3 hover:text-ink')}
+            trigger={<><LanguageIcon className="h-5 w-5" aria-hidden="true" /><span dir="ltr" className="text-xs font-semibold">{current.label}</span></>}
+            items={LANGUAGES.map(l => ({
+              label: <span lang={l.code} dir={l.code === 'ar' ? 'rtl' : 'ltr'}>{l.name}</span>,
+              hint: <span dir="ltr">{l.label}</span>,
+              selected: l.code === lang,
+              onClick: () => changeLang(l.code),
+            }))}
+          />
+          {signedIn ? (
+            <Button href="/dashboard" variant={deep ? 'on-deep' : 'dark'} size="md" className="rounded-[14px] px-[22px]">
+              {t(lang, 'pub_dashboard')}
+            </Button>
+          ) : (
+            <>
+              <Link href="/auth/login" className={cn('px-3.5 py-2.5 text-[15px] transition-colors', deep ? 'text-[#EAF7F5] hover:text-white' : 'text-ink hover:text-link')}>
+                {t(lang, 'pub_sign_in')}
+              </Link>
+              <Button href="/auth/register" variant={deep ? 'on-deep' : 'primary'} size="md" className="rounded-[14px] px-[22px] text-[15px]">
+                {t(lang, 'pub_start_free')}
+              </Button>
+            </>
+          )}
         </div>
 
-        {/* Mobile menu */}
-        <div className={`mob-menu${menuOpen?' open':''}`}>
-          {navLinks.map(([l, h]) => (
-            <Link key={h} href={h} onClick={()=>setMenuOpen(false)}
-              className={`mob-link${active===h?' active':''}`}
-              style={{textAlign: lang==='ar' ? 'right' : 'left'}}>{l}</Link>
-          ))}
-          <Link href="/auth/login" onClick={()=>setMenuOpen(false)}
-            className="mob-link" style={{textAlign: lang==='ar' ? 'right' : 'left'}}>{t(lang,'sign_in')}</Link>
-          <Link href="/auth/register" onClick={()=>setMenuOpen(false)}
-            style={{background:'#25D366',color:'#fff',padding:'13px',borderRadius:9,fontSize:15,fontWeight:700,textDecoration:'none',textAlign:'center',marginTop:8,display:'block'}}>{t(lang,'get_started')}</Link>
+        <button
+          type="button"
+          onClick={() => setMenuOpen(o => !o)}
+          className={cn('flex h-11 w-11 items-center justify-center rounded-btn lg:hidden', deep ? 'text-[#EAF7F5] hover:bg-white/10' : 'text-ink hover:bg-surface-3')}
+          aria-expanded={menuOpen}
+          aria-controls="public-mobile-menu"
+          aria-label={menuOpen ? t(lang, 'shell_close_menu') : t(lang, 'shell_open_menu')}
+        >
+          {menuOpen ? <XMarkIcon className="h-6 w-6" aria-hidden="true" /> : <Bars3Icon className="h-6 w-6" aria-hidden="true" />}
+        </button>
+      </div>
 
-          <div className="mob-langs">
+      {menuOpen && (
+        <div
+          id="public-mobile-menu"
+          className={cn(
+            'border-t px-4 pb-6 pt-3 sm:px-8 lg:hidden',
+            deep ? 'border-white/10 bg-[#04282C] text-[#EAF7F5]' : 'border-line bg-surface text-ink',
+          )}
+        >
+          <nav aria-label={t(lang, 'shell_main_nav')} className="flex flex-col">
+            {links.map(([label, href]) => (
+              <Link
+                key={href}
+                href={href}
+                aria-current={isActive(href) ? 'page' : undefined}
+                className={cn(
+                  'border-b py-3.5 text-base',
+                  deep ? 'border-white/10 text-[#EAF7F5] hover:text-white' : 'border-line-soft text-ink hover:text-link',
+                  isActive(href) && 'font-semibold',
+                )}
+              >
+                {label}
+              </Link>
+            ))}
+          </nav>
+          <div className="mt-5 flex flex-col gap-2.5">
+            {signedIn ? (
+              <Button href="/dashboard" variant={deep ? 'on-deep' : 'dark'} size="lg" fullWidth>{t(lang, 'pub_dashboard')}</Button>
+            ) : (
+              <>
+                <Button href="/auth/register" variant="primary" size="lg" fullWidth>{t(lang, 'pub_start_free')}</Button>
+                <Button href="/auth/login" variant={deep ? 'on-deep-ghost' : 'secondary'} size="lg" fullWidth>{t(lang, 'pub_sign_in')}</Button>
+              </>
+            )}
+          </div>
+          <div className="mt-5 flex flex-wrap gap-2" role="group" aria-label={t(lang, 'shell_language')}>
             {LANGUAGES.map(l => (
-              <button key={l.code} onClick={()=>{changeLang(l.code);}}
-                className={`mob-lang${lang===l.code?' sel':''}`}>
-                <img className="flag-img" src={l.flag} alt={l.label} />
-                <span>{l.label}</span>
+              <button
+                key={l.code}
+                type="button"
+                onClick={() => changeLang(l.code)}
+                aria-pressed={l.code === lang}
+                className={cn(
+                  'h-9 rounded-full px-4 text-sm font-medium transition-colors',
+                  l.code === lang
+                    ? 'bg-brand-gradient text-[#04282C]'
+                    : deep ? 'border border-white/15 text-[#EAF7F5] hover:bg-white/10' : 'border border-line text-body hover:border-line-strong',
+                )}
+              >
+                <span lang={l.code}>{l.name}</span>
               </button>
             ))}
           </div>
         </div>
-      </nav>
-    </>
+      )}
+    </header>
   )
 }

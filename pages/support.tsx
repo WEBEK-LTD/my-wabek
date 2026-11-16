@@ -38,7 +38,7 @@ export default function SupportPage() {
   return (
     <>
       <Head>
-      <link rel="icon" href="https://res.cloudinary.com/dkl7ntpgw/image/upload/f_auto,q_auto/%D8%AA%D8%B5%D9%85%D9%8A%D9%85_%D8%A8%D8%AF%D9%88%D9%86_%D8%B9%D9%86%D9%88%D8%A7%D9%86_1_kejdrs" /><title>{t(lang,'support_title')} | {name}</title></Head>
+      <link rel="icon" href="/brand/favicon-32.png" /><title>{t(lang,'support_title')} | {name}</title></Head>
       <style>{`*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fff;color:#111b21}.inp{width:100%;padding:12px 16px;border:1.5px solid #e9edef;border-radius:9px;font-size:14px;outline:none;background:#fff;color:#111b21;font-family:inherit;transition:border .15s}.inp:focus{border-color:#25D366}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}@media(max-width:700px){.grid{grid-template-columns:1fr}}`}</style>
 
       <PublicNav active="/support" onLangChange={setLang} />
