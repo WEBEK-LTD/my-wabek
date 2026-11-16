@@ -18,7 +18,7 @@ import {
 } from '@/components/ui'
 import { ErrorState, InfoRow, Notice, SectionTitle, apiError, rich } from '@/components/settings/Shared'
 import { useT } from '@/lib/i18n-local'
-import { LANGUAGES } from '@/lib/i18n'
+
 import messages from '@/locales/dashboard/settings'
 
 // Labels are keys of locales/dashboard/settings.ts.
@@ -33,15 +33,8 @@ const TAB_IDS = TABS.map(t => t.id)
 // Old tab id kept so /dashboard/settings?tab=password still works.
 const TAB_ALIASES = { password: 'security' }
 
-// Language names are shown in their own language (autonyms).
-const LANG_NAME = Object.fromEntries(LANGUAGES.map(l => [l.code, l.name]))
-const LANG_OPTIONS = [
-  { value: 'ar', label: LANG_NAME.ar },
-  { value: 'en', label: LANG_NAME.en },
-  { value: 'fr', label: LANG_NAME.fr },
-  { value: 'tr', label: LANG_NAME.tr },
-  { value: 'es', label: 'Español' },
-]
+// Language names are shown in the current UI language (keys `lang_<code>`).
+const LANG_OPTIONS = ['ar', 'en', 'fr', 'tr', 'es']
 const TZ_OPTIONS = [
   { value: 'UTC', label: 'tz_utc' },
   { value: 'Asia/Riyadh', label: 'tz_riyadh' },
@@ -383,7 +376,7 @@ export default function SettingsPage() {
               <SectionTitle icon={LanguageIcon} title={t('langTzTitle')} subtitle={t('langTzSub')} />
               <form className="space-y-4" onSubmit={e => { e.preventDefault(); profileMut.mutate({ language: profile.language, timezone: profile.timezone }) }}>
                 <Field label={t('uiLanguage')}>
-                  <Select value={profile.language || 'en'} onChange={e => setProfile(p => ({ ...p, language: e.target.value }))} options={LANG_OPTIONS} />
+                  <Select value={profile.language || 'en'} onChange={e => setProfile(p => ({ ...p, language: e.target.value }))} options={LANG_OPTIONS.map(code => ({ value: code, label: t(`lang_${code}`) }))} />
                 </Field>
                 <Field label={t('timezone')} hint={t('timezoneHint')}>
                   <Select value={profile.timezone || 'UTC'} onChange={e => setProfile(p => ({ ...p, timezone: e.target.value }))} options={TZ_OPTIONS.map(o => ({ value: o.value, label: t(o.label) }))} />
