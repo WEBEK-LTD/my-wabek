@@ -161,3 +161,41 @@ export async function sendWAWebMedia(params: {
   }) as { messageId: string }
   return data
 }
+
+/**
+ * Keep the dashboard honest about QR numbers.
+ *
+ * Asks the Baileys server which sessions it actually holds and marks
+ * `wa_web` instances that WABEK still lists as "connected" — but that the
+ * server no longer has — as disconnected, so the owner sees "scan the QR
+ * again" instead of a green badge on a number whose sends all fail.
+ *
+ * Skipped while the Baileys server is (re)starting, so a deploy never causes
+ * false "disconnected" marks.
+ */
+export async function reconcileWAWebStatuses(): Promise<{ checked: number; markedDisconnected: number; skipped?: string }> {
+  if (!process.env.WA_WEB_SERVER_URL || !process.env.WA_WEB_SERVER_SECRET) return { checked: 0, markedDisconnected: 0, skipped: 'wa_web_not_configured' }
+  const info = await callWAServer('/instances') as {
+    restoreDone?: boolean; uptimeSeconds?: number
+    instances?: { id: string; connected: boolean; status: string }[]
+  }
+  // Older Baileys builds don't report restore state: don't guess.
+  if (info?.restoreDone !== true) return { checked: 0, markedDisconnected: 0, skipped: 'server_restoring_or_old_build' }
+  if ((info.uptimeSeconds ?? 0) < 180) return { checked: 0, markedDisconnected: 0, skipped: 'server_just_started' }
+
+  const live = new Set((info.instances || []).map(i => i.id))
+  const db = supabaseAdmin()
+  const { data: rows } = await db.from('whatsapp_instances')
+    .select('id')
+    .eq('instance_type', 'wa_web')
+    .eq('status', 'connected')
+  const missing = (rows || []).map(r => r.id as string).filter(id => !live.has(id))
+  if (missing.length) {
+    await db.from('whatsapp_instances')
+      .update({ status: 'disconnected', qr_code: null, updated_at: new Date().toISOString() })
+      .in('id', missing)
+      .eq('status', 'connected')
+    console.warn(`[wa-web] reconcile: ${missing.length} QR number(s) had no live session — marked disconnected`)
+  }
+  return { checked: rows?.length || 0, markedDisconnected: missing.length }
+}
