@@ -18,7 +18,9 @@ Prices and limits vary by plan; your current plan's details are on the **Billing
 | Monthly campaigns | Campaigns created since the start of the month | Creating a new campaign is refused with an upgrade message |
 | WhatsApp numbers | Number of connected numbers | Connecting a new number is blocked; existing numbers are not affected |
 | AI replies | AI assistant replies this month | Automatic replies stop until next month |
-| Team members, chatbot flows, quick replies, segments, links, sub-accounts | Per plan | Per plan |
+| Contacts | Contacts in your account | Creating or importing **new** contacts (dashboard, CSV, API) is refused with `403` `plan_limit`; contacts created by incoming messages are never blocked |
+| Sub-accounts | Sub-accounts you created | Creating another sub-account is refused with `403` `plan_limit` (a plan with `0` and without the Sub-Accounts feature has none) |
+| Team members, chatbot flows, quick replies, segments, links | Per plan | Per plan |
 
 > **Note:** A value of `-1` in a plan means unlimited. For AI replies specifically, `0` means the feature is not included in the plan.
 
@@ -28,7 +30,7 @@ Some pages only appear if your plan includes them:
 
 | Feature | Controls |
 |---|---|
-| API Access | The **API Keys** and **Integrations** pages |
+| API Access | The **API Keys** and **Integrations** pages, and every request to `/api/v1/*` and `/api/gateway/whatsapp` made with an API key (`403` `plan_no_api` otherwise) |
 | Chatbot | The chatbot builder |
 | Automation | The **Flows** page |
 | Analytics | The analytics page |

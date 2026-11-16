@@ -12,7 +12,7 @@ slug: api/whmcs-webhook
 POST /api/v1/whmcs-webhook
 ```
 
-> **Warning:** This endpoint exists for compatibility with older installs. Its message texts are fixed and cannot be customized. For new installs, use the [WHMCS addon](/docs/integrations/whmcs).
+> **Warning:** This endpoint exists for compatibility with older installs. Its message texts are fixed (Arabic or English, see `lang`) and cannot be customized. For new installs, use the [WHMCS addon](/docs/integrations/whmcs).
 
 It receives event data from WHMCS and sends a WhatsApp notification to the client from the default connected number on your account.
 
@@ -38,6 +38,7 @@ It receives event data from WHMCS and sends a WhatsApp notification to the clien
 | `ticketid` | string | For `TicketOpen` | Ticket number |
 | `subject` | string | No | Ticket subject |
 | `ticket_url` | string | No | Ticket link |
+| `lang` | string | No | Message language: `ar` (default) or `en` (`english`, `en_US` … are accepted) |
 
 Text values are truncated to 500 characters.
 
@@ -46,18 +47,20 @@ Text values are truncated to 500 characters.
 `200 OK`
 
 ```json
-{ "success": true }
+{ "success": true, "sent": true, "message_id": "wamid.HBgM..." }
 ```
 
-> **Note:** `success: true` is also returned when no notification is sent, for example when the phone number is missing or `action` is not supported. Do not treat this response as delivery confirmation.
+When there is nothing to send (no phone number, or an unsupported `action`) the response is `200` with `"sent": false` and a `reason`. A failed send is reported as an error (below), not as success.
 
 ## Errors
 
 | Status | Response |
 |---|---|
 | `401` | `{"error": "Invalid API key"}` |
+| `403` | Recipient opted out / blocked, plan limit (`code`), or `plan_no_api` / `permission_denied` |
+| `422` | `{"success": false, "sent": false, "code": "outside_window", ...}` — the client is outside the 24-hour window |
 | `429` | `{"error": "Too many requests", ...}` |
-| `502` | `{"success": false, "error": "Failed to process webhook"}` |
+| `502` | `{"success": false, "sent": false, "code": "send_failed" \| "no_instance", "error": "..."}` |
 
 ## Examples
 

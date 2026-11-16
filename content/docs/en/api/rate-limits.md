@@ -12,25 +12,30 @@ slug: api/rate-limits
 
 | Scope | Limit |
 |---|---|
-| Per IP address, per path | **100 requests** per **60 seconds** |
+| Per API key (all `/api/v1/*` actions together) | **100 requests** per **60 seconds** |
+| Per IP address, per path, before authentication | **300 requests** per **60 seconds** |
 
-- Each path is counted separately: requests to `/api/v1/send` do not count against `/api/v1/contacts`.
-- The limit is applied **before** authentication, so requests rejected with 401 count too.
+- The per-key limit counts every action of that key together. Two keys of the same account have separate limits; a session (dashboard) call is counted per account.
+- The per-IP ceiling is applied **before** authentication, so requests rejected with 401 count too.
+- Limits are shared across all WABEK servers.
 - Treat 100 as an upper bound and design your integration to stay comfortably below it.
 
-When you exceed the limit:
+When you exceed a limit:
 
-```json
-{ "error": "Too many requests", "retryAfter": 42 }
+```
+HTTP/1.1 429 Too Many Requests
+Retry-After: 60
 ```
 
-HTTP status: `429`. `retryAfter` is in seconds.
+```json
+{ "error": "Too many requests", "code": "rate_limited", "retryAfter": 60 }
+```
 
-> **Note:** Do not rely on a `Retry-After` header being present; use the `retryAfter` field in the response body.
+`Retry-After` (header) and `retryAfter` (body) are in seconds and always present on `429`.
 
 ## Retrying
 
-1. On `429`, wait for `retryAfter` seconds, then retry.
+1. On `429`, wait for the `Retry-After` header (or `retryAfter`) seconds, then retry.
 2. On `502` or `500`, retry with increasing delays (for example 2, then 4, then 8 seconds) and a maximum number of attempts.
 3. **Do not retry** on `400`, `401`, `403`, `404` or `422`; fix the request first.
 
@@ -48,7 +53,8 @@ async function sendWithRetry(payload, maxAttempts = 4) {
     const data = await res.json().catch(() => ({}));
     if (res.ok) return data;
     if (res.status === 429) {
-      await new Promise(r => setTimeout(r, (data.retryAfter || 60) * 1000));
+      const wait = Number(res.headers.get("Retry-After")) || data.retryAfter || 60;
+      await new Promise(r => setTimeout(r, wait * 1000));
       continue;
     }
     if (res.status >= 500 && attempt < maxAttempts) {
@@ -63,7 +69,7 @@ async function sendWithRetry(payload, maxAttempts = 4) {
 
 ## Other endpoints
 
-No separate request limit currently applies to `/api/gateway/whatsapp`, `/api/webhooks/trigger` or `/api/webhooks/wix`. The limits below still apply to every endpoint.
+`/api/gateway/whatsapp` has the same limits as `/api/v1/*` (100 per minute per key, counted separately from `/api/v1`). No separate request limit currently applies to `/api/webhooks/trigger` or `/api/webhooks/wix`. The limits below still apply to every endpoint.
 
 ## Limits that affect sending
 

@@ -12,7 +12,7 @@ slug: api/whmcs-webhook
 POST /api/v1/whmcs-webhook
 ```
 
-> **تحذير:** هذه النقطة موجودة للتوافق مع التثبيتات القديمة. نصوص الرسائل فيها ثابتة ولا يمكن تخصيصها. للتثبيتات الجديدة استخدم [وحدة WHMCS](/docs/integrations/whmcs).
+> **تحذير:** هذه النقطة موجودة للتوافق مع التثبيتات القديمة. نصوص الرسائل فيها ثابتة (بالعربية أو الإنجليزية، راجع `lang`) ولا يمكن تخصيصها. للتثبيتات الجديدة استخدم [وحدة WHMCS](/docs/integrations/whmcs).
 
 تستقبل بيانات حدث من WHMCS، وترسل إشعار واتساب إلى العميل من الرقم الافتراضي المتصل في حسابك.
 
@@ -38,6 +38,7 @@ POST /api/v1/whmcs-webhook
 | `ticketid` | string | مع `TicketOpen` | رقم التذكرة |
 | `subject` | string | لا | موضوع التذكرة |
 | `ticket_url` | string | لا | رابط التذكرة |
+| `lang` | string | لا | لغة الرسالة: `ar` (الافتراضي) أو `en` (تُقبل `english` و`en_US` …) |
 
 تُقص القيم النصية إلى 500 حرف.
 
@@ -46,18 +47,20 @@ POST /api/v1/whmcs-webhook
 `200 OK`
 
 ```json
-{ "success": true }
+{ "success": true, "sent": true, "message_id": "wamid.HBgM..." }
 ```
 
-> **ملاحظة:** تُعاد `success: true` أيضًا عندما لا يُرسل أي إشعار، مثل غياب رقم الهاتف أو قيمة `action` غير مدعومة. لا تعتمد على هذه الاستجابة كتأكيد للتسليم.
+عندما لا يوجد ما يُرسل (لا رقم هاتف، أو قيمة `action` غير مدعومة) تكون الاستجابة `200` مع `"sent": false` وسبب في `reason`. أما فشل الإرسال فيُعاد خطأً (أدناه) لا نجاحًا.
 
 ## الأخطاء
 
 | الحالة | الاستجابة |
 |---|---|
 | `401` | `{"error": "Invalid API key"}` |
+| `403` | المستلم ألغى اشتراكه / محظور، أو حد الباقة (`code`)، أو `plan_no_api` / `permission_denied` |
+| `422` | `{"success": false, "sent": false, "code": "outside_window", ...}` — العميل خارج نافذة الـ 24 ساعة |
 | `429` | `{"error": "Too many requests", ...}` |
-| `502` | `{"success": false, "error": "Failed to process webhook"}` |
+| `502` | `{"success": false, "sent": false, "code": "send_failed" \| "no_instance", "error": "..."}` |
 
 ## أمثلة
 

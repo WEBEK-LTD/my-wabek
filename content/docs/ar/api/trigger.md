@@ -29,7 +29,9 @@ POST /api/webhooks/trigger
 | `message` | string | نعم | نص الرسالة |
 | `instance_id` | string | لا | معرّف الرقم المرسِل. الافتراضي: أول رقم متصل |
 
-> **تحذير:** على أرقام Cloud API، إذا كان المستلم خارج نافذة الـ 24 ساعة، يُرسل قالب الإشعار الافتراضي للمنصة بدل نصك. راجع [نافذة الـ 24 ساعة](/docs/getting-started/messaging-window).
+> **تحذير:** على أرقام Cloud API، إذا كان المستلم خارج نافذة الـ 24 ساعة فلا يُرسل شيء، ويُعاد `422` بالرمز `outside_window` (لا ترسل WABEK قالبًا مختلفًا بدل نصك أبدًا). استخدم [إرسال رسالة](/docs/api/send-message) مع `template` لهؤلاء المستلمين. راجع [نافذة الـ 24 ساعة](/docs/getting-started/messaging-window).
+
+يحتاج المفتاح صلاحية `send` (وإلا `403` بالرمز `permission_denied`).
 
 ## الاستجابة
 

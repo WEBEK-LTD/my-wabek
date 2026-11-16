@@ -14,6 +14,8 @@ POST /api/v1/send
 
 يرسل رسالة من أحد أرقامك. تختار WABEK طريقة الإرسال تلقائيًا حسب نوع الرقم ونافذة الـ 24 ساعة.
 
+يتطلب باقة تشمل الوصول إلى API (وإلا `403` برمز `plan_no_api`)، وصلاحية `send` للمفاتيح ذات الصلاحيات المقيّدة (وإلا `403` برمز `permission_denied`).
+
 ## الترويسات
 
 | الترويسة | القيمة |
@@ -29,7 +31,8 @@ POST /api/v1/send
 | `message` | string | نعم | نص الرسالة. |
 | `instance_id` | string | لا | معرّف الرقم المرسِل. إن لم يُحدَّد يُستخدم أقدم رقم متصل في حسابك. |
 | `template` | string | لا | اسم قالب معتمد يُستخدم إذا كان المستلم خارج نافذة الـ 24 ساعة (Cloud API). |
-| `template_params` | object | لا | معاملات القالب المسمّاة، مثل `{"customer_name": "Sara"}`. تُستخدم مع `template`. |
+| `template_params` | object أو array | لا | معاملات نص القالب، تُستخدم مع `template`: كائن للمعاملات المسمّاة (`{"customer_name": "Sara"}`) أو مصفوفة للمعاملات المرقّمة (`["Sara", "1042"]` ← `{{1}}` و`{{2}}`). |
+| `template_language` | string | لا | رمز لغة القالب المعتمدة كما يظهر في WhatsApp Manager تمامًا (مثل `ar` أو `en` أو `en_US`). |
 | `customer_name` | string | لا | اسم العميل للقالب الافتراضي خارج النافذة. الافتراضي `Customer`. |
 | `code` | string أو number | لا | رمز تحقق من 4 إلى 8 أرقام. وجوده يجعل الرسالة تُرسل عبر قالب Authentication. |
 | `type` | string | لا | القيمة `otp` تعني أن `message` تحتوي رمز تحقق يُستخرج منها. |
@@ -47,7 +50,7 @@ POST /api/v1/send
 | Cloud API | خارج النافذة مع `template` | يُرسل القالب المحدد بمعاملات `template_params` |
 | Cloud API | خارج النافذة بلا `template` | يُرسل قالب التسويق الافتراضي للمنصة، مع اسم العميل في `customer_name` ونص `message` في `offer_details` |
 
-تُجرّب القوالب باللغتين `en` ثم `en_US`. راجع [نافذة الـ 24 ساعة والقوالب](/docs/getting-started/messaging-window).
+تُجرَّب القوالب أولًا باللغة `template_language` (إن حُدِّدت)، ثم `ar` ثم `en` ثم `en_US`، وتُتخطّى اللغة التي لا يوجد بها القالب (خطأ Meta `132001`). راجع [نافذة الـ 24 ساعة والقوالب](/docs/getting-started/messaging-window).
 
 > **تحذير:** قبل كل إرسال تتحقق WABEK من حد الرسائل الشهري ومن أن المستلم غير محظور ولم يُلغِ اشتراكه. إذا مُنع الإرسال تُعاد الحالة `403` ولا تُرسل الرسالة.
 
@@ -75,10 +78,10 @@ POST /api/v1/send
 |---|---|---|
 | `400` | `{"error": "to and message required"}` | حقل ناقص |
 | `401` | `{"error": "Invalid API key"}` | مفتاح غير صالح |
-| `403` | `{"error": "Recipient has opted out", "code": "opted_out"}` | حد الباقة، أو إلغاء اشتراك، أو حظر |
+| `403` | `{"error": "Recipient has opted out", "code": "opted_out"}` | حد الباقة، أو إلغاء اشتراك، أو حظر؛ وأيضًا `plan_no_api` / `permission_denied` |
 | `404` | `{"error": "No connected WhatsApp instance"}` | لا يوجد رقم في الحساب |
 | `422` | انظر أدناه | خارج النافذة وفشلت كل محاولات القالب |
-| `429` | `{"error": "Too many requests", "retryAfter": 42}` | تجاوزت حد الطلبات |
+| `429` | `{"error": "Too many requests", "code": "rate_limited", "retryAfter": 60}` مع ترويسة `Retry-After` | تجاوزت حد الطلبات |
 | `502` | `{"error": "Failed to send message", "detail": "..."}` | رفض مزوّد واتساب الرسالة |
 
 مثال `422`:
@@ -184,7 +187,7 @@ else:
 
 ### مع قالب احتياطي خارج النافذة
 
-إذا كان العميل داخل النافذة يُرسل `message` نصًا، وإلا يُرسل القالب `order_update`. يجب أن يكون القالب معتمدًا على حساب واتساب للأعمال المرتبط بالرقم، وأن تطابق مفاتيح `template_params` أسماء المتغيرات في نصّه، وأن تكون لغته `en` أو `en_US`.
+إذا كان العميل داخل النافذة يُرسل `message` نصًا، وإلا يُرسل القالب `order_update`. يجب أن يكون القالب معتمدًا على حساب واتساب للأعمال المرتبط بالرقم، وأن تطابق مفاتيح `template_params` أسماء المتغيرات في نصّه، وأن تكون `template_language` لغة القالب المعتمدة (وإن لم تُحدَّد تُجرَّب `ar` ثم `en` ثم `en_US`).
 
 ```bash
 curl -X POST https://waabek.com/api/v1/send \
@@ -195,6 +198,7 @@ curl -X POST https://waabek.com/api/v1/send \
     "message": "Hi Sara, your order #1042 has shipped.",
     "instance_id": "3f1c2a7e-0000-4000-8000-000000000000",
     "template": "order_update",
+    "template_language": "ar",
     "template_params": { "customer_name": "Sara", "order_id": "1042" }
   }'
 ```

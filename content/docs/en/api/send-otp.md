@@ -57,7 +57,7 @@ WABEK generates a random **6-digit** code, stores it hashed, and sends it to the
 }
 ```
 
-> **Note:** The response field is named `otpId`, while the verify endpoint expects the field `otp_id`.
+> **Note:** The response field is named `otpId`; the verify endpoint accepts it as `otp_id` or `otpId`.
 
 ## Errors
 
@@ -65,7 +65,8 @@ WABEK generates a random **6-digit** code, stores it hashed, and sends it to the
 |---|---|---|
 | `400` | `{"error": "phone required"}` | Missing number |
 | `401` | `{"error": "Invalid API key"}` | Invalid key |
-| `429` | `{"error": "Too many requests", ...}` | Request limit exceeded |
+| `403` | `{"success": false, "error": "Recipient has opted out", "code": "opted_out"}` | The recipient opted out or is blocked in your account (also `plan_no_api` / `permission_denied`) |
+| `429` | `{"error": "Too many requests", ...}` + `Retry-After` | Request limit exceeded |
 | `500` | Internal error | No connected number, or every Authentication template attempt failed |
 
 ## Examples

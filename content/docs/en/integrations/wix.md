@@ -78,4 +78,6 @@ Request and response details are in the [Wix Automations reference](/docs/api/wi
 
 ## The 24-hour window
 
-On **Cloud API** numbers, if the customer is outside the 24-hour window, they may receive the platform's default notification template instead of the event text. See [24-hour window](/docs/getting-started/messaging-window).
+On **Cloud API** numbers, if the customer is outside the 24-hour window, the event text cannot be delivered and is not sent (WABEK does not substitute a generic template). See [24-hour window](/docs/getting-started/messaging-window).
+
+Custom texts saved under **Dashboard → Wix → Messages** apply to all your linked stores; texts saved earlier per store in the Wix panel are still used for events you did not customise in the dashboard.

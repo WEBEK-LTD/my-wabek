@@ -29,7 +29,9 @@ A send endpoint for automation tools such as Zapier and Make. After a successful
 | `message` | string | Yes | Message text |
 | `instance_id` | string | No | ID of the sending number. Default: the first connected number |
 
-> **Warning:** On Cloud API numbers, if the recipient is outside the 24-hour window, the platform's default notification template is sent instead of your text. See [24-hour window](/docs/getting-started/messaging-window).
+> **Warning:** On Cloud API numbers, if the recipient is outside the 24-hour window, nothing is sent and the request returns `422` with code `outside_window` (WABEK never sends a different template in place of your text). Use [Send a message](/docs/api/send-message) with `template` for those recipients. See [24-hour window](/docs/getting-started/messaging-window).
+
+The key needs the `send` permission (otherwise `403` `permission_denied`).
 
 ## Response
 

@@ -67,6 +67,8 @@ You can register an HTTPS URL of yours to receive a notification from WABEK when
 2. Enter the **Webhook URL** (it must be a public `https://` URL).
 3. Choose the event, add an optional label, and save.
 
-> **Warning:** Currently only the **`message_sent`** event is delivered, when a message is sent successfully through `POST /api/webhooks/trigger`. The other events in the list can be registered but are not delivered in this release.
+4. Copy the **signing secret** shown once after saving, and verify the `X-WABEK-Signature` header with it in your receiver.
+
+Delivered events: `message_received`, `message_sent`, `message_status`, `contact_created`, `campaign_completed`, `opt_out`, `opt_in`, `chatbot_triggered` and `link_clicked`. Use **🧪 Test** to send a signed sample, and **🔑 Secret** to rotate the secret.
 
 The payload format and how to verify it are in the [outgoing webhooks reference](/docs/api/outgoing-webhooks).

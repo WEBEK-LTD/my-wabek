@@ -22,7 +22,7 @@ The chatbot builder lets you draw a conversation flow from connected nodes. When
 |---|---|
 | 🔑 Keyword | When the customer's message contains one of the keywords (comma-separated, case-insensitive) |
 | 💬 Any Message | On any message that does not match a keyword flow |
-| 👋 First Message | Currently treated the same as Any Message |
+| 👋 First Message | Only the contact's first ever message to that number (later messages do not start it) |
 
 4. Choose the **number**, or leave **All instances** to run the flow on all your numbers.
 5. Add nodes, connect them, then save and activate the flow.

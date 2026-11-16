@@ -22,7 +22,7 @@ The **Flows** page is for simple automatic replies: "if a message containing X a
 |---|---|
 | Keyword Match | When the message contains one of the keywords (for example `hello, hi, start, help`) |
 | Any Message Received | On every inbound message |
-| Opt-in | Reserved for an opt-in event; it does not currently run on inbound messages |
+| Opt-in | Runs when a contact subscribes again: the `START` / `اشتراك` keyword, **Re-subscribe** on the contact page, or `opted_out: false` sent through the API or a plugin. It does not run on other messages |
 
 4. Write the **auto-reply message**.
 5. Save. You can turn the rule on or off at any time with the toggle next to it.

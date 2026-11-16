@@ -18,10 +18,30 @@ slug: security/api-keys
 | Usage tracking | Last-used date is shown | — |
 
 - Keys are compared in constant time.
+- API access (`/api/v1/*`, `/api/gateway/whatsapp`) requires a plan that includes it; otherwise requests get `403` with code `plan_no_api`.
 - Only the account owner can manage and view keys; team members cannot.
 - Each sub-account has its own keys, and one account's key never reaches another account's data.
 
 > **Note:** Because the default key can be revealed, we recommend **named keys** for integrations, keeping the default key for testing only.
+
+## Permissions
+
+Each named key carries a list of permissions. New keys get all of them; an existing key with no permission list has full access.
+
+| Permission | Allows |
+|---|---|
+| `send` | `POST /api/v1/send`, `GET /api/v1/message-status`, `GET /api/v1/instances`, `POST /api/v1/whmcs-webhook`, `/api/gateway/whatsapp`, `/api/webhooks/trigger` |
+| `contacts:read` | `GET /api/v1/contacts` |
+| `contacts:write` | `POST /api/v1/contacts`, `POST /api/v1/contacts-opt-out` (includes `contacts:read`) |
+| `otp` | `POST /api/v1/otp`, `POST /api/v1/otp-verify` |
+
+The older value `contacts` grants both `contacts:read` and `contacts:write`. A request whose key lacks the permission gets `403`:
+
+```json
+{ "error": "This API key does not have the \"send\" permission", "code": "permission_denied", "required": "send" }
+```
+
+Give each integration only what it needs — for example a login plugin only `otp`.
 
 ## Best practices
 
@@ -52,7 +72,7 @@ Rotate keys immediately if someone with access leaves the team, or if you suspec
 ### Protect your own receiving endpoints
 
 - Always use HTTPS.
-- Secure [outgoing webhook](/docs/api/outgoing-webhooks) URLs with a secret token in the URL.
+- Verify the `X-WABEK-Signature` header of [outgoing webhooks](/docs/api/outgoing-webhooks) with the webhook's secret.
 - Rate-limit verification-code requests on your server, per number and per user.
 
 ## Your WABEK account

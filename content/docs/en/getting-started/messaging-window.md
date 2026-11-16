@@ -32,20 +32,20 @@ Customer sends a message ──► [ 24 hours: free text allowed ] ──► aft
 | Inbox | Your text is sent | Sending is refused with a message saying the customer is outside the 24-hour window and must message you first |
 | Campaigns | Always sent as the template you choose | Same |
 | `POST /api/v1/send` | Your text is sent | Tries to send a template (see below); if that fails, returns `422` |
-| `/api/gateway/whatsapp`, `/api/webhooks/trigger` and Wix | Your text is sent | The platform's default notification template is sent instead of your text |
+| `/api/gateway/whatsapp`, `/api/webhooks/trigger`, Wix, WHMCS webhook, automations | Your text is sent | Nothing is sent: `outside_window` (Gateway sends a code it finds in the text through your Authentication template) |
 | Verification codes (OTP) | Through an Authentication template | Through an Authentication template |
 
-> **Warning:** On `/api/gateway/whatsapp`, `/api/webhooks/trigger` and the Wix integration, a customer outside the window may receive a generic notification template instead of your message text. For important messages outside the window, use `POST /api/v1/send` with the `template` field.
+> **Warning:** WABEK never sends a generic template in place of your text. On `/api/gateway/whatsapp`, `/api/webhooks/trigger`, the Wix and WHMCS webhooks and automations, a customer outside the window does not receive the message and the request reports `outside_window`. For important messages outside the window, use `POST /api/v1/send` with the `template` field.
 
 ## Sending a template through the API
 
 With `POST /api/v1/send`, if the recipient is outside the window:
 
-1. If you send `template` (the template name) and `template_params` (an object of named parameters), WABEK sends that template with your parameters.
+1. If you send `template` (the template name) and `template_params` (an object of named parameters, or an array for `{{1}}`, `{{2}}` …), WABEK sends that template with your parameters.
 2. If you do not send `template`, WABEK tries the platform's default marketing template, putting your `message` text into the `offer_details` parameter and the customer name into `customer_name`.
 3. If `message` contains a numeric code of 4 to 8 digits, it is treated as a verification code and sent through an Authentication template.
 
-Template languages `en` and then `en_US` are tried. See [Send a message](/docs/api/send-message).
+The language in `template_language` is tried first, then `ar`, `en` and `en_US`. See [Send a message](/docs/api/send-message).
 
 ## Templates: what you need to know
 
@@ -56,7 +56,7 @@ Template languages `en` and then `en_US` are tried. See [Send a message](/docs/a
 
 ### The verification-code template
 
-To send OTP codes through the Cloud API you need an approved **Authentication** template on your account. WABEK looks for the template configured on the platform, then for the common names `wabek_otp`, `digits`, `otp_verification` and `authentication`, in the languages `en`, `en_US` and `en_GB`.
+To send OTP codes through the Cloud API you need an approved **Authentication** template on your account. WABEK looks for the template configured on the platform, then for the common names `wabek_otp`, `digits`, `otp_verification` and `authentication`, in the languages `ar`, `en`, `en_US` and `en_GB`.
 
 > **Note:** If you have no approved Authentication template under one of these names, verification codes will not reach customers outside the window. Contact support to find out the template name configured on the platform.
 

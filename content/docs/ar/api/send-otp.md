@@ -57,7 +57,7 @@ POST /api/v1/otp
 }
 ```
 
-> **ملاحظة:** اسم الحقل في الاستجابة `otpId`، بينما تطلب نقطة التحقق الحقل `otp_id`.
+> **ملاحظة:** اسم الحقل في الاستجابة `otpId`، وتقبله نقطة التحقق باسم `otp_id` أو `otpId`.
 
 ## الأخطاء
 
@@ -65,7 +65,8 @@ POST /api/v1/otp
 |---|---|---|
 | `400` | `{"error": "phone required"}` | الرقم مفقود |
 | `401` | `{"error": "Invalid API key"}` | مفتاح غير صالح |
-| `429` | `{"error": "Too many requests", ...}` | تجاوزت حد الطلبات |
+| `403` | `{"success": false, "error": "Recipient has opted out", "code": "opted_out"}` | المستلم ألغى اشتراكه أو محظور في حسابك (وأيضًا `plan_no_api` / `permission_denied`) |
+| `429` | `{"error": "Too many requests", ...}` مع `Retry-After` | تجاوزت حد الطلبات |
 | `500` | خطأ داخلي | لا يوجد رقم متصل، أو فشلت كل محاولات قالب Authentication |
 
 ## أمثلة

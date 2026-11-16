@@ -27,8 +27,8 @@ POST /api/v1/otp-verify
 
 | الحقل | النوع | إلزامي | الوصف |
 |---|---|---|---|
-| `otp_id` | string | نعم | قيمة `otpId` من استجابة الإرسال |
-| `otp` | string | نعم | الرمز الذي أدخله المستخدم |
+| `otp_id` | string | نعم | قيمة `otpId` من استجابة الإرسال. يُقبل `otpId` بديلًا |
+| `otp` | string | نعم | الرمز الذي أدخله المستخدم. يُقبل `code` بديلًا |
 
 لا يمكن التحقق إلا من رموز صادرة لحسابك نفسه.
 
@@ -64,7 +64,8 @@ POST /api/v1/otp-verify
 |---|---|
 | `400` | `otp_id and otp required` |
 | `401` | `Invalid API key` |
-| `429` | `Too many requests` |
+| `403` | `plan_no_api` / `permission_denied` (يحتاج المفتاح صلاحية `otp`) |
+| `429` | `Too many requests` (مع ترويسة `Retry-After`) |
 
 ## أمثلة
 

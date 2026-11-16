@@ -27,8 +27,8 @@ Checks a code the user entered against the `otpId` you received from [Send a ver
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `otp_id` | string | Yes | The `otpId` value from the send response |
-| `otp` | string | Yes | The code the user entered |
+| `otp_id` | string | Yes | The `otpId` value from the send response. `otpId` is accepted as an alias |
+| `otp` | string | Yes | The code the user entered. `code` is accepted as an alias |
 
 Only codes issued for your own account can be verified.
 
@@ -64,7 +64,8 @@ After one successful verification, the code is used and cannot be verified again
 |---|---|
 | `400` | `otp_id and otp required` |
 | `401` | `Invalid API key` |
-| `429` | `Too many requests` |
+| `403` | `plan_no_api` / `permission_denied` (the key needs the `otp` permission) |
+| `429` | `Too many requests` (with a `Retry-After` header) |
 
 ## Examples
 

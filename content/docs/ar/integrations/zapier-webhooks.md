@@ -67,6 +67,8 @@ Content-Type: application/json
 2. أدخل **Webhook URL** (يجب أن يكون رابط `https://` عامًا).
 3. اختر الحدث وأدخل اسمًا اختياريًا، ثم احفظ.
 
-> **تحذير:** حاليًا يُرسَل الحدث **`message_sent`** فقط، وذلك عند إرسال رسالة بنجاح عبر `POST /api/webhooks/trigger`. الأحداث الأخرى الظاهرة في القائمة يمكن تسجيلها لكنها لا تُرسل في هذا الإصدار.
+4. انسخ **سرّ التوقيع** الذي يظهر مرة واحدة بعد الحفظ، وتحقّق به من ترويسة `X-WABEK-Signature` في نقطة الاستقبال.
+
+الأحداث المُرسلة: `message_received` و`message_sent` و`message_status` و`contact_created` و`campaign_completed` و`opt_out` و`opt_in` و`chatbot_triggered` و`link_clicked`. استخدم **🧪 Test** لإرسال نموذج موقّع، و**🔑 Secret** لتوليد سرّ جديد.
 
 صيغة الإشعار والتحقق منه في [مرجع Webhooks الصادرة](/docs/api/outgoing-webhooks).

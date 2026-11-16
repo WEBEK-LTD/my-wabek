@@ -12,25 +12,30 @@ slug: api/rate-limits
 
 | النطاق | الحد |
 |---|---|
-| لكل عنوان IP ولكل مسار | **100 طلب** خلال **60 ثانية** |
+| لكل مفتاح API (كل إجراءات `/api/v1/*` معًا) | **100 طلب** خلال **60 ثانية** |
+| لكل عنوان IP ولكل مسار، قبل المصادقة | **300 طلب** خلال **60 ثانية** |
 
-- يُحسب كل مسار على حدة: الطلبات إلى `/api/v1/send` لا تُحتسب ضمن `/api/v1/contacts`.
-- يُطبّق الحد **قبل** المصادقة، فالطلبات المرفوضة بخطأ 401 تُحتسب أيضًا.
+- يجمع حد المفتاح كل إجراءات ذلك المفتاح معًا. لكل مفتاحين في الحساب نفسه حدّان منفصلان، وتُحتسب طلبات الجلسة (لوحة التحكم) لكل حساب.
+- يُطبّق سقف عنوان IP **قبل** المصادقة، فالطلبات المرفوضة بخطأ 401 تُحتسب أيضًا.
+- الحدود مشتركة بين كل خوادم WABEK.
 - اعتبر الرقم 100 حدًا أعلى، وصمّم تكاملك ليبقى دونه بهامش مريح.
 
-عند تجاوز الحد:
+عند تجاوز حد:
 
-```json
-{ "error": "Too many requests", "retryAfter": 42 }
+```
+HTTP/1.1 429 Too Many Requests
+Retry-After: 60
 ```
 
-الحالة HTTP: `429`. القيمة `retryAfter` بالثواني.
+```json
+{ "error": "Too many requests", "code": "rate_limited", "retryAfter": 60 }
+```
 
-> **ملاحظة:** لا تعتمد على وجود ترويسة `Retry-After`؛ استخدم الحقل `retryAfter` في جسم الاستجابة.
+الترويسة `Retry-After` والحقل `retryAfter` بالثواني، وهما موجودان دائمًا مع `429`.
 
 ## إعادة المحاولة
 
-1. عند `429` انتظر المدة في `retryAfter` ثم أعد المحاولة.
+1. عند `429` انتظر عدد الثواني في ترويسة `Retry-After` (أو `retryAfter`) ثم أعد المحاولة.
 2. عند `502` أو `500` أعد المحاولة بتأخير متزايد (مثل 2 ثم 4 ثم 8 ثوانٍ) مع حد أقصى لعدد المحاولات.
 3. **لا تُعِد المحاولة** عند `400` أو `401` أو `403` أو `404` أو `422`؛ أصلح الطلب أولًا.
 
@@ -48,7 +53,8 @@ async function sendWithRetry(payload, maxAttempts = 4) {
     const data = await res.json().catch(() => ({}));
     if (res.ok) return data;
     if (res.status === 429) {
-      await new Promise(r => setTimeout(r, (data.retryAfter || 60) * 1000));
+      const wait = Number(res.headers.get("Retry-After")) || data.retryAfter || 60;
+      await new Promise(r => setTimeout(r, wait * 1000));
       continue;
     }
     if (res.status >= 500 && attempt < maxAttempts) {
@@ -63,7 +69,7 @@ async function sendWithRetry(payload, maxAttempts = 4) {
 
 ## النقاط الأخرى
 
-لا يُطبّق حد طلبات منفصل حاليًا على `/api/gateway/whatsapp` و`/api/webhooks/trigger` و`/api/webhooks/wix`. لكن تبقى الحدود التالية سارية على كل النقاط.
+لـ `/api/gateway/whatsapp` الحدود نفسها التي لـ `/api/v1/*` (100 طلب في الدقيقة لكل مفتاح، تُحتسب منفصلة عن `/api/v1`). ولا يُطبّق حد طلبات منفصل حاليًا على `/api/webhooks/trigger` و`/api/webhooks/wix`. لكن تبقى الحدود التالية سارية على كل النقاط.
 
 ## حدود تؤثر في الإرسال
 
