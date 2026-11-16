@@ -93,7 +93,10 @@ function buildMessage(blocks) {
 }
 
 function WhatsAppPreview({ message, contactName = 'John' }) {
-  const preview = message
+  // Escape first: the preview is rendered as HTML (only the <br/> and
+  // formatting markup added below are real tags).
+  const preview = String(message || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
     .replace(/\{\{name\}\}/g, contactName)
     .replace(/\{\{phone\}\}/g, '+1234567890')
     .replace(/\{\{company\}\}/g, 'My Company')

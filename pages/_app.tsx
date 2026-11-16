@@ -6,6 +6,10 @@ export const LangContext = createContext<{lang:string;setLang:(l:string)=>void}>
 
 const LOGO = 'https://res.cloudinary.com/dkl7ntpgw/image/upload/f_auto,q_auto/%D8%AA%D8%B5%D9%85%D9%8A%D9%85_%D8%A8%D8%AF%D9%88%D9%86_%D8%B9%D9%86%D9%88%D8%A7%D9%86_1_kejdrs'
 
+// Admin-configured values that end up inside <script> tags.
+const safeGaId = (v: unknown) => (typeof v === 'string' && /^[A-Za-z0-9-]{1,40}$/.test(v) ? v : '')
+const safeJsonLd = (v: unknown) => (typeof v === 'string' ? v.replace(/</g, '\\u003c') : '')
+
 function SeoHead() {
   const [seo, setSeo] = useState<any>({})
   const [brand, setBrand] = useState<any>({})
@@ -36,13 +40,13 @@ function SeoHead() {
       <link rel="icon" href={favicon} />
       <link rel="shortcut icon" href={favicon} />
       <link rel="apple-touch-icon" href={favicon} />
-      {seo.ga_id && <script async src={"https://www.googletagmanager.com/gtag/js?id=" + seo.ga_id} />}
-      {seo.ga_id && <script dangerouslySetInnerHTML={{ __html: "window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','" + seo.ga_id + "')" }} />}
+      {safeGaId(seo.ga_id) && <script async src={"https://www.googletagmanager.com/gtag/js?id=" + safeGaId(seo.ga_id)} />}
+      {safeGaId(seo.ga_id) && <script dangerouslySetInnerHTML={{ __html: "window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','" + safeGaId(seo.ga_id) + "')" }} />}
       {webmaster.google_site_verification && <meta name="google-site-verification" content={webmaster.google_site_verification} />}
       {webmaster.bing_site_verification && <meta name="msvalidate.01" content={webmaster.bing_site_verification} />}
       <meta name="p:domain_verify" content="67f0db54e40ee97b1eeb7675f199e477" />
-      {seo.schema_organization && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: seo.schema_organization }} />}
-      {seo.schema_website && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: seo.schema_website }} />}
+      {seo.schema_organization && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(seo.schema_organization) }} />}
+      {seo.schema_website && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(seo.schema_website) }} />}
     </Head>
   )
 }
