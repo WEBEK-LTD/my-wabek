@@ -2,13 +2,13 @@ import Head from 'next/head'
 import { useEffect, useState, createContext } from 'react'
 import Router, { useRouter } from 'next/router'
 import { BRAND_ASSETS, brandOverride } from '@/hooks/useWhiteLabel'
-import { DEFAULT_LANG, getStoredLang, setStoredLang, isRtlLang, routeLang } from '@/lib/i18n'
+import { DEFAULT_LANG, LANG_PENDING_ATTR, SHELL_ROUTE_RE, getStoredLang, setStoredLang, isRtlLang, routeLang } from '@/lib/i18n'
 import { AppToaster } from '@/components/ui/Toast'
 
 export const LangContext = createContext<{lang:string;setLang:(l:string)=>void}>({lang:DEFAULT_LANG,setLang:()=>{}})
 
 /** Routes whose shell manages <html lang/dir> itself (profile language). */
-const SHELL_ROUTES = /^\/(dashboard|admin)(\/|$)/
+const SHELL_ROUTES = SHELL_ROUTE_RE
 
 // Admin-configured values that end up inside <script> tags.
 const safeGaId = (v: unknown) => (typeof v === 'string' && /^[A-Za-z0-9-]{1,40}$/.test(v) ? v : '')
@@ -102,6 +102,20 @@ export default function App({ Component, pageProps }: AppProps) {
     document.documentElement.lang = l
     document.documentElement.dir = isRtlLang(l) ? 'rtl' : 'ltr'
   }, [globalLang])
+
+  // The server HTML is Arabic; LANG_INIT_SCRIPT hid it for other languages.
+  // Show the page once this render is in the stored language (the switch
+  // happens in the mount effect below, in the same batch as useTranslation's).
+  useEffect(() => {
+    const root = document.documentElement
+    if (!root.hasAttribute(LANG_PENDING_ATTR)) return
+    if (globalLang === getStoredLang()) root.removeAttribute(LANG_PENDING_ATTR)
+  }, [globalLang])
+  useEffect(() => {
+    // Never keep the page hidden (e.g. a profile language that differs from the device one).
+    const id = setTimeout(() => document.documentElement.removeAttribute(LANG_PENDING_ATTR), 1000)
+    return () => clearTimeout(id)
+  }, [])
 
   useEffect(() => {
     // Sync lang from localStorage on mount

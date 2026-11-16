@@ -1934,12 +1934,18 @@ export function isRtlLang(lang: string): boolean {
 
 export function getStoredLang(): string {
   if (typeof window === 'undefined') return DEFAULT_LANG
+  let v: string | null = null
   try {
-    const v = localStorage.getItem('wabek_lang') || localStorage.getItem('lang')
-    return v && translations[v] ? v : DEFAULT_LANG
-  } catch {
-    return DEFAULT_LANG
+    v = localStorage.getItem('wabek_lang') || localStorage.getItem('lang')
+  } catch { /* storage blocked */ }
+  if (!v) {
+    // Same fallback as LANG_INIT_SCRIPT: the cookie mirror (storage blocked or cleared).
+    try {
+      const m = document.cookie.match(/(?:^|;\s*)wabek_lang=([a-z]{2})/)
+      v = m ? m[1] : null
+    } catch { /* no cookie access */ }
   }
+  return v && translations[v] ? v : DEFAULT_LANG
 }
 
 /** Cookie mirror of the stored language, read by _document on the server. */
@@ -1967,11 +1973,30 @@ export function routeLang(path: string | undefined | null): 'en' | 'ar' | null {
   return null
 }
 
+/** Routes whose shell (dashboard/admin) manages <html lang/dir> itself. */
+export const SHELL_ROUTE_RE = /^\/(dashboard|admin)(\/|$)/
+
 /**
- * Inline script for _document: sets <html lang/dir> before first paint.
- * Skipped when the server fixed the language from the route (data-lang-fixed).
+ * Attribute LANG_INIT_SCRIPT puts on <html> when the stored language is not
+ * the language public pages are pre-rendered in (Arabic). While it is set,
+ * LANG_PENDING_CSS hides the page content; _app removes it right after the
+ * first client render in the stored language, so en/fr/tr visitors never
+ * see the Arabic server HTML. The page itself still hydrates in Arabic, so
+ * there is no hydration mismatch. A CSS animation reveals the content after
+ * 1.2s in any case (e.g. if the JavaScript bundle fails to load).
  */
-export const LANG_INIT_SCRIPT = `(function(){try{var r=document.documentElement;if(r.hasAttribute('data-lang-fixed'))return;var l=localStorage.getItem('wabek_lang')||localStorage.getItem('lang')||'${DEFAULT_LANG}';if(['en','ar','fr','tr'].indexOf(l)<0)l='${DEFAULT_LANG}';r.lang=l;r.dir=l==='ar'?'rtl':'ltr'}catch(e){}})();`
+export const LANG_PENDING_ATTR = 'data-lang-pending'
+
+export const LANG_PENDING_CSS =
+  `html[${LANG_PENDING_ATTR}] #__next{visibility:hidden;animation:wabek-lang-reveal 0s linear 1.2s forwards}` +
+  `@keyframes wabek-lang-reveal{to{visibility:visible}}`
+
+/**
+ * Inline script for _document: sets <html lang/dir> before first paint (and
+ * LANG_PENDING_ATTR, see above). Skipped when the server fixed the language
+ * from the route (data-lang-fixed). Reads localStorage, then the cookie.
+ */
+export const LANG_INIT_SCRIPT = `(function(){try{var r=document.documentElement;if(r.hasAttribute('data-lang-fixed'))return;var l=null;try{l=localStorage.getItem('wabek_lang')||localStorage.getItem('lang')}catch(e){}if(!l){var m=document.cookie.match(/(?:^|;\\s*)${LANG_COOKIE}=([a-z]{2})/);l=m&&m[1]}if(['en','ar','fr','tr'].indexOf(l)<0)l='${DEFAULT_LANG}';r.lang=l;r.dir=l==='ar'?'rtl':'ltr';if(l!=='${DEFAULT_LANG}'&&!/^\\/(dashboard|admin)(\\/|$)/.test(location.pathname))r.setAttribute('${LANG_PENDING_ATTR}','')}catch(e){}})();`
 
 export type Language = keyof typeof translations
 export type TranslationKey = keyof typeof translations['en']

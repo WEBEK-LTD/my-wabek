@@ -28,13 +28,15 @@ export default function PublicNav({ active = '', lang: langProp = '', onLangChan
   const router = useRouter()
   const { brandName, customLogo } = useWhiteLabel()
   const user = useAuthStore(s => s.user)
-  const [lang, setLang] = useState(langProp || 'ar')
+  // The page's language wins when it passes one; derived during render so the
+  // nav switches language in the same render as the page (no extra frame).
+  const [ownLang, setLang] = useState('ar')
+  const lang = langProp || ownLang
   const [mounted, setMounted] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
 
-  useEffect(() => { setMounted(true) }, [])
-  useEffect(() => { setLang(langProp || getStoredLang()) }, [langProp])
+  useEffect(() => { setMounted(true); setLang(getStoredLang()) }, [])
   useEffect(() => {
     const onChange = (e: Event) => { const d = (e as CustomEvent<string>).detail; if (typeof d === 'string') setLang(d) }
     window.addEventListener('langchange', onChange)
