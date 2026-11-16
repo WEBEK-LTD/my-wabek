@@ -1,0 +1,81 @@
+# iOS release on GitHub Actions — no registered devices needed.
+#
+# Each run creates a fresh "Apple Distribution" certificate and an App Store
+# provisioning profile with the App Store Connect API key, signs and exports
+# the IPA, uploads it to TestFlight, then revokes the certificate and deletes
+# the profile again (so Apple's certificate limit is never reached). Builds
+# already uploaded are not affected: Apple re-signs App Store / TestFlight builds.
+#
+# Env: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8, APPLE_TEAM_ID, BUILD_NUMBER, UPLOAD=true|false
+default_platform(:ios)
+
+BUNDLE_ID = 'com.webek.wabek'
+
+platform :ios do
+  lane :release do
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch('ASC_KEY_ID'),
+      issuer_id: ENV.fetch('ASC_ISSUER_ID'),
+      key_content: ENV.fetch('ASC_KEY_P8'),
+      in_house: false,
+    )
+    Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.from(hash: api_key)
+
+    keychain = 'wabek-ci'
+    keychain_password = SecureRandom.hex(16)
+    create_keychain(name: keychain, password: keychain_password, default_keychain: true, unlock: true, timeout: 7200, lock_when_sleeps: false)
+    out = ENV.fetch('RUNNER_TEMP', '/tmp')
+    cert_id = nil
+    profile_id = nil
+
+    begin
+      get_certificates(
+        api_key: api_key, development: false, force: true,
+        keychain_path: File.expand_path("~/Library/Keychains/#{keychain}-db"),
+        keychain_password: keychain_password, output_path: out,
+      )
+      cert_id = lane_context[SharedValues::CERT_CERTIFICATE_ID]
+
+      get_provisioning_profile(
+        api_key: api_key, app_identifier: BUNDLE_ID, force: true,
+        cert_id: cert_id, output_path: out, filename: 'wabek-appstore.mobileprovision',
+      )
+      profile_name = lane_context[SharedValues::SIGH_NAME]
+      profile_id = lane_context[SharedValues::SIGH_UUID]
+
+      update_code_signing_settings(
+        path: 'ios/WABEK.xcodeproj', use_automatic_signing: false,
+        team_id: ENV.fetch('APPLE_TEAM_ID'), bundle_identifier: BUNDLE_ID,
+        code_sign_identity: 'Apple Distribution', profile_name: profile_name, targets: ['WABEK'],
+      )
+
+      ipa = build_app(
+        workspace: 'ios/WABEK.xcworkspace', scheme: 'WABEK', configuration: 'Release',
+        export_method: 'app-store', output_directory: "#{out}/export", output_name: 'WABEK.ipa',
+        xcargs: "CURRENT_PROJECT_VERSION=#{ENV.fetch('BUILD_NUMBER', '1')} DEVELOPMENT_TEAM=#{ENV.fetch('APPLE_TEAM_ID')}",
+        export_options: { provisioningProfiles: { BUNDLE_ID => profile_name } },
+      )
+
+      if ENV['UPLOAD'] == 'true'
+        upload_to_testflight(api_key: api_key, ipa: ipa, skip_waiting_for_build_processing: true)
+      end
+    ensure
+      # Clean up so every run starts fresh and Apple's limits are never hit.
+      begin
+        if profile_id
+          Spaceship::ConnectAPI::Profile.all(filter: { name: lane_context[SharedValues::SIGH_NAME] }).each(&:delete!)
+        end
+      rescue => e
+        UI.important("Could not delete the provisioning profile: #{e.message}")
+      end
+      begin
+        cert = cert_id && Spaceship::ConnectAPI::Certificate.all.find { |c| c.id == cert_id }
+        cert&.delete!
+        UI.message('Revoked the temporary distribution certificate') if cert
+      rescue => e
+        UI.important("Could not revoke the temporary certificate #{cert_id}: #{e.message}")
+      end
+      delete_keychain(name: keychain) rescue nil
+    end
+  end
+end
