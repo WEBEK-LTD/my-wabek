@@ -38,24 +38,27 @@ export default function AdminUsersPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [quick, setQuick] = useState<null | { user: AdminUser; action: 'suspend' | 'activate' }>(null)
 
-  useEffect(() => { setPage(1) }, [search])
+  useEffect(() => { setPage(1) }, [search, planF, statusF, roleF])
   const filtering = planF !== 'all' || statusF !== 'all' || roleF !== 'all'
-  // The list API filters by search only; with other filters on, load a larger page and filter it here.
-  const limit = filtering ? 100 : PAGE
+  const limit = PAGE
 
+  // Search, filters and pagination all run on the server.
   const { data, isLoading, isError, refetch, isFetching } = useQuery<{ users: AdminUser[]; total: number }>(
-    ['admin-users', search, page, limit],
-    () => axios.get(`/api/admin/users?search=${encodeURIComponent(search)}&page=${page}&limit=${limit}`).then(r => r.data),
+    ['admin-users', search, planF, statusF, roleF, page, limit],
+    () => {
+      const params = new URLSearchParams({ page: String(page), limit: String(limit) })
+      if (search) params.set('q', search)
+      if (planF !== 'all') params.set('plan_id', planF)
+      if (statusF !== 'all') params.set('status', statusF)
+      if (roleF !== 'all') params.set('role', roleF)
+      return axios.get(`/api/admin/users?${params.toString()}`).then(r => r.data)
+    },
     { keepPreviousData: true },
   )
   const { data: plansData } = useQuery<{ plans: AdminPlanRef[] }>('admin-plans-list', () => axios.get('/api/admin/plans').then(r => r.data))
   const plans = plansData?.plans || []
 
-  const rows = useMemo(() => (data?.users || []).filter(u =>
-    (planF === 'all' || (planF === 'free' ? !u.plan_id : u.plan_id === planF)) &&
-    (statusF === 'all' || (statusF === 'active' ? u.is_active : !u.is_active)) &&
-    (roleF === 'all' || u.role === roleF),
-  ), [data, planF, statusF, roleF])
+  const rows = useMemo(() => data?.users || [], [data])
 
   const updateMut = useMutation(
     ({ id, body }: { id: string; body: UserUpdateBody; label: string }) => axios.put(`/api/admin/users/${id}`, body).then(r => r.data as { user?: Partial<AdminUser>; notes?: string[] }),
@@ -106,7 +109,7 @@ export default function AdminUsersPage() {
       key: 'role', header: tr('الدور', 'Role'), hideBelow: 'sm',
       cell: u => <Badge tone={u.role === 'admin' ? 'violet' : 'neutral'} icon={u.role === 'admin' ? ShieldCheckIcon : undefined}>{u.role === 'admin' ? tr('مدير', 'Admin') : tr('مستخدم', 'User')}</Badge>,
     },
-    { key: 'status', header: tr('الحالة', 'Status'), cell: u => <StatusPill status={u.is_active ? 'active' : 'blocked'}>{u.is_active ? tr('نشط', 'Active') : tr('موقوف', 'Suspended')}</StatusPill> },
+    { key: 'status', header: tr('الحالة', 'Status'), cell: u => <StatusPill status={u.is_active !== false ? 'active' : 'blocked'}>{u.is_active !== false ? tr('نشط', 'Active') : tr('موقوف', 'Suspended')}</StatusPill> },
     { key: 'joined', header: tr('انضم', 'Joined'), hideBelow: 'lg', cell: u => <span className="tabular text-xs text-muted">{fmtDate(u.created_at)}</span> },
     {
       key: 'actions', header: <span className="sr-only">{tr('إجراءات', 'Actions')}</span>, align: 'end',
@@ -118,7 +121,7 @@ export default function AdminUsersPage() {
             trigger={<EllipsisHorizontalIcon className="h-5 w-5" />}
             items={[
               { label: tr('عرض وتعديل', 'View & edit'), icon: EyeIcon, onClick: () => { setSaveError(null); setSelected(u) } },
-              u.is_active
+              u.is_active !== false
                 ? { label: tr('إيقاف الحساب', 'Suspend'), icon: NoSymbolIcon, danger: true, divider: true, disabled: u.id === me?.id, onClick: () => setQuick({ user: u, action: 'suspend' }) }
                 : { label: tr('تفعيل الحساب', 'Activate'), icon: CheckCircleIcon, divider: true, onClick: () => setQuick({ user: u, action: 'activate' }) },
             ]}
@@ -152,12 +155,6 @@ export default function AdminUsersPage() {
             {filtering && <Button size="sm" variant="ghost" icon={XMarkIcon} onClick={clearFilters}>{tr('مسح', 'Clear')}</Button>}
           </div>
         </div>
-        {filtering && (
-          <p className="border-b border-line-soft bg-surface-2 px-4 py-2 text-xs text-muted">
-            {tr(`تُطبَّق عوامل التصفية على ${formatNumber(data?.users?.length ?? 0)} نتيجة محمّلة — ${formatNumber(rows.length)} مطابقة.`,
-              `Filters apply to the ${formatNumber(data?.users?.length ?? 0)} loaded results — ${formatNumber(rows.length)} match.`)}
-          </p>
-        )}
 
         {isError ? <div className="p-4"><ErrorState onRetry={() => refetch()} /></div> : (
           <div className={isFetching && !isLoading ? 'opacity-70 transition-opacity' : 'transition-opacity'}>
