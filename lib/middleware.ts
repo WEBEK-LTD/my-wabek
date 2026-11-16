@@ -177,7 +177,7 @@ export function handleCors(req: NextApiRequest, res: NextApiResponse): boolean {
 // ── Plan Limit Check ──────────────────────────────────────────────────────────
 // Rules:
 //   -1  → unlimited (always allow)
-//    0  → not set   (always allow)
+//    0  → none allowed (PLAN_LIMIT_ZERO=unlimited restores the old "always allow")
 //   >0  → hard limit (count and compare)
 //   no plan_id → allow (don't block users without a plan)
 export async function checkPlanLimit(
@@ -249,11 +249,18 @@ export async function checkPlanLimit(
 
     const limit = limitMap[type] ?? -1
 
-    // -1 → unlimited; 0 → not set (unlimited) — except for sub-accounts,
-    // where the column default 0 means "none" unless the plan explicitly
-    // enables the feature (allow_sub_accounts = true → 0 = unlimited).
-    if (type === 'sub_accounts' && limit === 0 && plan.allow_sub_accounts !== true) return BLOCK(0, 0)
-    if (limit <= 0) return ALLOW(limit)
+    // -1 (or any negative) → unlimited.
+    //  0 → none allowed: this is how the Free plan blocks a feature
+    //      (migration 018 sets max_campaigns = 0). Sub-accounts keep their
+    //      rule: 0 + allow_sub_accounts = true → unlimited.
+    // Rollback switch: PLAN_LIMIT_ZERO=unlimited restores the old reading of
+    // 0 as "unlimited" for every type except sub-accounts.
+    if (limit < 0) return ALLOW(limit)
+    if (limit === 0) {
+      if (type === 'sub_accounts') return plan.allow_sub_accounts === true ? ALLOW(-1) : BLOCK(0, 0)
+      if (process.env.PLAN_LIMIT_ZERO === 'unlimited') return ALLOW(limit)
+      return BLOCK(0, 0)
+    }
 
     // 4. Count current usage
     const now        = new Date()

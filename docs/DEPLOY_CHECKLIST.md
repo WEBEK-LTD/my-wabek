@@ -8,7 +8,7 @@
 ## ١. ترتيب النشر (مختصر)
 
 1. **متغيرات البيئة** على Netlify و Railway (القسم ٢) — قبل أي شيء آخر.
-2. **Migrations** في Supabase بالترتيب `026 → 027 → 028 → 029 → 030 → 031` (القسم ٣).
+2. **Migrations** في Supabase بالترتيب `026 → 027 → 028 → 029 → 030 → 031 → 032` (القسم ٣).
 3. **Railway (wabek-baileys)** — إعادة نشر/تشغيل خادم Baileys.
 4. **Netlify** — نشر الواجهة و API.
 5. **Smoke test** (القسم ٥) + **تحقق اتصالات واتساب** (القسم ٦).
@@ -91,7 +91,7 @@
 
 ## ٣. Migrations
 
-الترتيب: **`026_enable_rls_lockdown` → `027_auth_hardening` → `028_billing_hardening` → `029_messaging_hardening` → `030_lockdown_reassert` → `031_api_idempotency`**
+الترتيب: **`026_enable_rls_lockdown` → `027_auth_hardening` → `028_billing_hardening` → `029_messaging_hardening` → `030_lockdown_reassert` → `031_api_idempotency` → `032_functional_fixes`**
 
 - كلها إضافية وidempotent (يمكن إعادة تشغيلها)، لا تحذف بيانات، ولا تغيّر `whatsapp_instances` أو `wa_sessions`.
 - **026**: يفعّل RLS على كل جداول `public`، يحذف policies الخاصة بـ anon/authenticated/PUBLIC، ويسحب كل الصلاحيات منهم (جداول/sequences/functions + default privileges). `service_role` (Netlify + Baileys) يحتفظ بكل الصلاحيات ويتجاوز RLS. ⚠️ أي كود يستخدم anon key مباشرة على الجداول (مثلاً Realtime من المتصفح) لن يستقبل شيئاً بعده.
@@ -100,6 +100,7 @@
 - **029**: unique لـ inbound `(instance_id, wa_message_id)` و `wix_user_links(wix_instance_id)` — **فقط** إن لم توجد تكرارات؛ وإلا يطبع NOTICE مع استعلام المراجعة. راجع الـ NOTICEs بعد التشغيل.
 - **030**: يعيد تطبيق حلقات القفل من 026 على الكائنات التي أنشأتها 027–029 (EXECUTE لـ PUBLIC على الدوال افتراضي عام في Postgres ولا يُسحب على مستوى schema).
 - **031**: جدول `api_idempotency_keys` لمنع تكرار الإرسال عند إعادة المحاولة عبر الترويسة `Idempotency-Key` في `POST /api/v1/send` (مقفول على الخادم فقط).
+- **032**: أعمدة القالب ولغته ومتغيراته في `campaigns`، وأعمدة التوقيع والحالة في `zapier_hooks`، وجدول `webhook_deliveries` لإعادة محاولة الـ webhooks الصادرة (مقفول على الخادم فقط).
 
 بعد التشغيل: تحقق من الـ NOTICEs (تكرارات custom_domain / subscriptions / inbound / Wix).
 
@@ -152,6 +153,20 @@
 - [ ] `MESSAGE_LIMIT_MODE=log`: راقب سجلات `[send-guard] ... not blocking` لمعرفة من سيتأثر قبل تفعيل الحجب.
 
 ---
+
+## ٦.١ تغييرات في السلوك يجب مراجعتها قبل الدمج
+
+| التغيير | ما الذي يحدث | ما المطلوب قبل النشر |
+|---|---|---|
+| **وصول الـ API حسب الباقة** | استدعاءات مفاتيح الـ API (v1 و gateway، ومنها إضافات WordPress وWHMCS) تُرفض بـ `403 plan_no_api` إذا كانت الباقة لا تتضمن `allow_api_access`. | فعّل `allow_api_access` على الباقات المدفوعة من لوحة الأدمن، أو ضع `API_ACCESS_MODE=log` مؤقتًا لتسجيل الحالات دون حجب. |
+| **قيمة 0 في حدود الباقة** | أصبحت `0` تعني «غير مسموح»، و`-1` تعني «غير محدود» (كانت `0` تُقرأ خطأً كغير محدود، فكانت الباقة المجانية تملك حملات بلا حد). | راجع كل الباقات: أي حد وُضع `0` بقصد «غير محدود» غيّره إلى `-1`. للتراجع السريع: `PLAN_LIMIT_ZERO=unlimited`. |
+| **حد الرسائل الشهري** | يُطبَّق لأول مرة. | ابدأ بـ `MESSAGE_LIMIT_MODE=log`. |
+| **صلاحيات أعضاء الفريق** | المشاهد (viewer) للقراءة فقط، والموظف (agent) للمحادثات وجهات الاتصال والردود السريعة فقط؛ غير ذلك `403 member_forbidden`. | أبلغ العملاء أصحاب الفرق، وراجع أدوار الأعضاء الحاليين. |
+| **النص خارج نافذة الـ 24 ساعة** | gateway وtrigger وWix وwebhook الخاص بـ WHMCS ترجع `422 outside_window` بدل إرسال قالب عام لا علاقة له بالرسالة. | لا شيء؛ الإضافات الجديدة تمرّر قالبًا معتمدًا تلقائيًا. |
+| **حدود جهات الاتصال والحسابات الفرعية** | تُطبَّق عند الإنشاء والاستيراد. | راجع `max_contacts` و`max_sub_accounts` في الباقات. |
+| **إيقاف الرسائل بكلمة STOP** | رسالة «STOP» أو «إيقاف» من العميل توقف الإرسال إليه، و«START» أو «اشتراك» تعيده. | لا شيء. |
+| **مفاتيح الـ API وصلاحياتها** | تُطبَّق صلاحيات المفتاح (`send`, `contacts:read`, `contacts:write`, `otp`)؛ المفتاح بلا صلاحيات = وصول كامل كما كان. | لا شيء. |
+| **أسرار الـ webhooks الصادرة** | كل webhook أصبح موقّعًا بـ `X-WABEK-Signature`؛ الـ webhooks القديمة أُنشئ لها سر تلقائيًا. | على أصحابها تدوير السر من صفحة التكاملات لرؤيته. |
 
 ## ٧. ملاحظات إضافية
 

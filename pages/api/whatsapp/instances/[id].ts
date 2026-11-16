@@ -28,6 +28,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // server (Meta webhooks / Baileys events), never set by the client.
     const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
     if (typeof req.body?.display_name === 'string') update.display_name = req.body.display_name.trim().slice(0, 100) || null
+    // Make this the account's default sending number (only one default per account).
+    if (req.body?.is_default === true) {
+      const { data: owned } = await db.from('whatsapp_instances').select('id').eq('id', id).eq('user_id', user.userId).maybeSingle()
+      if (!owned) return res.status(404).json({ error: 'Instance not found' })
+      await db.from('whatsapp_instances').update({ is_default: false }).eq('user_id', user.userId).neq('id', id)
+      update.is_default = true
+    }
     const { data, error } = await db
       .from('whatsapp_instances')
       .update(update)
