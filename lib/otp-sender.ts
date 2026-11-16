@@ -1,8 +1,7 @@
-import { smartSend, isInWindow } from '@/lib/wa-smart-send'
+import { smartSend, smartSendWAWeb, isInWindow } from '@/lib/wa-smart-send'
 import { supabaseAdmin } from './supabase'
 import { getSetting } from './settings'
 import { sendOtpTemplate } from './otp-template'
-import { sendWAWebMessage } from './wa-web'
 
 /**
  * Send a platform message (OTP code / reset link) over WhatsApp.
@@ -62,10 +61,13 @@ export async function sendOtpWhatsApp(phone: string, message: string, code?: str
           console.error('[otp-sender] recipient outside 24h window and no usable OTP template — not sending')
           return false
         }
-        await smartSend({ userId: instance.user_id || '', instanceId: instance.id || '', phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: phone, text: message, source: 'api' as any, forceTemplate: false })
+        const r = await smartSend({ userId: instance.user_id || '', instanceId: instance.id || '', phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: phone, text: message, source: 'notification', forceTemplate: false, bypassLimits: true })
+        if (r.error && !r.messageId) return false
       }
     } else {
-      await sendWAWebMessage({ instanceId: instance.id, to: phone, text: message })
+      // Platform system message: no plan limit, and never stored in an inbox.
+      const r = await smartSendWAWeb({ userId: instance.user_id || '', instanceId: instance.id, to: phone, text: message, source: 'notification', bypassLimits: true, persist: false })
+      if (r.error && !r.messageId) return false
     }
     return true
   } catch (e) {

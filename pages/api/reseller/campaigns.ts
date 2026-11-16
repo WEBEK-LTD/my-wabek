@@ -144,9 +144,9 @@ async function sendToContacts(
       if (inst) {
         const isWAWeb = inst.instance_type === 'wa_web'
         if (isWAWeb) {
-          await smartSendWAWeb({ userId: resellerUserId, instanceId: inst.id, to: contact.phone, text: msg })
+          await smartSendWAWeb({ userId: resellerUserId, instanceId: inst.id, to: contact.phone, text: msg, source: 'campaign' })
         } else {
-          await smartSend({ userId: resellerUserId, instanceId: inst.id, phoneNumberId: inst.phone_number_id, accessToken: inst.access_token, to: contact.phone, text: msg, forceTemplate: false })
+          await smartSend({ userId: resellerUserId, instanceId: inst.id, phoneNumberId: inst.phone_number_id, accessToken: inst.access_token, to: contact.phone, text: msg, forceTemplate: false, source: 'campaign' })
         }
       }
       sent++

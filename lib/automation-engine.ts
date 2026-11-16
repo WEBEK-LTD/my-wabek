@@ -1,7 +1,6 @@
 import { z } from 'zod'
-import { smartSend } from '@/lib/wa-smart-send'
+import { smartSend, smartSendWAWeb } from '@/lib/wa-smart-send'
 import { supabaseAdmin } from './supabase'
-import { sendWAWebMessage } from './wa-web'
 import { v4 as uuidv4 } from 'uuid'
 
 // ── Shared validation for automation flows (POST + PUT) ──────────────────────
@@ -98,14 +97,12 @@ export async function executeAutomationFlow(params: {
         if (repliesThisRun >= AUTOMATION_MAX_REPLIES) break
         try {
           if (isWAWeb) {
-            // Raw WA Web send does not persist — record it here.
-            const result = await sendWAWebMessage({ instanceId, to: from, text: node.data.text })
-            await db.from('messages').insert({
-              id: uuidv4(), user_id: userId, instance_id: instanceId, contact_id: contactId,
-              direction: 'outbound', type: 'text', content: node.data.text,
-              wa_message_id: result.messageId || uuidv4(), status: 'sent',
-              meta: { method: 'text', source: 'automation', flow_id: flow.id },
+            // Guarded send (plan limit / opt-out); persists the outbound row.
+            const r = await smartSendWAWeb({
+              userId, instanceId, to: from, text: node.data.text, contactId,
+              source: 'automation', extraMeta: { flow_id: flow.id },
             })
+            if (r.blocked) break
           } else {
             // smartSend persists the outbound message itself (with
             // meta.source='automation') — do not insert a second row.

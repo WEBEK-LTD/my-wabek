@@ -1,6 +1,5 @@
-import { smartSend } from '@/lib/wa-smart-send'
+import { smartSend, smartSendWAWeb } from '@/lib/wa-smart-send'
 import { supabaseAdmin } from './supabase'
-import { sendWAWebMessage } from './wa-web'
 import { v4 as uuidv4 } from 'uuid'
 
 // ── Cost guards ───────────────────────────────────────────────────────────────
@@ -186,14 +185,11 @@ export async function processAIReply(params: {
 
   try {
     if (instType === 'wa_web' || instType === 'baileys') {
-      // Raw WA Web send does not persist the message — save it here.
-      const r = await sendWAWebMessage({ instanceId, to: from, text: aiReply })
-      const waMessageId = r?.messageId || null
-      const { error: insErr } = await db.from('messages').insert({ id: uuidv4(), user_id: userId, instance_id: instanceId, contact_id: contactId || null, wa_message_id: waMessageId, direction: 'outbound', type: 'ai_reply', content: aiReply, status: 'sent', meta: { method: 'text', source: 'ai_assistant' } })
-      if (insErr) {
-        console.error(`[AI] message insert err: ${insErr.message} — trying text type`)
-        const { error: fallbackErr } = await db.from('messages').insert({ id: uuidv4(), user_id: userId, instance_id: instanceId, contact_id: contactId || null, wa_message_id: waMessageId, direction: 'outbound', type: 'text', content: `🤖 ${aiReply}`, status: 'sent', meta: { method: 'text', source: 'ai_assistant' } })
-        if (fallbackErr) console.error(`[AI] fallback insert err: ${fallbackErr.message}`)
+      // Guarded send (plan limit / opt-out); smartSendWAWeb persists the row.
+      const r = await smartSendWAWeb({ userId, instanceId, to: from, text: aiReply, contactId: contactId || null, source: 'ai_assistant' })
+      if (r.error && !r.messageId) {
+        console.error(`[AI] send failed: ${r.error}`)
+        return false
       }
     } else {
       // smartSend persists the outbound message itself — no second insert.
