@@ -1,322 +1,212 @@
-// @ts-nocheck
-import { useState, useCallback } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import AdminLayout from '@/components/layout/AdminLayout'
-import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { useMutation, useQuery, useQueryClient } from 'react-query'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { MagnifyingGlassIcon, PencilIcon, NoSymbolIcon, CheckCircleIcon, XMarkIcon, EyeIcon } from '@heroicons/react/24/outline'
-import { format } from 'date-fns'
-import clsx from 'clsx'
+import {
+  CheckCircleIcon, EllipsisHorizontalIcon, EyeIcon, FunnelIcon, NoSymbolIcon, ShieldCheckIcon, UserGroupIcon, XMarkIcon,
+} from '@heroicons/react/24/outline'
+import {
+  Avatar, Badge, Button, Card, ConfirmDialog, DataTable, Dropdown, EmptyState, PageHeader, SearchInput, Select, StatusPill, formatNumber,
+} from '@/components/ui'
+import type { Column } from '@/components/ui'
+import { useAuthStore } from '@/lib/store'
+import { apiError, useAdminT } from '@/components/admin/i18n'
+import { ErrorState, Pagination } from '@/components/admin/shared'
+import { UserDrawer } from '@/components/admin/users/UserDrawer'
+import type { AdminPlanRef, AdminUser, UserUpdateBody } from '@/components/admin/users/types'
 
-// Simple debounce hook
-function useDebounce(value: string, delay = 400) {
-  const [debounced, setDebounced] = useState(value)
-  const timerRef = { current: null as any }
-  const update = useCallback((v: string) => {
-    clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => setDebounced(v), delay)
-  }, [delay])
-  return [debounced, update] as const
+const PAGE = 20
+
+function useDebounced<T>(value: T, delay = 400) {
+  const [v, setV] = useState(value)
+  useEffect(() => { const id = setTimeout(() => setV(value), delay); return () => clearTimeout(id) }, [value, delay])
+  return v
 }
 
 export default function AdminUsersPage() {
+  const { tr, fmtDate } = useAdminT()
   const qc = useQueryClient()
+  const me = useAuthStore(s => s.user)
   const [rawSearch, setRawSearch] = useState('')
-  const [search, updateSearch] = useDebounce('')
+  const search = useDebounced(rawSearch)
   const [page, setPage] = useState(1)
-  const [editUser, setEditUser] = useState(null)
-  const [viewUser, setViewUser] = useState(null)
-  const [editData, setEditData] = useState({ is_active: true, role: 'user', plan_id: '', plan_expires_at: '' })
+  const [planF, setPlanF] = useState('all')
+  const [statusF, setStatusF] = useState('all')
+  const [roleF, setRoleF] = useState('all')
+  const [selected, setSelected] = useState<AdminUser | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [quick, setQuick] = useState<null | { user: AdminUser; action: 'suspend' | 'activate' }>(null)
 
-  const handleSearch = (v: string) => { setRawSearch(v); updateSearch(v); setPage(1) }
+  useEffect(() => { setPage(1) }, [search])
+  const filtering = planF !== 'all' || statusF !== 'all' || roleF !== 'all'
+  // The list API filters by search only; with other filters on, load a larger page and filter it here.
+  const limit = filtering ? 100 : PAGE
 
-  const { data, isLoading } = useQuery(
-    ['admin-users', search, page],
-    () => axios.get(`/api/admin/users?search=${encodeURIComponent(search)}&page=${page}&limit=20`).then(r => r.data),
-    { keepPreviousData: true }
+  const { data, isLoading, isError, refetch, isFetching } = useQuery<{ users: AdminUser[]; total: number }>(
+    ['admin-users', search, page, limit],
+    () => axios.get(`/api/admin/users?search=${encodeURIComponent(search)}&page=${page}&limit=${limit}`).then(r => r.data),
+    { keepPreviousData: true },
   )
-  const { data: plansData } = useQuery('admin-plans-list', () => axios.get('/api/admin/plans').then(r => r.data))
-  const { data: userDetail } = useQuery(
-    ['admin-user-detail', viewUser?.id],
-    () => viewUser ? axios.get(`/api/admin/users/${viewUser.id}`).then(r => r.data) : null,
-    { enabled: !!viewUser }
-  )
-
-  const users = data?.users || []
+  const { data: plansData } = useQuery<{ plans: AdminPlanRef[] }>('admin-plans-list', () => axios.get('/api/admin/plans').then(r => r.data))
   const plans = plansData?.plans || []
 
+  const rows = useMemo(() => (data?.users || []).filter(u =>
+    (planF === 'all' || (planF === 'free' ? !u.plan_id : u.plan_id === planF)) &&
+    (statusF === 'all' || (statusF === 'active' ? u.is_active : !u.is_active)) &&
+    (roleF === 'all' || u.role === roleF),
+  ), [data, planF, statusF, roleF])
+
   const updateMut = useMutation(
-    ({ id, body }: any) => axios.put(`/api/admin/users/${id}`, body),
+    ({ id, body }: { id: string; body: UserUpdateBody; label: string }) => axios.put(`/api/admin/users/${id}`, body).then(r => r.data as { user?: Partial<AdminUser>; notes?: string[] }),
     {
-      onSuccess: () => { qc.invalidateQueries('admin-users'); setEditUser(null); toast.success('User updated ✅') },
-      onError: (e: any) => toast.error(e?.response?.data?.error || 'Update failed'),
-    }
+      onMutate: () => setSaveError(null),
+      onSuccess: (res, vars) => {
+        qc.invalidateQueries('admin-users')
+        qc.invalidateQueries(['admin-user-detail', vars.id])
+        toast.success(vars.label)
+        for (const n of res?.notes || []) toast(n)
+        if (res?.user && selected?.id === vars.id) {
+          const merged = { ...selected, ...res.user } as AdminUser
+          merged.plans = merged.plan_id ? (plans.find(p => p.id === merged.plan_id) || selected.plans || null) : null
+          setSelected(merged)
+        }
+      },
+      onError: (e) => {
+        const msg = apiError(e, tr('تعذّر تحديث المستخدم', 'Update failed'))
+        setSaveError(msg)
+        toast.error(msg)
+      },
+    },
   )
+  const save = (id: string, body: UserUpdateBody, label: string) => updateMut.mutateAsync({ id, body, label })
 
-  // Suspend: PUT with is_active: false (not DELETE — cleaner and consistent)
-  const suspendMut = useMutation(
-    (id: string) => axios.put(`/api/admin/users/${id}`, { is_active: false }),
+  const planOptions = [
+    { value: 'all', label: tr('كل الباقات', 'All plans') },
+    { value: 'free', label: tr('مجانية', 'Free') },
+    ...plans.map(p => ({ value: p.id, label: p.name })),
+  ]
+
+  const columns: Column<AdminUser>[] = [
     {
-      onSuccess: () => { qc.invalidateQueries('admin-users'); toast.success('User suspended') },
-      onError: (e: any) => toast.error(e?.response?.data?.error || 'Suspend failed'),
-    }
-  )
-
-  const activateMut = useMutation(
-    (id: string) => axios.put(`/api/admin/users/${id}`, { is_active: true }),
+      key: 'user', header: tr('المستخدم', 'User'),
+      cell: u => (
+        <div className="flex min-w-0 items-center gap-3">
+          <Avatar name={u.name || u.email} size="sm" />
+          <div className="min-w-0">
+            <p className="max-w-[220px] truncate font-medium text-ink">{u.name || '—'}</p>
+            <p dir="ltr" className="max-w-[220px] truncate text-start text-xs text-muted">{u.email}</p>
+          </div>
+        </div>
+      ),
+    },
+    { key: 'plan', header: tr('الباقة', 'Plan'), cell: u => <Badge tone={u.plans?.name ? 'brand' : 'neutral'}>{u.plans?.name || tr('مجانية', 'Free')}</Badge> },
+    { key: 'expires', header: tr('تنتهي', 'Expires'), hideBelow: 'md', cell: u => <span className="tabular text-xs text-muted">{u.plan_expires_at ? fmtDate(u.plan_expires_at) : '—'}</span> },
     {
-      onSuccess: () => { qc.invalidateQueries('admin-users'); toast.success('User activated') },
-      onError: (e: any) => toast.error(e?.response?.data?.error || 'Activate failed'),
-    }
-  )
-
-  const openEdit = (user: any) => {
-    setEditUser(user)
-    setEditData({
-      is_active: user.is_active,
-      role: user.role,
-      plan_id: user.plan_id || '',
-      plan_expires_at: user.plan_expires_at ? user.plan_expires_at.split('T')[0] : '',
-    })
-  }
-
-  return (
-    <AdminLayout title="Users">
-      <div className="flex flex-col sm:flex-row gap-3 mb-5">
-        <div className="relative flex-1 max-w-sm">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            value={rawSearch}
-            onChange={e => handleSearch(e.target.value)}
-            placeholder="Search by name or email…"
-            className="input pl-9"
+      key: 'role', header: tr('الدور', 'Role'), hideBelow: 'sm',
+      cell: u => <Badge tone={u.role === 'admin' ? 'violet' : 'neutral'} icon={u.role === 'admin' ? ShieldCheckIcon : undefined}>{u.role === 'admin' ? tr('مدير', 'Admin') : tr('مستخدم', 'User')}</Badge>,
+    },
+    { key: 'status', header: tr('الحالة', 'Status'), cell: u => <StatusPill status={u.is_active ? 'active' : 'blocked'}>{u.is_active ? tr('نشط', 'Active') : tr('موقوف', 'Suspended')}</StatusPill> },
+    { key: 'joined', header: tr('انضم', 'Joined'), hideBelow: 'lg', cell: u => <span className="tabular text-xs text-muted">{fmtDate(u.created_at)}</span> },
+    {
+      key: 'actions', header: <span className="sr-only">{tr('إجراءات', 'Actions')}</span>, align: 'end',
+      cell: u => (
+        <div onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+          <Dropdown
+            label={tr(`إجراءات ${u.email}`, `Actions for ${u.email}`)}
+            triggerClassName="h-9 w-9 justify-center rounded-xl hover:bg-surface-3"
+            trigger={<EllipsisHorizontalIcon className="h-5 w-5" />}
+            items={[
+              { label: tr('عرض وتعديل', 'View & edit'), icon: EyeIcon, onClick: () => { setSaveError(null); setSelected(u) } },
+              u.is_active
+                ? { label: tr('إيقاف الحساب', 'Suspend'), icon: NoSymbolIcon, danger: true, divider: true, disabled: u.id === me?.id, onClick: () => setQuick({ user: u, action: 'suspend' }) }
+                : { label: tr('تفعيل الحساب', 'Activate'), icon: CheckCircleIcon, divider: true, onClick: () => setQuick({ user: u, action: 'activate' }) },
+            ]}
           />
         </div>
-        <div className="text-sm text-slate-400 flex items-center">{data?.total || 0} total users</div>
-      </div>
+      ),
+    },
+  ]
 
-      <div className="card p-0 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="border-b border-slate-200 bg-[#F8FAFC]/50">
-              <tr>
-                <th className="table-head">User</th>
-                <th className="table-head">Plan</th>
-                <th className="table-head">Expires</th>
-                <th className="table-head">Role</th>
-                <th className="table-head">Status</th>
-                <th className="table-head">Joined</th>
-                <th className="table-head w-28">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? Array.from({ length: 8 }).map((_, i) => (
-                <tr key={i} className="border-b border-slate-200">
-                  {Array.from({ length: 7 }).map((_, j) => (
-                    <td key={j} className="table-cell"><div className="h-4 skeleton rounded w-20" /></td>
-                  ))}
-                </tr>
-              )) : users.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-12 text-slate-500">No users found</td></tr>
-              ) : users.map(u => (
-                <tr key={u.id} className="table-row">
-                  <td className="table-cell">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-[#F8FAFC] flex items-center justify-center text-xs font-bold text-slate-700 flex-shrink-0">
-                        {u.name?.[0]?.toUpperCase() || u.email[0].toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-900 truncate max-w-32">{u.name || '—'}</p>
-                        <p className="text-xs text-slate-500 truncate max-w-32">{u.email}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="table-cell">
-                    <span className={clsx('text-xs px-2 py-0.5 rounded font-medium', u.plans?.name ? 'badge-green' : 'badge-gray')}>
-                      {u.plans?.name || 'Free'}
-                    </span>
-                  </td>
-                  <td className="table-cell text-xs text-slate-400">
-                    {u.plan_expires_at ? format(new Date(u.plan_expires_at), 'MMM d, yyyy') : '—'}
-                  </td>
-                  <td className="table-cell">
-                    <span className={u.role === 'admin' ? 'badge-red' : 'badge-gray'}>{u.role}</span>
-                  </td>
-                  <td className="table-cell">
-                    {u.is_active
-                      ? <span className="badge-green flex items-center gap-1 w-fit"><span className="w-1.5 h-1.5 rounded-full bg-brand-400" />Active</span>
-                      : <span className="badge-red">Suspended</span>}
-                  </td>
-                  <td className="table-cell text-xs text-slate-400">{format(new Date(u.created_at), 'MMM d, yyyy')}</td>
-                  <td className="table-cell">
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => setViewUser(u)} className="p-1.5 text-slate-400 hover:text-blue-400 transition-colors" title="View details">
-                        <EyeIcon className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => openEdit(u)} className="p-1.5 text-slate-400 hover:text-slate-900 transition-colors" title="Edit">
-                        <PencilIcon className="w-4 h-4" />
-                      </button>
-                      {u.is_active
-                        ? <button
-                            onClick={() => { if (confirm('Suspend this user?')) suspendMut.mutate(u.id) }}
-                            disabled={suspendMut.isLoading}
-                            className="p-1.5 text-slate-400 hover:text-red-400 disabled:opacity-50"
-                            title="Suspend"
-                          >
-                            <NoSymbolIcon className="w-4 h-4" />
-                          </button>
-                        : <button
-                            onClick={() => activateMut.mutate(u.id)}
-                            disabled={activateMut.isLoading}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 disabled:opacity-50"
-                            title="Activate"
-                          >
-                            <CheckCircleIcon className="w-4 h-4" />
-                          </button>
-                      }
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+  const clearFilters = () => { setPlanF('all'); setStatusF('all'); setRoleF('all') }
+
+  return (
+    <AdminLayout title={tr('المستخدمون', 'Users')}>
+      <PageHeader
+        eyebrow={tr('الإدارة', 'Administration')}
+        title={tr('المستخدمون', 'Users')}
+        description={tr('ابحث عن أي حساب، وعيّن الباقات، وغيّر الأدوار، وأوقف الحسابات أو فعّلها.', 'Find any account, assign plans, change roles, and suspend or activate accounts.')}
+        actions={<Badge tone="neutral" size="md" className="tabular">{tr(`${formatNumber(data?.total ?? 0)} مستخدم`, `${formatNumber(data?.total ?? 0)} users`)}</Badge>}
+      />
+
+      <Card padding="none">
+        <div className="flex flex-col gap-3 border-b border-line-soft p-4 lg:flex-row lg:items-center">
+          <SearchInput value={rawSearch} onChange={setRawSearch} placeholder={tr('ابحث بالاسم أو البريد الإلكتروني', 'Search by name or email')} size="sm" wrapperClassName="lg:max-w-sm lg:flex-1" />
+          <div className="flex flex-wrap items-center gap-2">
+            <FunnelIcon className="hidden h-4 w-4 text-muted sm:block" aria-hidden="true" />
+            <Select size="sm" aria-label={tr('تصفية حسب الباقة', 'Filter by plan')} value={planF} onChange={e => setPlanF(e.target.value)} options={planOptions} className="min-w-[140px]" />
+            <Select size="sm" aria-label={tr('تصفية حسب الحالة', 'Filter by status')} value={statusF} onChange={e => setStatusF(e.target.value)} className="min-w-[120px]"
+              options={[{ value: 'all', label: tr('كل الحالات', 'All statuses') }, { value: 'active', label: tr('نشط', 'Active') }, { value: 'suspended', label: tr('موقوف', 'Suspended') }]} />
+            <Select size="sm" aria-label={tr('تصفية حسب الدور', 'Filter by role')} value={roleF} onChange={e => setRoleF(e.target.value)} className="min-w-[120px]"
+              options={[{ value: 'all', label: tr('كل الأدوار', 'All roles') }, { value: 'user', label: tr('مستخدم', 'User') }, { value: 'admin', label: tr('مدير', 'Admin') }]} />
+            {filtering && <Button size="sm" variant="ghost" icon={XMarkIcon} onClick={clearFilters}>{tr('مسح', 'Clear')}</Button>}
+          </div>
         </div>
+        {filtering && (
+          <p className="border-b border-line-soft bg-surface-2 px-4 py-2 text-xs text-muted">
+            {tr(`تُطبَّق عوامل التصفية على ${formatNumber(data?.users?.length ?? 0)} نتيجة محمّلة — ${formatNumber(rows.length)} مطابقة.`,
+              `Filters apply to the ${formatNumber(data?.users?.length ?? 0)} loaded results — ${formatNumber(rows.length)} match.`)}
+          </p>
+        )}
 
-        {/* Pagination */}
-        {(data?.total || 0) > 20 && (
-          <div className="px-4 py-3 border-t border-slate-200 flex items-center justify-between">
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="btn-secondary text-sm py-1.5 px-3 disabled:opacity-50">← Previous</button>
-            <span className="text-sm text-slate-400">Page {page} of {Math.ceil((data?.total || 0) / 20)}</span>
-            <button onClick={() => setPage(p => p + 1)} disabled={users.length < 20} className="btn-secondary text-sm py-1.5 px-3 disabled:opacity-50">Next →</button>
+        {isError ? <div className="p-4"><ErrorState onRetry={() => refetch()} /></div> : (
+          <div className={isFetching && !isLoading ? 'opacity-70 transition-opacity' : 'transition-opacity'}>
+            <DataTable
+              rows={rows}
+              loading={isLoading}
+              skeletonRows={8}
+              rowKey={u => u.id}
+              columns={columns}
+              minWidth={720}
+              caption={tr('قائمة المستخدمين', 'Users list')}
+              onRowClick={u => { setSaveError(null); setSelected(u) }}
+              empty={<EmptyState size="sm" icon={UserGroupIcon}
+                title={search || filtering ? tr('لا توجد نتائج مطابقة', 'No matching users') : tr('لا يوجد مستخدمون بعد', 'No users yet')}
+                description={search || filtering ? tr('جرّب كلمة بحث أخرى أو امسح عوامل التصفية.', 'Try another search or clear the filters.') : undefined}
+                action={(search || filtering) ? <Button size="sm" variant="secondary" onClick={() => { setRawSearch(''); clearFilters() }}>{tr('مسح البحث', 'Clear search')}</Button> : undefined} />}
+            />
           </div>
         )}
-      </div>
+        <Pagination page={page} total={data?.total || 0} pageSize={limit} onChange={setPage} />
+      </Card>
 
-      {/* View User Modal */}
-      {viewUser && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewUser(null)}>
-          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-5 border-b border-slate-200">
-              <h3 className="font-display font-bold text-slate-900">User Details</h3>
-              <button onClick={() => setViewUser(null)} className="text-slate-400 hover:text-slate-900"><XMarkIcon className="w-5 h-5" /></button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-200/50 flex items-center justify-center text-lg font-bold text-blue-600">
-                  {viewUser.name?.[0]?.toUpperCase() || '?'}
-                </div>
-                <div>
-                  <p className="font-bold text-slate-900">{viewUser.name}</p>
-                  <p className="text-slate-400 text-sm">{viewUser.email}</p>
-                  {viewUser.referred_by && <p className="text-xs text-blue-500 mt-0.5">👥 Referred user</p>}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: 'Plan', value: userDetail?.user?.plans?.name || viewUser.plans?.name || 'Free' },
-                  { label: 'Plan Expires', value: viewUser.plan_expires_at ? format(new Date(viewUser.plan_expires_at), 'MMM d, yyyy') : 'No expiry' },
-                  { label: 'Messages', value: (userDetail?.stats?.messages || 0).toLocaleString() },
-                  { label: 'Contacts', value: (userDetail?.stats?.contacts || 0).toLocaleString() },
-                  { label: 'WA Instances', value: userDetail?.instances?.length || 0 },
-                  { label: 'Joined', value: format(new Date(viewUser.created_at), 'MMM d, yyyy') },
-                  { label: 'Role', value: viewUser.role },
-                  { label: 'Status', value: viewUser.is_active ? '✅ Active' : '🚫 Suspended' },
-                ].map(s => (
-                  <div key={s.label} className="bg-[#F8FAFC] rounded-xl p-3 border border-slate-200">
-                    <p className="text-xs text-slate-500">{s.label}</p>
-                    <p className="text-sm font-medium text-slate-900 mt-0.5">{s.value}</p>
-                  </div>
-                ))}
-              </div>
-              {userDetail?.instances?.length > 0 && (
-                <div>
-                  <p className="text-xs text-slate-500 mb-2">WhatsApp Instances</p>
-                  {userDetail.instances.map(inst => (
-                    <div key={inst.id} className="flex items-center gap-2 text-sm py-1.5 border-b border-slate-100 last:border-0">
-                      <div className={clsx('w-2 h-2 rounded-full flex-shrink-0', inst.status === 'connected' ? 'bg-brand-500' : 'bg-slate-200')} />
-                      <span className="text-slate-700 flex-1">{inst.display_name || inst.phone_number || 'No number'}</span>
-                      <span className="text-xs text-slate-400 capitalize">{inst.instance_type || inst.type}</span>
-                      <span className="text-xs text-slate-400">{inst.status}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="flex gap-3 pt-2">
-                <button onClick={() => { setViewUser(null); openEdit(viewUser) }} className="btn-secondary flex-1 justify-center text-sm">
-                  <PencilIcon className="w-4 h-4" /> Edit User
-                </button>
-                <button onClick={() => setViewUser(null)} className="btn-secondary flex-1 justify-center text-sm">Close</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <UserDrawer
+        user={selected}
+        plans={plans}
+        onClose={() => setSelected(null)}
+        onSave={save}
+        saving={updateMut.isLoading}
+        error={saveError}
+        isSelf={!!selected && selected.id === me?.id}
+      />
 
-      {/* Edit User Modal */}
-      {editUser && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setEditUser(null)}>
-          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-5 border-b border-slate-200">
-              <div>
-                <h3 className="font-display font-bold text-slate-900">Edit User</h3>
-                <p className="text-sm text-slate-400">{editUser.email}</p>
-              </div>
-              <button onClick={() => setEditUser(null)} className="text-slate-400 hover:text-slate-900"><XMarkIcon className="w-5 h-5" /></button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div>
-                <label className="label">Status</label>
-                <select value={editData.is_active ? 'active' : 'suspended'} onChange={e => setEditData(d => ({ ...d, is_active: e.target.value === 'active' }))} className="input">
-                  <option value="active">✅ Active</option>
-                  <option value="suspended">🚫 Suspended</option>
-                </select>
-              </div>
-              <div>
-                <label className="label">Role</label>
-                <select value={editData.role} onChange={e => setEditData(d => ({ ...d, role: e.target.value }))} className="input">
-                  <option value="user">👤 User</option>
-                  <option value="admin">⭐ Admin</option>
-                </select>
-              </div>
-              <div>
-                <label className="label">Plan</label>
-                <select value={editData.plan_id} onChange={e => setEditData(d => ({ ...d, plan_id: e.target.value }))} className="input">
-                  <option value="">No plan (Free)</option>
-                  {plans.map(p => <option key={p.id} value={p.id}>{p.name} — ${p.price_monthly}/mo</option>)}
-                </select>
-              </div>
-              {editData.plan_id && (
-                <div>
-                  <label className="label">Plan Expires At</label>
-                  <input
-                    type="date"
-                    value={editData.plan_expires_at}
-                    onChange={e => setEditData(d => ({ ...d, plan_expires_at: e.target.value }))}
-                    className="input"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">Leave empty for no expiry (permanent)</p>
-                </div>
-              )}
-              <div className="flex justify-end gap-3 pt-2">
-                <button onClick={() => setEditUser(null)} className="btn-secondary">Cancel</button>
-                <button
-                  onClick={() => updateMut.mutate({
-                    id: editUser.id,
-                    body: {
-                      ...editData,
-                      plan_expires_at: editData.plan_expires_at ? new Date(editData.plan_expires_at).toISOString() : null,
-                    },
-                  })}
-                  disabled={updateMut.isLoading}
-                  className="btn-primary"
-                >
-                  {updateMut.isLoading ? 'Saving…' : 'Save Changes'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={!!quick}
+        destructive={quick?.action === 'suspend'}
+        onClose={() => setQuick(null)}
+        loading={updateMut.isLoading}
+        title={quick?.action === 'suspend' ? tr('إيقاف هذا المستخدم؟', 'Suspend this user?') : tr('تفعيل هذا المستخدم؟', 'Activate this user?')}
+        description={quick ? (quick.action === 'suspend'
+          ? tr(`سيُمنع ${quick.user.email} من الدخول وتنتهي جلساته الحالية.`, `${quick.user.email} will be blocked from signing in and signed out everywhere.`)
+          : quick.user.email) : undefined}
+        confirmLabel={quick?.action === 'suspend' ? tr('إيقاف', 'Suspend') : tr('تفعيل', 'Activate')}
+        onConfirm={() => {
+          if (!quick) return
+          const active = quick.action === 'activate'
+          save(quick.user.id, { is_active: active }, active ? tr('تم تفعيل المستخدم', 'User activated') : tr('تم إيقاف المستخدم', 'User suspended'))
+            .then(() => setQuick(null), () => setQuick(null))
+        }}
+      />
     </AdminLayout>
   )
 }
