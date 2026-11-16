@@ -25,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Get all contacts (opted-out/blocked are also re-checked by the send guard)
   const { data: contacts } = await db.from('contacts')
-    .select('id, phone, first_name, last_name')
+    .select('id, phone, name')
     .eq('user_id', userId)
     .eq('is_blocked', false)
     .eq('opted_out', false)
@@ -40,7 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const phone = contact.phone?.replace(/[^\d]/g, '').replace(/^0+/, '')
     if (!phone) { failed++; continue }
 
-    const name = `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || 'Customer'
+    const name = String(contact.name || '').trim() || 'Customer'
     const msg  = message
       .replace(/\{\{customer_name\}\}/g, name)
       .replace(/\{\{shop_name\}\}/g, 'Our Store')
