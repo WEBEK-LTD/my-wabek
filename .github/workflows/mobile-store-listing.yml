@@ -54,6 +54,8 @@ jobs:
       - name: Upload to Google Play
         env:
           PLAY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          FASTLANE_OPT_OUT_USAGE: '1'
+          FASTLANE_SKIP_UPDATE_CHECK: '1'
         run: |
           if [ -z "$PLAY_JSON" ]; then echo "::error::Missing PLAY_SERVICE_ACCOUNT_JSON."; exit 1; fi
           fastlane supply \
@@ -105,7 +107,12 @@ jobs:
           jq -n --arg id "$ASC_KEY_ID" --arg iss "$ASC_ISSUER_ID" --arg key "$ASC_KEY_P8" \
             '{key_id:$id, issuer_id:$iss, key:$key, in_house:false}' > "$RUNNER_TEMP/asc.json"
       - name: Upload to App Store Connect
+        env:
+          FASTLANE_OPT_OUT_USAGE: '1'
+          FASTLANE_SKIP_UPDATE_CHECK: '1'
         run: |
+          # deliver asks to "set up deliver" when no Deliverfile exists — an empty one answers that.
+          mkdir -p fastlane && touch fastlane/Deliverfile
           fastlane deliver \
             --api_key_path "$RUNNER_TEMP/asc.json" \
             --app_identifier com.webek.wabek \
