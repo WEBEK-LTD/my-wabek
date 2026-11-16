@@ -64,13 +64,15 @@ export function applySegmentConditions<Q>(query: Q, conditions: SegmentCondition
 
 /**
  * Campaign audience filter stored in campaigns.contact_filter:
- *   { all: true } | { tags: [...] } | { segment_id, conditions, operator }
+ *   { all: true } | { tags: [...], tag_operator? } | { segment_id, conditions, operator }
+ * tag_operator: 'any' (default — has at least one of the tags) or 'all'.
  * The segment's rules are copied in at creation so editing or deleting the
  * segment later does not silently change who a scheduled campaign targets.
  */
 export interface CampaignContactFilter {
   all?: boolean
   tags?: string[]
+  tag_operator?: 'any' | 'all'
   segment_id?: string
   conditions?: SegmentCondition[]
   operator?: 'AND' | 'OR'
@@ -79,9 +81,23 @@ export interface CampaignContactFilter {
 export function applyCampaignFilter<Q>(query: Q, filter: CampaignContactFilter | null | undefined): Q {
   let q: any = query
   const f = filter || {}
-  if (Array.isArray(f.tags) && f.tags.length) q = q.overlaps('tags', f.tags)
+  if (Array.isArray(f.tags) && f.tags.length) q = f.tag_operator === 'all' ? q.contains('tags', f.tags) : q.overlaps('tags', f.tags)
   if (Array.isArray(f.conditions) && f.conditions.length) q = applySegmentConditions(q, f.conditions, f.operator || 'AND')
   return q
+}
+
+/**
+ * Exact number of recipients a campaign with this filter would target — the
+ * same query the sender runs (blocked and opted-out contacts excluded).
+ */
+export async function countCampaignAudience(userId: string, filter: CampaignContactFilter): Promise<number> {
+  const query = applyCampaignFilter(
+    supabaseAdmin().from('contacts').select('id', { count: 'exact', head: true })
+      .eq('user_id', userId).eq('is_blocked', false).eq('opted_out', false),
+    filter)
+  const { count, error } = await query
+  if (error) throw new Error(error.message)
+  return count || 0
 }
 
 export async function countSegmentContacts(userId: string, conditions: SegmentCondition[], operator: string): Promise<number> {

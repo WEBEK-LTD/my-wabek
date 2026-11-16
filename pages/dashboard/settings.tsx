@@ -10,7 +10,7 @@ import { useTheme } from '@/hooks/useTheme'
 import {
   UserCircleIcon, ShieldCheckIcon, DevicePhoneMobileIcon, BellIcon, LanguageIcon, TrashIcon,
   KeyIcon, LockOpenIcon, LockClosedIcon, ComputerDesktopIcon, SunIcon, MoonIcon, CheckIcon,
-  ExclamationTriangleIcon, ArrowLeftIcon,
+  ExclamationTriangleIcon, ArrowLeftIcon, ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/outline'
 import {
   Avatar, Badge, Button, Card, CardHeader, ConfirmDialog, EmptyState, Field, Input, PageHeader, Select,
@@ -133,6 +133,20 @@ export default function SettingsPage() {
         toast.success('تم حفظ إعدادات الأمان')
       },
       onError: (e) => toast.error(e?.response?.data?.error || 'تعذّر الحفظ')
+    }
+  )
+
+  // Revokes every session of this person (token_version bump) and clears the cookie here.
+  const [logoutAllOpen, setLogoutAllOpen] = useState(false)
+  const logoutAllMut = useMutation(
+    () => axios.post('/api/auth/logout-all'),
+    {
+      onSuccess: () => {
+        toast.success('تم تسجيل الخروج من جميع الأجهزة')
+        useAuthStore.setState({ user: null, token: null })
+        window.location.href = '/auth/login'
+      },
+      onError: (e) => toast.error(e?.response?.data?.error || 'تعذّر تسجيل الخروج من جميع الأجهزة'),
     }
   )
 
@@ -304,6 +318,16 @@ export default function SettingsPage() {
                 <InfoRow label="حالة الحساب">{user?.is_verified ? 'موثّق' : 'غير موثّق'}</InfoRow>
                 <InfoRow label="التحقق الثنائي">{OTP_LABEL[otp.otp_mode] || otp.otp_mode}</InfoRow>
               </Card>
+
+              <Card>
+                <SectionTitle icon={ArrowRightOnRectangleIcon} title="الجلسات النشطة" />
+                <p className="mb-4 text-sm text-muted">
+                  إذا فقدت جهازًا أو اشتبهت في دخول غير مصرّح به، فأنهِ جميع الجلسات المفتوحة على كل المتصفحات والأجهزة، بما فيها هذا الجهاز. ستحتاج إلى تسجيل الدخول من جديد.
+                </p>
+                <Button variant="danger" icon={ArrowRightOnRectangleIcon} onClick={() => setLogoutAllOpen(true)}>
+                  تسجيل الخروج من جميع الأجهزة
+                </Button>
+              </Card>
             </div>
           </div>
         </TabPanel>
@@ -412,6 +436,17 @@ export default function SettingsPage() {
         title="إزالة هذا الجهاز؟"
         description="سيُطلب رمز تحقق عند تسجيل الدخول التالي من هذا الجهاز."
         confirmLabel="إزالة"
+      />
+
+      <ConfirmDialog
+        destructive
+        open={logoutAllOpen}
+        onClose={() => setLogoutAllOpen(false)}
+        onConfirm={() => logoutAllMut.mutate()}
+        loading={logoutAllMut.isLoading}
+        title="تسجيل الخروج من جميع الأجهزة؟"
+        description="ستُنهى كل الجلسات المفتوحة لحسابك فورًا، بما فيها الجلسة الحالية."
+        confirmLabel="تسجيل الخروج"
       />
     </DashboardLayout>
   )

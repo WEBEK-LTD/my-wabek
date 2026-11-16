@@ -18,7 +18,13 @@ export class OtpSendError extends Error {
   }
 }
 
-const OTP_EXPIRY = parseInt(process.env.OTP_EXPIRY_MINUTES || '10') * 60 * 1000
+/** OTP lifetime in minutes (OTP_EXPIRY_MINUTES, default 10). */
+export function otpExpiryMinutes(): number {
+  const n = parseInt(process.env.OTP_EXPIRY_MINUTES || '', 10)
+  return Number.isFinite(n) && n > 0 ? n : 10
+}
+
+const OTP_EXPIRY = otpExpiryMinutes() * 60 * 1000
 
 export async function sendOTP(params: {
   userId: string
@@ -74,7 +80,7 @@ export async function sendOTP(params: {
   if (!instance) throw new OtpSendError('No connected WhatsApp number found for this account', 'no_instance')
 
   const brand = (params.brandName || '').replace(/[*_~`\r\n]/g, '').trim().slice(0, 60)
-  const minutes = process.env.OTP_EXPIRY_MINUTES || 10
+  const minutes = otpExpiryMinutes()
   const message = brand
     ? `*${brand}*\n\nرمز التحقق: *${otp}*\nYour verification code: *${otp}*\n\nصالح لمدة ${minutes} دقائق. لا تشاركه مع أحد.`
     : `رمز التحقق: *${otp}*\nYour verification code: *${otp}*\n\nصالح لمدة ${minutes} دقائق. لا تشاركه مع أحد.`

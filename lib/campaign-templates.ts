@@ -25,7 +25,7 @@ export const campaignTemplateFields = {
 export async function resolveContactFilter(
   db: ReturnType<typeof supabaseAdmin>,
   userId: string,
-  raw: { tags?: string[]; all?: boolean; segment_id?: string },
+  raw: { tags?: string[]; all?: boolean; segment_id?: string; tag_operator?: 'any' | 'all' },
   segmentId?: string
 ): Promise<{ filter: CampaignContactFilter } | { error: string }> {
   const sid = segmentId || raw.segment_id
@@ -37,7 +37,8 @@ export async function resolveContactFilter(
     return { filter: { segment_id: seg.id, conditions, operator: seg.operator === 'OR' ? 'OR' : 'AND' } }
   }
   const tags = (raw.tags || []).map(t => t.trim()).filter(Boolean)
-  return { filter: tags.length ? { tags } : { all: true } }
+  if (!tags.length) return { filter: { all: true } }
+  return { filter: raw.tag_operator === 'all' ? { tags, tag_operator: 'all' } : { tags } }
 }
 
 export async function userTimeZone(db: ReturnType<typeof supabaseAdmin>, userId: string): Promise<string | null> {

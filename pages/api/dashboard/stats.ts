@@ -35,6 +35,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     { data: topLinks },
     { count: inboundMsgCount },
     dailyAgg,
+    activeAutomationsRes,
+    aiReplies30Res,
+    teamReplies30Res,
   ] = await Promise.all([
     db.from('messages').select('*', { count: 'exact', head: true }).eq('user_id', user.userId),
     db.from('messages').select('*', { count: 'exact', head: true }).eq('user_id', user.userId).eq('direction', 'outbound').gte('created_at', monthStart),
@@ -51,11 +54,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       db.from('messages').select('id', { count: 'exact', head: true }).eq('user_id', user.userId).eq('direction', 'outbound').eq('status', st).gte('created_at', monthStart)
     ) as [any, any, any, any]),
     db.from('chatbot_flows').select('name, trigger_count, is_active').eq('user_id', user.userId).order('trigger_count', { ascending: false }).limit(5),
-    db.from('messages').select('*', { count: 'exact', head: true }).eq('user_id', user.userId).eq('type', 'ai_reply').gte('created_at', monthStart),
+    // AI replies are stored with meta.source = 'ai_assistant' (legacy rows: type 'ai_reply').
+    db.from('messages').select('id', { count: 'exact', head: true }).eq('user_id', user.userId).eq('direction', 'outbound')
+      .or('type.eq.ai_reply,meta->>source.eq.ai_assistant').gte('created_at', monthStart),
     db.from('tracked_links').select('short_code, original_url, click_count').eq('user_id', user.userId).order('click_count', { ascending: false }).limit(5),
     db.from('messages').select('*', { count: 'exact', head: true }).eq('user_id', user.userId).eq('direction', 'inbound').gte('created_at', monthStart),
     // Last 30 days chart — SQL aggregate (migration 026)
     db.rpc('dashboard_daily_messages', { p_user: user.userId, p_since: thirtyDaysAgo }),
+    db.from('automation_flows').select('id', { count: 'exact', head: true }).eq('user_id', user.userId).eq('is_active', true),
+    // Replies in the last 30 days: AI assistant vs the team (head counts only).
+    db.from('messages').select('id', { count: 'exact', head: true }).eq('user_id', user.userId).eq('direction', 'outbound')
+      .eq('meta->>source', 'ai_assistant').gte('created_at', thirtyDaysAgo),
+    db.from('messages').select('id', { count: 'exact', head: true }).eq('user_id', user.userId).eq('direction', 'outbound')
+      .not('meta->>sent_by', 'is', null).gte('created_at', thirtyDaysAgo),
   ])
 
   // Null-safe counts
@@ -69,6 +80,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const openConversations = openConversationsRaw || 0
   const inboundMessages = inboundMsgCount || 0
   const aiRepliesThisMonth = aiRepliesRaw || 0
+  // automation_flows may be missing on older databases → 0.
+  const activeAutomations = activeAutomationsRes.error ? 0 : (activeAutomationsRes.count || 0)
+  const aiReplies30 = aiReplies30Res.error ? 0 : (aiReplies30Res.count || 0)
+  const teamReplies30 = teamReplies30Res.error ? 0 : (teamReplies30Res.count || 0)
 
   // Status breakdown
   const sb = { sent: sbSent || 0, delivered: sbDelivered || 0, read: sbRead || 0, failed: sbFailed || 0 }
@@ -120,13 +135,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       new_contacts_this_month: newContactsThisMonth || 0,
       active_campaigns: activeCampaigns || 0,
       active_chatbots: activeChatbots || 0,
+      active_automations: activeAutomations,
+      // Active chatbot + automation flows.
+      active_flows: activeChatbots + activeAutomations,
       link_clicks_total: totalClicks,
       open_conversations: openConversations || 0,
       ai_replies_this_month: aiRepliesThisMonth || 0,
       inbound_this_month: inboundMessages || 0,
       delivery_rate: deliveryRate,
       read_rate: readRate,
+      ai_replies_30d: aiReplies30,
+      team_replies_30d: teamReplies30,
     },
+    replies_30d: { ai: aiReplies30, team: teamReplies30 },
     status_breakdown: sb,
     daily_chart: chart,
     recent_campaigns: recentCampaigns || [],

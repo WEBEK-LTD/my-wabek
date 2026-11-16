@@ -1,6 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
 
+const LEGACY_LOGO = /res\.cloudinary\.com\/dkl7ntpgw\//
+/** Official logo as an absolute URL (this response is also read by plugins on other origins). */
+const defaultLogo = () => `${(process.env.NEXT_PUBLIC_APP_URL || 'https://waabek.com').replace(/\/+$/, '')}/brand/logo-mark.png`
+const notLegacy = (v: unknown) => (typeof v === 'string' && v && !LEGACY_LOGO.test(v) ? v : null)
+
 // Public endpoint - no auth needed
 // Returns white label settings for a given domain
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -24,8 +29,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const brand = brandRow.value as any
       const settings = {
         brand_name:  brand.app_name || null,
-        brand_logo:  brand.logo_url || brand.brand_logo || 'https://res.cloudinary.com/dkl7ntpgw/image/upload/f_auto,q_auto/%D8%AA%D8%B5%D9%85%D9%8A%D9%85_%D8%A8%D8%AF%D9%88%D9%86_%D8%B9%D9%86%D9%88%D8%A7%D9%86_1_kejdrs',
-        favicon_url: brand.favicon_url || null,
+        brand_logo:  notLegacy(brand.logo_url) || notLegacy(brand.brand_logo) || defaultLogo(),
+        favicon_url: notLegacy(brand.favicon_url),
         brand_color: brand.primary_color || brand.brand_color || null,
       }
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')

@@ -13,6 +13,8 @@ import {
   ShieldCheckIcon, ArrowRightOnRectangleIcon, ClockIcon, BookOpenIcon,
 } from '@heroicons/react/24/outline'
 import { useAuthStore } from '@/lib/store'
+import { useAuth } from '@/hooks/useAuth'
+import SessionLoading from './SessionLoading'
 import { getPushStatus } from '@/lib/push-client'
 import { setStoredLang } from '@/lib/i18n'
 import { useTranslation } from '@/hooks/useTranslation'
@@ -72,6 +74,8 @@ export default function DashboardLayout({ children, title: titleProp, bleed, hid
   const router = useRouter()
   const { t, lang, dir } = useTranslation()
   const [searchOpen, setSearchOpen] = useState(false)
+  // Waits for the cookie session check before rendering or redirecting.
+  const { ready } = useAuth({ required: true })
 
   // White label (tenants on their own domain keep their logo / colours / favicon)
   const { brandName, customLogo, favIcon, hidePoweredBy, customCss, customFooter } = useWhiteLabel()
@@ -79,7 +83,7 @@ export default function DashboardLayout({ children, title: titleProp, bleed, hid
   /* ── Push notifications ───────────────────────────────── */
   useEffect(() => {
     // Load VAPID key and check subscription state
-    fetch('/api/admin/seo').then(r => r.json()).then(d => {
+    fetch('/api/seo/public').then(r => r.json()).then(d => {
       if (d.push?.vapid_public) getPushStatus().catch(() => {})
     }).catch(() => {})
   }, [])
@@ -92,7 +96,7 @@ export default function DashboardLayout({ children, title: titleProp, bleed, hid
       if (perm !== 'granted') return
       try {
         const reg = await navigator.serviceWorker.ready
-        const { data: seoData } = await axios.get('/api/admin/seo').catch(() => ({ data: {} as any }))
+        const { data: seoData } = await axios.get('/api/seo/public').catch(() => ({ data: {} as any }))
         const vapidKey = seoData?.push?.vapid_public || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
         if (!vapidKey) return
         const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKey })
@@ -108,7 +112,7 @@ export default function DashboardLayout({ children, title: titleProp, bleed, hid
   /* ── Data ─────────────────────────────────────────────── */
   const { data: notifData, refetch: refetchNotifs } = useQuery('notifications',
     () => axios.get('/api/notifications?limit=10').then(r => r.data),
-    { refetchInterval: 30000, retry: false },
+    { refetchInterval: 30000, retry: false, enabled: ready },
   )
   const notifications: NotificationRow[] = notifData?.notifications || []
   const unreadCount = notifications.filter(n => !n.is_read).length
@@ -116,7 +120,7 @@ export default function DashboardLayout({ children, title: titleProp, bleed, hid
   // Plan features — drive locked nav items and the upgrade wall
   const { data: planData } = useQuery('plan-features',
     () => axios.get('/api/billing/plan-features').then(r => r.data),
-    { staleTime: 60000, retry: false },
+    { staleTime: 60000, retry: false, enabled: ready },
   )
   const features: Record<string, unknown> = planData?.features || {}
   const planName: string = planData?.plan?.name || ''
@@ -124,6 +128,7 @@ export default function DashboardLayout({ children, title: titleProp, bleed, hid
   // Session (auth guard + plan expiry + Wix + team role)
   const { data: meData, error: meError } = useQuery('me', () => axios.get('/api/auth/me').then(r => r.data), {
     staleTime: 300000,
+    enabled: ready,
     retry: (count, err: any) => err?.response?.status !== 401 && count < 1,
   })
   useEffect(() => {
@@ -146,7 +151,7 @@ export default function DashboardLayout({ children, title: titleProp, bleed, hid
   // Unread conversations badge on "المحادثات"
   const { data: inboxData } = useQuery('shell-inbox-unread',
     () => axios.get('/api/inbox/inboxes').then(r => r.data),
-    { refetchInterval: 60000, staleTime: 30000, retry: false },
+    { refetchInterval: 60000, staleTime: 30000, retry: false, enabled: ready },
   )
   const inboxUnread = (inboxData?.inboxes || []).reduce((s: number, i: { unread?: number }) => s + (i.unread || 0), 0)
 
@@ -242,6 +247,15 @@ export default function DashboardLayout({ children, title: titleProp, bleed, hid
       <Link href="/dashboard/billing" className="font-semibold text-inherit underline-offset-4 hover:text-inherit hover:underline">{t('shell_renew')}</Link>
     </div>
   ) : null
+
+  if (!ready) {
+    return (
+      <>
+        <Head><title>{`${title} | ${brandName || BRAND_ASSETS.name}`}</title></Head>
+        <SessionLoading label={t('ui_loading')} dir={dir} />
+      </>
+    )
+  }
 
   return (
     <>

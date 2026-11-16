@@ -42,13 +42,19 @@ const planSchema = z.object({
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const db = supabaseAdmin()
 
-  if (req.method === 'GET') {
-    const { data } = await db.from('plans').select('*').eq('is_active', true).order('sort_order')
-    return res.status(200).json({ plans: data })
-  }
-
+  // Admin-only. The public, active-only catalogue is GET /api/plans.
   const admin = await requireAdmin(req, res)
   if (!admin) return
+
+  if (req.method === 'GET') {
+    // Every plan, including inactive ones (each row carries is_active).
+    const { data, error } = await db.from('plans').select('*').order('sort_order')
+    if (error) {
+      console.error('[admin plans] load failed:', error.message)
+      return res.status(500).json({ error: 'Failed to load plans' })
+    }
+    return res.status(200).json({ plans: data || [] })
+  }
 
   if (req.method === 'POST') {
     try {

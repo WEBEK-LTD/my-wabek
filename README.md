@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://res.cloudinary.com/dkl7ntpgw/image/upload/f_auto,q_auto/%D8%AA%D8%B5%D9%85%D9%8A%D9%85_%D8%A8%D8%AF%D9%88%D9%86_%D8%B9%D9%86%D9%88%D8%A7%D9%86_1_kejdrs" alt="WABEK" height="80" />
+<img src="public/brand/logo-mark.png" alt="WABEK" height="80" />
 
 # WABEK — WhatsApp Business Automation Platform
 

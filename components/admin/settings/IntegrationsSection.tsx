@@ -78,9 +78,6 @@ export function IntegrationsSection({ seo, webmaster, push, onSaved }: { seo: Ob
       {/* Webmaster */}
       <Card className="space-y-4">
         <CardHeader icon={GlobeAltIcon} title={tr('أدوات مشرفي المواقع', 'Webmaster tools')} subtitle={tr('أكّد ملكية الموقع لدى محركات البحث.', 'Verify site ownership with search engines.')} />
-        <Notice tone="warning" icon={ExclamationTriangleIcon}>
-          {tr('واجهة /api/admin/seo لا تحفظ هذه الحقول حاليًا (لا تقبل مفتاح webmaster)، لذا لن تُطبَّق بعد الحفظ.', 'The /api/admin/seo endpoint doesn’t persist these fields yet (no webmaster key), so they won’t apply after saving.')}
-        </Notice>
         {[
           { label: 'Google Search Console', key: 'google_site_verification', link: 'https://search.google.com/search-console', desc: tr('Search Console ← إضافة موقع ← طريقة وسم HTML', 'Search Console → Add property → HTML tag') },
           { label: 'Bing Webmaster Tools', key: 'bing_site_verification', link: 'https://www.bing.com/webmasters', desc: tr('Bing Webmaster ← إضافة موقع ← وسم XML', 'Bing Webmaster → Add site → XML meta tag') },
@@ -103,7 +100,7 @@ export function IntegrationsSection({ seo, webmaster, push, onSaved }: { seo: Ob
             { label: tr('اختبار البيانات المنظمة', 'Rich results test'), href: 'https://search.google.com/test/rich-results' },
           ].map(a => <Button key={a.href} size="xs" variant="secondary" href={a.href} external iconEnd={ArrowTopRightOnSquareIcon}>{a.label}</Button>)}
         </div>
-        <div className="flex justify-end"><Button variant="secondary" loading={saving === 'web'} onClick={() => put('web', { webmaster: webForm }, tr('أُرسلت الإعدادات', 'Settings sent'))}>{tr('حفظ', 'Save')}</Button></div>
+        <div className="flex justify-end"><Button variant="secondary" loading={saving === 'web'} onClick={() => put('web', { webmaster: webForm }, tr('حُفظت إعدادات مشرفي المواقع', 'Webmaster settings saved'))}>{tr('حفظ', 'Save')}</Button></div>
       </Card>
 
       {/* Push */}

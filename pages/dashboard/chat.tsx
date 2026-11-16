@@ -8,6 +8,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout'
 import { Avatar, Button, Select, Skeleton, Tooltip } from '@/components/ui'
 import { cn } from '@/components/ui/utils'
 import { useAuthStore } from '@/lib/store'
+import { useRouter } from 'next/router'
 import { useRequireAuth } from '@/hooks/useAuth'
 import { localeTag } from '@/components/auth/makeCopy'
 import { useInboxCopy } from '@/components/inbox/copy'
@@ -16,7 +17,7 @@ import type { AssignFilter } from '@/components/inbox/ConversationList'
 import { MessageBubble } from '@/components/inbox/MessageBubble'
 import { Composer } from '@/components/inbox/Composer'
 import { CustomerPanel } from '@/components/inbox/CustomerPanel'
-import { TemplatesModal } from '@/components/inbox/TemplatesModal'
+import { TemplatesModal, type InboxTemplate, type TemplateParams } from '@/components/inbox/TemplatesModal'
 import { dayLabel, isAiMessage, windowState } from '@/components/inbox/utils'
 
 /** ≥1280px: the customer panel sits beside the thread instead of over it. */
@@ -75,7 +76,6 @@ export default function ChatPage() {
   const [aiSuggestion, setAiSuggestion] = useState<string | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiBlocked, setAiBlocked] = useState(false)
-  const aiSettingsRef = useRef<any[] | null>(null)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -136,6 +136,39 @@ export default function ChatPage() {
       axios.get('/api/team').then(r => setTeamMembers(r.data.members || [])).catch(() => {}),
     ]).finally(() => setLoading(false))
   }, [])
+
+  // Deep link: /dashboard/chat?contact=<id> (e.g. "open chat" on a contact page)
+  // opens that contact's conversation, or starts one when none exists yet.
+  const router = useRouter()
+  const deepLinkDone = useRef(false)
+  useEffect(() => {
+    if (loading || deepLinkDone.current || !router.isReady) return
+    const raw = router.query.contact
+    const contactId = typeof raw === 'string' && /^[0-9a-f-]{36}$/i.test(raw) ? raw : null
+    if (!contactId) return
+    deepLinkDone.current = true
+    ;(async () => {
+      try {
+        const known = conversations.find(cv => cv.contact_id === contactId)
+        if (known) { openConversation(known); return }
+        const { data } = await axios.get('/api/inbox', { params: { status: 'all', contact_id: contactId, ...(canSeeAll ? { instance_id: 'all' } : {}) } })
+        const found = (data?.conversations || [])[0]
+        if (found) {
+          setConversations(prev => (prev.some(cv => cv.id === found.id) ? prev : [found, ...prev]))
+          openConversation(found)
+          return
+        }
+        // No conversation yet: open an empty thread for the contact.
+        const { data: cd } = await axios.get(`/api/contacts/${contactId}`)
+        const contact = cd?.contact
+        if (!contact) return
+        openConversation({
+          id: null, contact_id: contact.id, instance_id: selectedInstance || instances[0]?.id || null, status: 'open',
+          contacts: { id: contact.id, name: contact.name, phone: contact.phone, tags: contact.tags },
+        })
+      } catch { /* invalid or inaccessible contact: stay on the list */ }
+    })()
+  }, [loading, router.isReady, router.query.contact])
 
   // Keep ref in sync so realtime handler always reads current value
   useEffect(() => { activeConvRef.current = activeConv }, [activeConv])
@@ -381,6 +414,34 @@ export default function ChatPage() {
     } finally { setSending(false) }
   }
 
+  // ── Approved template (Cloud API; reopens a conversation outside the 24h window) ──
+  const sendTemplate = async (tpl: InboxTemplate, params: TemplateParams) => {
+    if (!activeConv) return
+    const instance = sendingInstance()
+    if (!instance) { toast.error(c('no_instance')); throw new Error('no_instance') }
+    try {
+      const { data } = await axios.post('/api/whatsapp/chat-send', {
+        instance_id: instance.id,
+        to: activeConv.contacts?.phone,
+        contact_id: activeConv.contacts?.id,
+        template: { name: tpl.name, language: tpl.language, params },
+      })
+      const content = data?.content || `[${tpl.name}]`
+      const now = new Date().toISOString()
+      setMessages(prev => [...prev, {
+        id: 'temp-' + Date.now(), direction: 'outbound', content, status: 'sent', created_at: now, type: 'text',
+        wa_message_id: data?.wa_message_id, meta: { method: 'template', template: tpl.name, source: 'live_chat' },
+      }])
+      setConversations(prev => prev.map(cv =>
+        cv.id === activeConv.id ? { ...cv, last_message: { content, direction: 'outbound', created_at: now } } : cv
+      ))
+      toast.success(c('tpl_sent'))
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || c('tpl_send_failed'))
+      throw e
+    }
+  }
+
   // ── Attachments (isolated from the text sendMessage flow above) ──────────
   function mimeToWaType(mime: string) {
     if (!mime) return 'document'
@@ -484,31 +545,17 @@ export default function ChatPage() {
     setSavingNote(false)
   }
 
-  // ── AI reply suggestion (on demand; uses the AI test endpoint) ─────────
+  // ── AI reply suggestion (on demand; server builds it from the conversation) ─
   const lastInbound = useMemo(() => [...messages].reverse().find(m => m.direction === 'inbound' && m.content), [messages])
   const suggestReply = async () => {
     if (!activeConv || aiLoading) return
     setAiLoading(true)
     setAiSuggestion(null)
     try {
-      if (!aiSettingsRef.current) {
-        const { data } = await axios.get('/api/ai/settings').catch(() => ({ data: { settings: [] } }))
-        aiSettingsRef.current = data?.settings || []
-      }
-      const settings = aiSettingsRef.current || []
-      const cfg = settings.find((s: any) => s.instance_id === activeConv.instance_id) || settings.find((s: any) => !s.instance_id) || settings[0] || {}
-      const transcript = messages
-        .filter(m => m.content && !/^\[(image|video|audio|document|sticker|ptt)\]$/.test(m.content))
-        .slice(-10)
-        .map(m => `${m.direction === 'inbound' ? 'Customer' : 'Agent'}: ${m.content}`)
-        .join('\n')
-      const prompt = `${transcript}\n\nWrite the agent's next reply to the customer. Reply with the message text only.`.slice(-3900)
-      const { data } = await axios.post('/api/ai/test', {
-        message: prompt,
-        ...(cfg.system_prompt ? { system_prompt: cfg.system_prompt } : {}),
-        ...(cfg.company_name ? { company_name: cfg.company_name } : {}),
-      })
-      if (data?.reply) setAiSuggestion(String(data.reply).trim())
+      const { data } = await axios.post('/api/ai/suggest', activeConv.id
+        ? { conversation_id: activeConv.id }
+        : { contact_id: activeConv.contact_id, instance_id: activeConv.instance_id || undefined })
+      if (data?.suggestion) setAiSuggestion(String(data.suggestion).trim())
       else toast.error(c('ai_failed'))
     } catch (e: any) {
       if (e?.response?.data?.upgrade_required) { setAiBlocked(true); toast.error(c('ai_upgrade')) }
@@ -741,7 +788,13 @@ export default function ChatPage() {
         </div>
       )}
 
-      <TemplatesModal open={templatesOpen} onClose={() => setTemplatesOpen(false)} instanceId={sendingInstance()?.id || activeConv?.instance_id} />
+      <TemplatesModal
+        open={templatesOpen}
+        onClose={() => setTemplatesOpen(false)}
+        instanceId={sendingInstance()?.id || activeConv?.instance_id}
+        onSend={activeConv ? sendTemplate : undefined}
+        defaults={{ first: activeConv?.contacts?.name || undefined }}
+      />
     </DashboardLayout>
   )
 }

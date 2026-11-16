@@ -1938,16 +1938,36 @@ export function getStoredLang(): string {
   }
 }
 
+/** Cookie mirror of the stored language, read by _document on the server. */
+export const LANG_COOKIE = 'wabek_lang'
+
 export function setStoredLang(lang: string): void {
   if (typeof window === 'undefined') return
   try {
     localStorage.setItem('wabek_lang', lang)
     localStorage.setItem('lang', lang)
   } catch {}
+  try {
+    if (translations[lang]) document.cookie = `${LANG_COOKIE}=${lang}; Path=/; Max-Age=31536000; SameSite=Lax`
+  } catch {}
 }
 
-/** Inline script for _document: sets <html lang/dir> before first paint. */
-export const LANG_INIT_SCRIPT = `(function(){try{var l=localStorage.getItem('wabek_lang')||localStorage.getItem('lang')||'${DEFAULT_LANG}';if(['en','ar','fr','tr'].indexOf(l)<0)l='${DEFAULT_LANG}';var r=document.documentElement;r.lang=l;r.dir=l==='ar'?'rtl':'ltr'}catch(e){}})();`
+/**
+ * Routes whose language is fixed by the URL: the English docs under /en/…
+ * and the Arabic docs under /docs. Returns null for every other route.
+ */
+export function routeLang(path: string | undefined | null): 'en' | 'ar' | null {
+  const p = (path || '').split(/[?#]/)[0]
+  if (/^\/en(\/|$)/.test(p)) return 'en'
+  if (/^\/docs(\/|$)/.test(p)) return 'ar'
+  return null
+}
+
+/**
+ * Inline script for _document: sets <html lang/dir> before first paint.
+ * Skipped when the server fixed the language from the route (data-lang-fixed).
+ */
+export const LANG_INIT_SCRIPT = `(function(){try{var r=document.documentElement;if(r.hasAttribute('data-lang-fixed'))return;var l=localStorage.getItem('wabek_lang')||localStorage.getItem('lang')||'${DEFAULT_LANG}';if(['en','ar','fr','tr'].indexOf(l)<0)l='${DEFAULT_LANG}';r.lang=l;r.dir=l==='ar'?'rtl':'ltr'}catch(e){}})();`
 
 export type Language = keyof typeof translations
 export type TranslationKey = keyof typeof translations['en']
