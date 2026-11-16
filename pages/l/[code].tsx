@@ -1,9 +1,31 @@
 import { GetServerSideProps } from 'next'
+import Head from 'next/head'
 import { supabaseAdmin } from '@/lib/supabase'
 import { v4 as uuidv4 } from 'uuid'
+import { Button, Spinner } from '@/components/ui'
+import { ErrorScreen } from '@/components/marketing/ErrorScreen'
+import { usePublicLang } from '@/components/marketing/usePublicLang'
 
+// Visual fallback only: getServerSideProps below always answers with a redirect.
 export default function RedirectPage() {
-  return <div>Redirecting...</div>
+  const { lang, dir, t } = usePublicLang()
+  return (
+    <>
+      <Head>
+        <title>{t('mk_redirecting')}</title>
+        <meta name="robots" content="noindex" />
+      </Head>
+      <ErrorScreen
+        lang={lang}
+        dir={dir}
+        title={t('mk_redirecting')}
+        body={t('mk_redirect_note')}
+        actions={<Button href="/" variant="on-deep-ghost">{t('mk_go_home')}</Button>}
+      >
+        <Spinner className="h-6 w-6 text-brand-green" />
+      </ErrorScreen>
+    </>
+  )
 }
 
 // Only plain web links may be redirected to (blocks javascript:, data:, etc.)
