@@ -1,9 +1,9 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireOwnerOrRole } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireOwnerOrRole(req, res)
   if (!user) return
   const db = supabaseAdmin()
 
@@ -14,7 +14,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    const { api_key } = req.body
+    const { api_key } = req.body || {}
+    if (api_key !== undefined && api_key !== null && (typeof api_key !== 'string' || api_key.length > 512)) {
+      return res.status(400).json({ error: 'Invalid api_key' })
+    }
     await db.from('system_settings').upsert({
       key:        `wix_settings_${user.userId}`,
       value:      { api_key },
