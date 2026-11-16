@@ -122,11 +122,28 @@ export async function linkWixInstance(userId: string, wixInstanceId: string): Pr
   const { data: install } = await db.from('wix_installations').select('id').eq('wix_instance_id', wixInstanceId).maybeSingle()
   if (!install) {
     await db.from('wix_installations').insert({ wix_instance_id: wixInstanceId, owner_id: userId, installed_at: now, updated_at: now })
+  } else {
+    await reactivateWixInstallation(wixInstanceId)
   }
   if (!links?.length) {
     await db.from('wix_user_links').upsert({ user_id: userId, wix_instance_id: wixInstanceId, connected_at: now }, { onConflict: 'user_id,wix_instance_id' })
   }
   return 'linked'
+}
+
+/**
+ * Undo an App Removed mark (reinstall / relink). A separate update whose
+ * error is only logged: before migration 034 the columns do not exist and
+ * nothing else may fail because of that.
+ */
+export async function reactivateWixInstallation(wixInstanceId: string): Promise<void> {
+  const { error } = await supabaseAdmin().from('wix_installations')
+    .update({ status: 'active', removed_at: null })
+    .eq('wix_instance_id', wixInstanceId)
+    .eq('status', 'removed')
+  if (error && !/status|removed_at|column/i.test(error.message)) {
+    console.error('[wix-auth] reactivate installation failed:', error.message)
+  }
 }
 
 export interface WixCaller {
