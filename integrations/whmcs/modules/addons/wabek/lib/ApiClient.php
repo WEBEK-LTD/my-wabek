@@ -136,6 +136,8 @@ final class ApiClient
             'Accept: application/json',
             'X-API-Key: ' . $this->apiKey,
             'User-Agent: WABEK-WHMCS/' . (defined('WABEK_MODULE_VERSION') ? WABEK_MODULE_VERSION : '4'),
+            // Identifies the addon and its version to the platform (usage stats).
+            'X-WABEK-Client: whmcs/' . (defined('WABEK_MODULE_VERSION') ? WABEK_MODULE_VERSION : '4'),
         ];
         foreach ($extraHeaders as $h) {
             $headers[] = $h;

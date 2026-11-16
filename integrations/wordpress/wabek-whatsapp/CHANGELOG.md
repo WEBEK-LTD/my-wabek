@@ -2,6 +2,11 @@
 
 All notable changes to the WABEK WhatsApp for WooCommerce plugin.
 
+## 1.1.1 — 2026-11-16
+
+### Added
+- Every API call identifies the plugin with `X-WABEK-Client: wordpress/<version>` and the store host with `X-WABEK-Site`, so the WABEK admin can see which plugin versions are in use. No customer data is sent in these headers.
+
 ## 1.1.0 — 2026-11-16
 
 ### Added
