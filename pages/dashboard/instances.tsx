@@ -226,7 +226,7 @@ export default function InstancesPage() {
           }
         />
 
-        <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
+        <div className="grid grid-cols-2 gap-3 sm:gap-3.5 lg:grid-cols-4">
           <StatCard label="جميع الأرقام" value={String(instances.length)} icon={SignalIcon} loading={isLoading} />
           <StatCard label="متصلة الآن" value={String(connectedCount)} icon={CheckIcon} loading={isLoading}
             sub={instances.length ? `${instances.length - connectedCount} غير متصلة` : undefined}

@@ -137,7 +137,7 @@ export default function BillingPage() {
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] text-deep-muted">باقتك الحالية</p>
                   <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                    <h2 className="text-2xl font-bold">{sub.plans?.name || 'نشطة'}</h2>
+                    <h2 className="text-2xl font-bold text-deep-ink">{sub.plans?.name || 'نشطة'}</h2>
                     <Badge tone="success" dot size="sm">نشطة</Badge>
                     {isManualSub && <Badge tone="neutral" size="sm">مُعيّنة من الإدارة</Badge>}
                   </div>

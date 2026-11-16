@@ -236,7 +236,7 @@ function ResellerContent() {
               <Notice tone="warning" icon={ClockIcon} title="حسابك قيد المراجعة">سنُعلمك فور الموافقة. يمكنك ضبط إعداداتك في الأثناء.</Notice>
             ) : null}
 
-            <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+            <div className="grid grid-cols-2 gap-3 sm:gap-3.5 lg:grid-cols-4">
               <StatCard label="الرصيد المعلّق" value={money(profile?.balance_pending)} icon={BanknotesIcon} loading={isLoading} />
               <StatCard label="إجمالي الأرباح" value={money(profile?.balance_total)} icon={CurrencyDollarIcon} loading={isLoading} />
               <StatCard label="العملاء المُحالون" value={String(referrals.length)} icon={UserGroupIcon} loading={isLoading} />
@@ -272,7 +272,7 @@ function ResellerContent() {
                         <Avatar name={r.referred_user?.name || r.referred_user?.email || '?'} size="sm" />
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium text-ink">{r.referred_user?.name || 'غير معروف'}</p>
-                          <p className="truncate text-xs text-muted" dir="ltr">{r.referred_user?.email}</p>
+                          <p className="truncate text-xs text-muted"><span dir="ltr">{r.referred_user?.email}</span></p>
                         </div>
                         <div className="text-end">
                           <p className="text-sm font-semibold text-success tabular">{money(r.total_earned)}</p>
@@ -321,7 +321,7 @@ function ResellerContent() {
                         </div>
                         <Badge tone="success" size="sm" dot>نشطة</Badge>
                       </div>
-                      <p className="mt-4 text-3xl font-bold text-ink tabular" dir="ltr">{money(plan.custom_price_monthly)}<span className="ms-1 text-sm font-normal text-muted">/ شهر</span></p>
+                      <p className="mt-4 text-3xl font-bold text-ink tabular"><span dir="ltr">{money(plan.custom_price_monthly)}</span><span className="ms-1 text-sm font-normal text-muted">/ شهر</span></p>
                       <div className="mt-4 space-y-2 rounded-card bg-surface-2 p-3 text-sm">
                         <div className="flex justify-between"><span className="text-muted">تكلفتك</span><span className="tabular text-body">{money(cost)} / شهر</span></div>
                         <div className="flex justify-between border-t border-line-soft pt-2"><span className="font-medium text-success">ربحك</span><span className="font-bold text-success tabular">{money(p)} / شهر</span></div>
@@ -395,7 +395,7 @@ function ResellerContent() {
                           <Avatar name={r.referred_user?.name || r.referred_user?.email || '?'} size="sm" />
                           <div className="min-w-0">
                             <p className="truncate font-medium text-ink">{r.referred_user?.name}</p>
-                            <p className="truncate text-xs text-muted" dir="ltr">{r.referred_user?.email}</p>
+                            <p className="truncate text-xs text-muted"><span dir="ltr">{r.referred_user?.email}</span></p>
                           </div>
                         </div>
                       </TD>

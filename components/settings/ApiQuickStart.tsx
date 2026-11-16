@@ -11,7 +11,7 @@ const LANGS = [
 ]
 
 function samples(base: string, key: string) {
-  const body = '{"to": "966500000000", "message": "مرحبًا من WABEK"}'
+  const body = '{"to": "966500000000", "message": "Hello from WABEK"}'
   return {
     curl: `curl -X POST ${base}/api/v1/send \\
   -H "X-API-Key: ${key}" \\
@@ -23,7 +23,7 @@ function samples(base: string, key: string) {
     'X-API-Key': '${key}',
     'Content-Type': 'application/json',
   },
-  body: JSON.stringify({ to: '966500000000', message: 'مرحبًا من WABEK' }),
+  body: JSON.stringify({ to: '966500000000', message: 'Hello from WABEK' }),
 })
 const data = await res.json()`,
     php: `<?php
@@ -35,7 +35,7 @@ curl_setopt_array($ch, [
     'X-API-Key: ${key}',
     'Content-Type: application/json',
   ],
-  CURLOPT_POSTFIELDS => json_encode(['to' => '966500000000', 'message' => 'مرحبًا من WABEK']),
+  CURLOPT_POSTFIELDS => json_encode(['to' => '966500000000', 'message' => 'Hello from WABEK']),
 ]);
 $data = json_decode(curl_exec($ch), true);`,
     python: `import requests
@@ -43,7 +43,7 @@ $data = json_decode(curl_exec($ch), true);`,
 res = requests.post(
     "${base}/api/v1/send",
     headers={"X-API-Key": "${key}"},
-    json={"to": "966500000000", "message": "مرحبًا من WABEK"},
+    json={"to": "966500000000", "message": "Hello from WABEK"},
 )
 data = res.json()`,
   } as Record<string, string>

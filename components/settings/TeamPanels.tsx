@@ -40,7 +40,7 @@ export function PerformancePanel({ perfData, perfLoading, perfFetching, refetchP
           </div>
           {refresh}
         </div>
-        <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+        <div className="grid grid-cols-2 gap-3 sm:gap-3.5 lg:grid-cols-4">
           <StatCard label="محادثات تمت معالجتها" value={String(s.conversations_handled ?? 0)} icon={ChatBubbleLeftRightIcon} />
           <StatCard label="رسائل مرسلة" value={String(s.messages_sent ?? 0)} icon={PaperAirplaneIcon} />
           <StatCard label="نسبة الرد" value={s.response_rate !== null && s.response_rate !== undefined ? `${s.response_rate}%` : '—'} icon={ArrowUturnLeftIcon}
@@ -87,7 +87,7 @@ export function PerformancePanel({ perfData, perfLoading, perfFetching, refetchP
                       <Avatar name={m.name || m.email || '?'} size="sm" />
                       <div className="min-w-0">
                         <p className="max-w-[12rem] truncate font-medium text-ink">{m.name || 'غير معروف'}</p>
-                        <p className="max-w-[12rem] truncate text-xs text-muted" dir="ltr">{m.email || (m.name === 'You (Owner)' ? 'Account owner' : '')}</p>
+                        <p className="max-w-[12rem] truncate text-xs text-muted"><span dir="ltr">{m.email || (m.name === 'You (Owner)' ? 'Account owner' : '')}</span></p>
                       </div>
                     </div>
                   </TD>

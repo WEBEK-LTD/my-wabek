@@ -126,7 +126,7 @@ export default function WHMCSPage() {
                 },
                 {
                   title: 'الصق مفتاح API',
-                  body: <>أنشئ مفتاحًا باسم مثل <code dir="ltr" className="font-mono text-ink">WHMCS Production</code> من صفحة <a className="text-link hover:text-link-hover" href="/dashboard/api-keys">مفاتيح API</a>، ثم الصقه في <strong className="text-ink">Addons ← WABEK WhatsApp ← الإعدادات</strong>. تحفظه الوحدة مشفّرًا وترسله في الترويسة فقط.</>,
+                  body: <>أنشئ مفتاحًا باسم مثل <code dir="ltr" className="font-mono text-ink">WHMCS Production</code> من صفحة <a className="text-link hover:text-link-hover" href="/dashboard/api-keys">مفاتيح API</a>، ثم افتح <strong className="text-ink">Addons ← WABEK WhatsApp</strong> والصقه في تبويب <strong className="text-ink">الإعدادات</strong>. تحفظه الوحدة مشفّرًا وترسله في الترويسة فقط.</>,
                 },
                 {
                   title: 'اختبر الاتصال',
@@ -149,7 +149,7 @@ export default function WHMCSPage() {
                 </ul>
               </Card>
               <Notice tone="warning" title="تستخدم إصدارًا قديمًا؟">
-                الروابط القديمة التي تضع المفتاح داخل الرابط لم تعد مدعومة. احذف الملف <code dir="ltr" className="font-mono">includes/hooks/wabek_notifications.php</code> إن وُجد، ثم ثبّت الوحدة الجديدة؛ تُنقل إعداداتك تلقائيًا.
+                الروابط القديمة التي تضع المفتاح داخل الرابط لم تعد مدعومة. احذف الملف <code dir="ltr" className="break-all font-mono">includes/hooks/wabek_notifications.php</code> إن وُجد، ثم ثبّت الوحدة الجديدة؛ تُنقل إعداداتك تلقائيًا.
               </Notice>
               <Notice tone="info" title="نافذة الـ 24 ساعة">
                 على أرقام Cloud API لا يُسلَّم النص الحر لعميل لم يراسلك خلال 24 ساعة؛ حدّد قالبًا معتمدًا لكل حدث. <a className="font-medium underline" href="/docs/getting-started/messaging-window">اعرف المزيد</a>
@@ -170,7 +170,7 @@ export default function WHMCSPage() {
                         <span className={e.on ? 'h-2 w-2 shrink-0 rounded-full bg-success' : 'h-2 w-2 shrink-0 rounded-full bg-line-strong'} aria-hidden="true" />
                         <span className="min-w-0 flex-1">
                           <span className="block text-sm font-medium text-ink">{e.label}</span>
-                          <code dir="ltr" className="block truncate font-mono text-xs text-muted">{e.key}</code>
+                          <span className="block truncate text-xs text-muted"><code dir="ltr" className="font-mono">{e.key}</code></span>
                         </span>
                         <Badge tone={e.on ? 'success' : 'neutral'} size="sm">{e.on ? 'مفعّل افتراضيًا' : 'اختياري'}</Badge>
                       </li>
@@ -182,8 +182,8 @@ export default function WHMCSPage() {
             <Card>
               <h3 className="font-semibold text-ink">حقول الدمج</h3>
               <p className="mt-1 text-sm text-muted">تُستبدل تلقائيًا في نص كل إشعار داخل الوحدة، مثل: «مرحبًا {'{client_name}'}، صدرت الفاتورة {'{invoice_id}'}».</p>
-              <div className="mt-3 flex flex-wrap gap-1.5" dir="ltr">
-                {MERGE_FIELDS.map(f => <code key={f} className="rounded-md bg-chip px-2 py-0.5 font-mono text-xs text-chip-ink">{`{${f}}`}</code>)}
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {MERGE_FIELDS.map(f => <code key={f} dir="ltr" className="rounded-md bg-chip px-2 py-0.5 font-mono text-xs text-chip-ink">{`{${f}}`}</code>)}
               </div>
             </Card>
           </div>

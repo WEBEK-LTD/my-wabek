@@ -201,7 +201,7 @@ export default function WixPage() {
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className="truncate font-medium text-ink">{conn.wix_installations?.site_name || 'متجر Wix'}</p>
-                          <p className="truncate font-mono text-xs text-muted" dir="ltr">{conn.wix_instance_id}</p>
+                          <p className="truncate font-mono text-xs text-muted"><span dir="ltr">{conn.wix_instance_id}</span></p>
                           {conn.connected_at && <p className="mt-0.5 text-xs text-muted">مرتبط منذ {fmtDate(conn.connected_at)}</p>}
                         </div>
                         <Button size="sm" variant="danger-soft" icon={LinkSlashIcon} onClick={() => setToDisconnect(conn.wix_instance_id)}>فصل</Button>
@@ -259,11 +259,12 @@ export default function WixPage() {
                           value={templates[ev.key] || ev.default}
                           onChange={e => setTemplates(t => ({ ...t, [ev.key]: e.target.value }))}
                         />
-                        <div className="flex flex-wrap gap-1.5" dir="ltr">
+                        <div className="flex flex-wrap gap-1.5">
                           {ev.vars.map(v => (
                             <button
                               key={v}
                               type="button"
+                              dir="ltr"
                               onClick={() => {
                                 const cur = templates[ev.key] || ev.default
                                 setTemplates(t => ({ ...t, [ev.key]: cur + `{{${v}}}` }))

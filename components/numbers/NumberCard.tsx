@@ -69,7 +69,7 @@ export function NumberCard({ inst, onDelete, onReconnect, reconnecting }: {
             <h3 className="truncate text-[15px] font-semibold text-ink">{title}</h3>
             {inst.is_default && <Badge tone="violet" size="sm" icon={StarIcon}>الرقم الافتراضي</Badge>}
           </div>
-          <p className="mt-0.5 truncate text-sm text-muted" dir="ltr">{phone || 'لم يُربط بعد'}</p>
+          <p className="mt-0.5 truncate text-sm text-muted"><span dir="ltr">{phone || 'لم يُربط بعد'}</span></p>
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
             <StatusPill tone={meta.tone} pulse={meta.pulse} size="sm">{meta.label}</StatusPill>
             <Badge tone={web ? 'warning' : 'brand'} size="sm">{web ? 'WhatsApp Web' : 'Cloud API'}</Badge>

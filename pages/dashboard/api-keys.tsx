@@ -144,8 +144,8 @@ function ApiKeysContent() {
                             : (k.permissions || []).map(p => <Badge key={p} tone="neutral" size="sm">{PERMISSION_LABELS[p] || p}</Badge>)}
                         </div>
                       </TD>
-                      <TD className="text-sm text-muted">{k.last_used_at ? fmtRelative(k.last_used_at) : 'لم يُستخدم'}</TD>
-                      <TD className="text-sm text-muted">{fmtDate(k.created_at)}</TD>
+                      <TD className="whitespace-nowrap text-sm text-muted">{k.last_used_at ? fmtRelative(k.last_used_at) : 'لم يُستخدم'}</TD>
+                      <TD className="whitespace-nowrap text-sm text-muted">{fmtDate(k.created_at)}</TD>
                       <TD align="end">
                         {k.is_active && (
                           <Tooltip content="إلغاء المفتاح">

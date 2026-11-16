@@ -71,7 +71,7 @@ function SubAccountsContent() {
           }
         />
 
-        <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-3.5">
           <StatCard label="جميع الحسابات" value={String(accounts.length)} icon={UserGroupIcon} loading={isLoading} />
           <StatCard label="نشطة" value={String(activeCount)} icon={CheckCircleIcon} loading={isLoading} />
           <StatCard label="موقوفة" value={String(accounts.length - activeCount)} icon={NoSymbolIcon} loading={isLoading}
@@ -103,7 +103,7 @@ function SubAccountsContent() {
                         <p className="truncate font-semibold text-ink">{acc.user?.name || '—'}</p>
                         <Badge tone={active ? 'success' : 'danger'} size="sm" dot>{active ? 'نشط' : 'موقوف'}</Badge>
                       </div>
-                      <p className="truncate text-sm text-muted" dir="ltr">{acc.user?.email}</p>
+                      <p className="truncate text-sm text-muted"><span dir="ltr">{acc.user?.email}</span></p>
                       <p className="mt-0.5 text-xs text-muted">أُنشئ {fmtDate(acc.user?.created_at)}</p>
                     </div>
                   </div>

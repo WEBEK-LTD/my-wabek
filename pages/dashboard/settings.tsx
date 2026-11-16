@@ -159,14 +159,15 @@ export default function SettingsPage() {
 
         {/* Account summary */}
         <Card padding="none" className="overflow-hidden">
-          <div aria-hidden="true" className="h-16 bg-brand-gradient-soft opacity-90" />
-          <div className="-mt-8 flex flex-wrap items-end gap-4 px-5 pb-5 sm:px-6">
-            <Avatar name={user?.name || user?.email || '?'} size="xl" className="ring-4 ring-surface" />
-            <div className="min-w-0 flex-1 pb-1">
+          <div aria-hidden="true" className="absolute inset-y-0 start-0 w-1.5 bg-brand-gradient" />
+          <div aria-hidden="true" className="pointer-events-none absolute -end-20 -top-24 h-56 w-56 rounded-full bg-brand-teal/10 blur-3xl" />
+          <div className="relative flex flex-wrap items-center gap-4 p-5 sm:p-6">
+            <Avatar name={user?.name || user?.email || '?'} size="lg" />
+            <div className="min-w-0 flex-1">
               <p className="truncate text-lg font-semibold text-ink">{user?.name || '—'}</p>
-              <p className="truncate text-sm text-muted" dir="ltr">{user?.email}</p>
+              <p className="truncate text-sm text-muted"><span dir="ltr">{user?.email}</span></p>
             </div>
-            <div className="flex flex-wrap gap-2 pb-1">
+            <div className="flex flex-wrap gap-2">
               {user?.is_verified ? <Badge tone="success" dot>حساب موثّق</Badge> : <Badge tone="warning" dot>غير موثّق</Badge>}
               <Badge tone={(user?.otp_mode || 'disabled') === 'disabled' ? 'neutral' : 'brand'} icon={ShieldCheckIcon}>
                 التحقق الثنائي: {OTP_LABEL[user?.otp_mode || 'disabled']}

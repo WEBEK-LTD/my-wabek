@@ -204,7 +204,7 @@ export default function TeamPage() {
                               <Avatar name={member.name || member.email || '?'} size="sm" />
                               <div className="min-w-0">
                                 <p className="max-w-[14rem] truncate font-medium text-ink">{member.name || '—'}</p>
-                                <p className="max-w-[14rem] truncate text-xs text-muted" dir="ltr">{member.email}</p>
+                                <p className="max-w-[14rem] truncate text-xs text-muted"><span dir="ltr">{member.email}</span></p>
                               </div>
                             </div>
                           </TD>
