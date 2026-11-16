@@ -8,7 +8,11 @@ export default function MagicLogin() {
   useEffect(() => {
     if (!router.isReady) return
     const token = router.query.token as string
-    const redirect = (router.query.redirect as string) || '/dashboard'
+    // Same-origin relative paths only ("/x", never "//host" or "/\\host").
+    const rawRedirect = router.query.redirect
+    const redirect = typeof rawRedirect === 'string' && /^\/(?![\/\\])[^\\\s]*$/.test(rawRedirect)
+      ? rawRedirect
+      : '/dashboard'
     if (!token) { router.replace('/auth/login'); return }
 
     fetch('/api/auth/magic-verify', {

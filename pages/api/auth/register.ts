@@ -1,24 +1,29 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase'
-import { hashPassword, signToken, generateApiKey } from '@/lib/auth'
-import { authRateLimit, logAction, getClientIp } from '@/lib/middleware'
+import { hashPassword, issueSession, generateApiKey } from '@/lib/auth'
+import { authRateLimitAsync, hitRateLimit, logAction, getClientIp } from '@/lib/middleware'
 import { getSetting } from '@/lib/settings'
-import { sendOtpWhatsApp } from '@/lib/otp-sender'
+import { sendOtpCode } from '@/lib/otp-sender'
+import { createPendingOtp } from '@/lib/otp'
 import { v4 as uuidv4 } from 'uuid'
-import crypto from 'crypto'
+
+const MAX_INVITE_TRIAL_DAYS = 30
 
 const schema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  name: z.string().min(2).max(100),
-  phone: z.string().optional(),
-  invite_code: z.string().optional(),
+  email: z.string().email().max(254),
+  password: z.string().min(8).max(256),
+  name: z.string().trim().min(2).max(100),
+  phone: z.string().trim().regex(/^\+?[0-9 ()-]{6,24}$/).optional().or(z.literal('')),
+  invite_code: z.string().trim().max(64).optional(),
 })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-  if (!authRateLimit(req, res)) return
+  if (!(await authRateLimitAsync(req, res))) return
+  if (!(await hitRateLimit(`register:${getClientIp(req)}`, 10, 60 * 60))) {
+    return res.status(429).json({ error: 'Too many registrations from this network. Please try again later.' })
+  }
 
   try {
     const body = schema.parse(req.body)
@@ -49,15 +54,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let inviteRecord: any = null
     if (body.invite_code) {
       const { data: invite } = await db.from('reseller_invites')
-        .select('*, reseller_plan:reseller_plan_id(base_plan_id)')
+        .select('*, reseller_plan:reseller_plan_id(id, reseller_id, base_plan_id, is_active)')
         .eq('code', body.invite_code.toUpperCase().trim())
         .eq('is_active', true)
-        .single()
+        .maybeSingle()
 
       if (invite && (!invite.expires_at || new Date(invite.expires_at) > new Date())) {
         if (!invite.max_uses || invite.use_count < invite.max_uses) {
-          resellerId = invite.reseller_id
-          inviteRecord = invite
+          // Only approved resellers can refer users / grant trials.
+          const { data: rp } = await db.from('reseller_profiles')
+            .select('is_approved').eq('user_id', invite.reseller_id).maybeSingle()
+          if (rp?.is_approved) {
+            resellerId = invite.reseller_id
+            inviteRecord = invite
+          }
         }
       }
     }
@@ -77,7 +87,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       referred_by: resellerId,
     }).select().single()
 
-    if (insertError) return res.status(500).json({ error: insertError.message })
+    if (insertError || !user) {
+      console.error('[register] insert failed:', insertError?.message)
+      return res.status(500).json({ error: 'Registration failed' })
+    }
 
     // Activate reseller invite
     if (inviteRecord && user) {
@@ -95,14 +108,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         total_earned: 0,
       }).select().maybeSingle()
 
-      // If invite has a plan, activate it with trial
-      if (inviteRecord.reseller_plan?.base_plan_id) {
-        const trialExtra = inviteRecord.trial_days || 0
-        const planExpiry = new Date(Date.now() + trialExtra * 24 * 60 * 60 * 1000)
-        await db.from('users').update({
-          plan_id: inviteRecord.reseller_plan.base_plan_id,
-          plan_expires_at: planExpiry.toISOString(),
-        }).eq('id', user.id)
+      // If invite has a plan, activate it with a (capped) trial — but only if
+      // the reseller plan really belongs to this reseller and both it and the
+      // base plan are active.
+      const rplan = inviteRecord.reseller_plan
+      const trialDays = Math.min(Math.max(parseInt(String(inviteRecord.trial_days || 0), 10) || 0, 0), MAX_INVITE_TRIAL_DAYS)
+      if (rplan?.base_plan_id && rplan.reseller_id === inviteRecord.reseller_id && rplan.is_active !== false && trialDays > 0) {
+        const { data: basePlan } = await db.from('plans').select('id, is_active').eq('id', rplan.base_plan_id).maybeSingle()
+        if (basePlan && basePlan.is_active !== false) {
+          const planExpiry = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000)
+          await db.from('users').update({
+            plan_id: basePlan.id,
+            plan_expires_at: planExpiry.toISOString(),
+          }).eq('id', user.id)
+        }
       }
     }
 
@@ -110,22 +129,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // If OTP required, send OTP and return pending state
     if (requireOtp && body.phone) {
-      const otp = Math.floor(100000 + Math.random() * 900000).toString()
-      const otpHash = crypto.createHash('sha256').update(otp).digest('hex')
-      const expiryMinutes = await getSetting('otp_expiry_minutes', 10) as number
-      const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000).toISOString()
-
-      await db.from('otp_pending').insert({
-        user_id: user.id,
+      const expiryMinutes = Number(await getSetting('otp_expiry_minutes', 10)) || 10
+      const otp = await createPendingOtp({ userId: user.id, phone: body.phone, purpose: 'registration', expiryMinutes })
+      await sendOtpCode({
+        code: otp,
         phone: body.phone,
-        otp_hash: otpHash,
-        purpose: 'registration',
-        expires_at: expiresAt,
+        email: user.email,
+        name: user.name,
+        whatsappMessage: `🔐 *WABEK Verification*\n\nWelcome!\n\nYour verification code: *${otp}*\n\nExpires in ${expiryMinutes} minutes.`,
       })
-
-      // Send OTP via WhatsApp
-      const msg = `🔐 *WABEK Verification*\n\nWelcome ${user.name}!\n\nYour verification code: *${otp}*\n\nExpires in ${expiryMinutes} minutes.`
-      await sendOtpWhatsApp(body.phone, msg)
 
       return res.status(201).json({
         success: true,
@@ -136,8 +148,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // No OTP required — login immediately
-    const token = await signToken({ userId: user.id, email: user.email, role: user.role })
-    res.setHeader('Set-Cookie', `wabek_token=${token}; HttpOnly; Path=/; Max-Age=${7 * 24 * 60 * 60}; SameSite=Lax${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`)
+    const token = await issueSession(res, user)
 
     return res.status(201).json({
       success: true,
@@ -146,7 +157,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       token,
     })
   } catch (err) {
-    if (err instanceof z.ZodError) return res.status(400).json({ error: 'Invalid data', details: err.errors })
-    return res.status(500).json({ error: 'Registration failed', details: String(err) })
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Invalid data', details: err.errors.map(e => ({ path: e.path, message: e.message })) })
+    }
+    console.error('[register] error:', err)
+    return res.status(500).json({ error: 'Registration failed' })
   }
 }
