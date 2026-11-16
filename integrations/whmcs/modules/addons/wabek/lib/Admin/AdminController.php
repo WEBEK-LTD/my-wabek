@@ -185,7 +185,7 @@ final class AdminController
             Config::set($k, Security::choice(Security::post($k, 20), $allowed, Config::DEFAULTS[$k]));
         }
 
-        foreach (['immediate_critical', 'reminder_on_due', 'include_credentials', 'otp_skip_no_phone'] as $k) {
+        foreach (['immediate_critical', 'reminder_on_due', 'include_credentials', 'otp_skip_no_phone', 'checkout_consent'] as $k) {
             Config::set($k, Security::postBool($k) ? '1' : '0');
         }
 
@@ -546,6 +546,8 @@ final class AdminController
 
         $privacy = View::field(Lang::t('set_consent_mode'), View::select('consent_mode', ['opt_out' => Lang::t('consent_opt_out'), 'opt_in' => Lang::t('consent_opt_in')], $s['consent_mode']), Lang::t('help_consent_mode'))
             . View::field(Lang::t('set_consent_field'), View::select('consent_field_id', $tickFields, $s['consent_field_id']), Lang::t('help_consent_field'))
+            . View::toggle('checkout_consent', $s['checkout_consent'] === '1', Lang::t('set_checkout_consent'))
+            . '<small class="wb-help">' . View::e(Lang::t('help_checkout_consent')) . '</small>'
             . View::toggle('include_credentials', $s['include_credentials'] === '1', Lang::t('set_include_credentials'))
             . '<small class="wb-help">' . View::e(Lang::t('help_include_credentials')) . '</small>'
             . View::field(Lang::t('set_log_retention_days'), View::input('log_retention_days', $s['log_retention_days'], 'number', ['min' => '0', 'max' => '3650']), Lang::t('help_log_retention'));

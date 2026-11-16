@@ -12,6 +12,7 @@ if (!defined('WHMCS')) {
 
 require_once __DIR__ . '/bootstrap.php';
 
+use WABEK\Checkout;
 use WABEK\Config;
 use WABEK\Consent;
 use WABEK\Context;
@@ -44,6 +45,10 @@ add_hook('ClientAdd', 1, function ($vars) {
     wabek_safe('ClientAdd', function () use ($vars) {
         $id = (int) ($vars['client_id'] ?? $vars['userid'] ?? 0);
         if ($id > 0) {
+            // Account created during checkout: record the WhatsApp checkbox before the welcome is queued.
+            wabek_safe('ClientAdd checkout consent', function () use ($id) {
+                Checkout::applyForNewClient($id);
+            });
             Notifier::client('client_welcome', Context::client($id), 'client:' . $id, 'client_welcome:' . $id);
         }
     });
@@ -133,11 +138,37 @@ add_hook('AfterShoppingCartCheckout', 1, function ($vars) {
     wabek_safe('AfterShoppingCartCheckout', function () use ($vars) {
         $id = (int) ($vars['OrderID'] ?? $vars['orderid'] ?? 0);
         if ($id > 0) {
+            wabek_safe('AfterShoppingCartCheckout consent', function () use ($id) {
+                Checkout::applyForOrder($id);
+            });
             Notifier::admins('admin_new_order', Context::order($id), 'order:' . $id);
         }
     });
 });
 
+// ── Checkout: optional WhatsApp consent checkbox (setting checkout_consent) ──
+// ShoppingCartCheckoutOutput is printed inside the checkout form by every
+// order form, so the box works with standard_cart, the comparison / slider /
+// boxes forms, Lagom, Lagom One Step and Nexus without template edits.
+
+add_hook('ShoppingCartCheckoutOutput', 1, function ($vars) {
+    return (string) wabek_safe('ShoppingCartCheckoutOutput', function () use ($vars) {
+        return Checkout::output(is_array($vars) ? $vars : []);
+    });
+});
+
+add_hook('ShoppingCartValidateCheckout', 1, function ($vars) {
+    wabek_safe('ShoppingCartValidateCheckout', function () {
+        Checkout::capture();
+    });
+    return [];
+});
+
+add_hook('PreShoppingCartCheckout', 1, function ($vars) {
+    wabek_safe('PreShoppingCartCheckout', function () {
+        Checkout::capture();
+    });
+});
 
 // ── Services (provisioning module commands) ────────────────────────────
 
@@ -326,12 +357,15 @@ add_hook('ClientAreaPrimarySidebar', 1, function ($sidebar) {
     });
 });
 
-// Scoped stylesheet, only on index.php?m=wabek.
+// Scoped stylesheet, only on index.php?m=wabek and the checkout step.
 add_hook('ClientAreaHeadOutput', 1, function ($vars) {
     return (string) wabek_safe('ClientAreaHeadOutput', function () use ($vars) {
+        $file = (string) ($vars['filename'] ?? '');
         $module = isset($_GET['m']) && is_string($_GET['m']) ? $_GET['m'] : '';
+        $step = isset($_GET['a']) && is_string($_GET['a']) ? $_GET['a'] : '';
         $onModule = $module === 'wabek';
-        if (!$onModule) {
+        $onCheckout = $file === 'cart' && in_array($step, ['view', 'checkout'], true) && Checkout::enabled();
+        if (!$onModule && !$onCheckout) {
             return '';
         }
         $root = isset($vars['WEB_ROOT']) && is_string($vars['WEB_ROOT']) ? rtrim($vars['WEB_ROOT'], '/') . '/' : '';
