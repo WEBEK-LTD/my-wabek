@@ -16,10 +16,9 @@ export default function PublicFooter({ lang: langProp = '', onLangChange = null,
   const { brandName, customLogo, hidePoweredBy } = useWhiteLabel()
   const name = brandName || 'WABEK'
   const [lang, setLang] = useState(langProp || 'ar')
-  const [year, setYear] = useState<number | null>(null)
+  const year = new Date().getFullYear()
 
   useEffect(() => {
-    setYear(new Date().getFullYear())
     setLang(langProp || getStoredLang())
     const handler = (e: Event) => { const d = (e as CustomEvent<string>).detail; if (typeof d === 'string') setLang(d) }
     window.addEventListener('langchange', handler)
@@ -56,8 +55,8 @@ export default function PublicFooter({ lang: langProp = '', onLangChange = null,
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4 text-sm">
           <div className="flex items-center gap-2.5">
             <Logo src={customLogo} name={brandName} size={24} wordmark={false} decorative={!customLogo} />
-            <span className={deep ? 'text-[#B5D3D0]' : 'text-muted'}>
-              © {year ?? ''} {name}{!brandName && <> · <span dir="ltr">webek.org</span></>}
+            <span className={deep ? 'text-[#B5D3D0]' : 'text-muted'} dir="ltr">
+              © {year} {name}{!brandName && ' · webek.org'}
             </span>
           </div>
           <nav aria-label={t(lang, 'footer_legal')} className="flex flex-wrap gap-x-6 gap-y-2">
