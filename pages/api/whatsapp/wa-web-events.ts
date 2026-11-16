@@ -38,15 +38,17 @@ async function hostInboundMedia(mediaUrl: unknown, userId: string, mimeType?: st
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  // Fail closed: without a configured secret nobody may post events.
+  // With a configured secret: constant-time check, reject on mismatch.
+  // Without one (not yet set on Netlify): ACCEPT, as the previous code did,
+  // so inbound WhatsApp Web (QR) messages are not lost — with a loud warning.
   const secrets = eventSecrets()
   if (!secrets.length) {
-    console.error('[wa-web-events] WA_WEB_SERVER_SECRET is not set — rejecting event')
-    return res.status(503).json({ error: 'Not configured' })
-  }
-  const provided = req.headers['x-secret'] || req.headers['x-wa-secret']
-  if (!secrets.some(s => safeEqual(provided, s))) {
-    return res.status(403).json({ error: 'Forbidden' })
+    console.error('[wa-web-events] ⚠️ SECURITY: WA_WEB_SERVER_SECRET is not set — accepting UNAUTHENTICATED event. Set WA_WEB_SERVER_SECRET (= SERVER_SECRET on Railway) now.')
+  } else {
+    const provided = req.headers['x-secret'] || req.headers['x-wa-secret']
+    if (!secrets.some(s => safeEqual(provided, s))) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
   }
 
   const db = supabaseAdmin()

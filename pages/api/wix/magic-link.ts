@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { randomBytes } from 'crypto'
 import { supabaseAdmin } from '@/lib/supabase'
-import { verifyWixInstance, getWixInstanceParam, getLinkedUserId } from '@/lib/wix-auth'
+import { verifyWixInstance, getWixInstanceParam, getLinkedUserId, wixAppConfigured } from '@/lib/wix-auth'
 
 // "Open full dashboard" from the Wix app page. The account is derived from a
 // VERIFIED (signed) Wix instance → wix_user_links; a user_id in the request
@@ -9,6 +9,7 @@ import { verifyWixInstance, getWixInstanceParam, getLinkedUserId } from '@/lib/w
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
+  if (!wixAppConfigured(res)) return
   const wix = verifyWixInstance(getWixInstanceParam(req))
   if (!wix) return res.status(401).json({ error: 'Invalid or expired Wix session. Please reopen the app from your Wix dashboard.' })
 

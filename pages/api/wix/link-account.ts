@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { requireMemberAccess } from '@/lib/auth'
-import { verifyWixInstance, getWixInstanceParam, linkWixInstance } from '@/lib/wix-auth'
+import { verifyWixInstance, getWixInstanceParam, linkWixInstance, wixAppConfigured } from '@/lib/wix-auth'
 
 // Link the logged-in WABEK account to a Wix store. Proof of the store is a
 // SIGNED Wix instance (`instance` in the body or x-wix-instance header);
@@ -11,6 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const user = await requireMemberAccess(req, res, 'integrations')
   if (!user) return
 
+  if (!wixAppConfigured(res)) return
   const wix = verifyWixInstance(getWixInstanceParam(req))
   if (!wix) return res.status(400).json({ error: 'A valid Wix session is required. Please open the app from your Wix dashboard.' })
 

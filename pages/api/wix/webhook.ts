@@ -1,7 +1,7 @@
 import { smartSend, smartSendWAWeb, resolveProvider } from '@/lib/wa-smart-send'
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
-import { verifyWixWebhook, parseMaybeJson } from '@/lib/wix-auth'
+import { verifyWixWebhook, parseMaybeJson, decodeUnverifiedWixWebhook, isWixPublicKeyConfigured } from '@/lib/wix-auth'
 import { readRawBody, withTimeout } from '@/lib/raw-body'
 import { requireEnv } from '@/lib/security'
 
@@ -21,13 +21,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   if (!rawBody) return res.status(400).json({ error: 'Empty body' })
 
-  // Wix app webhooks are RS256 JWTs signed by Wix — verify before trusting anything
+  // Wix app webhooks are RS256 JWTs signed by Wix — verify before trusting
+  // anything. While WIX_PUBLIC_KEY is not configured (or unusable), ORDER
+  // notifications are still processed unverified, as the previous code did,
+  // so merchants keep getting them. (Billing stays fail-closed.)
   let jwt: Record<string, any> | null
   try {
     jwt = await verifyWixWebhook(rawBody) as Record<string, any> | null
   } catch (e) {
-    console.error('[wix webhook] WIX_PUBLIC_KEY missing/invalid — rejecting:', (e as Error).message)
-    return res.status(503).json({ error: 'Not configured' })
+    console.error('[wix webhook] ⚠️ SECURITY: WIX_PUBLIC_KEY missing/invalid — accepting UNVERIFIED order webhook. Set WIX_PUBLIC_KEY now.', isWixPublicKeyConfigured() ? (e as Error).message : '')
+    jwt = decodeUnverifiedWixWebhook(rawBody) as Record<string, any> | null
+    if (!jwt) return res.status(400).json({ error: 'Invalid body' })
   }
   if (!jwt) {
     console.error('[wix webhook] invalid signature — rejected')
@@ -86,7 +90,9 @@ async function processOrderEvent(req: NextApiRequest, jwt: Record<string, any>):
     const metaSiteId = install?.meta_site_id || ''
 
     // Get token if needed
-    if (!accessToken) {
+    if (!accessToken && (!process.env.WIX_APP_ID || !process.env.WIX_APP_SECRET)) {
+      console.error('[wix webhook] Wix app not configured (WIX_APP_ID / WIX_APP_SECRET) — using the order data in the webhook only')
+    } else if (!accessToken) {
       try {
         const tokenRes = await fetch('https://www.wixapis.com/oauth2/token', {
           method: 'POST',

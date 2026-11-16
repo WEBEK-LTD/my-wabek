@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { randomBytes } from 'crypto'
 import { supabaseAdmin } from '@/lib/supabase'
-import { verifyWixInstance, getLinkedUserId } from '@/lib/wix-auth'
+import { verifyWixInstance, getLinkedUserId, wixAppConfigured } from '@/lib/wix-auth'
 import { v4 as uuidv4 } from 'uuid'
 
 // Called by /wix-setup with the `instance` param Wix gives the app page.
@@ -13,6 +13,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { instance } = req.body || {}
   if (!instance || typeof instance !== 'string') return res.status(400).json({ error: 'instance token required' })
 
+  if (!wixAppConfigured(res)) return
   const data = verifyWixInstance(instance)
   if (!data) return res.status(401).json({ error: 'Invalid or expired Wix session. Please open the app from your Wix Dashboard.' })
 

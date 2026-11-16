@@ -14,7 +14,7 @@
 
 import { NextApiRequest, NextApiResponse } from 'next'
 import { createHmac } from 'crypto'
-import { importSPKI, jwtVerify, KeyLike, JWTPayload as JoseJWTPayload } from 'jose'
+import { importSPKI, jwtVerify, decodeJwt, KeyLike, JWTPayload as JoseJWTPayload } from 'jose'
 import { safeEqual, requireEnv } from './security'
 import { supabaseAdmin } from './supabase'
 import { requireAuth } from './auth'
@@ -37,6 +37,22 @@ function toBase64Url(s: string): string {
 const MAX_INSTANCE_AGE_MS = (Number(process.env.WIX_INSTANCE_MAX_AGE_HOURS) || 48) * 3600 * 1000
 
 /** Verify a Wix `instance` parameter. Returns its payload, or null if unsigned/invalid/expired. */
+/**
+ * Whether the Wix app credentials are configured. When not, writes a clear
+ * 503 'Wix app not configured' and returns false (no crash, no misleading
+ * "invalid session" error).
+ */
+export function wixAppConfigured(res: NextApiResponse, opts: { needAppId?: boolean } = {}): boolean {
+  const missing = [
+    !process.env.WIX_APP_SECRET ? 'WIX_APP_SECRET' : null,
+    opts.needAppId && !process.env.WIX_APP_ID ? 'WIX_APP_ID' : null,
+  ].filter(Boolean)
+  if (!missing.length) return true
+  console.error(`[wix-auth] Wix app not configured: ${missing.join(', ')} not set`)
+  res.status(503).json({ error: 'Wix app not configured', code: 'wix_not_configured' })
+  return false
+}
+
 export function verifyWixInstance(instance: unknown): WixInstance | null {
   if (typeof instance !== 'string') return null
   const raw = instance.split('#')[0].trim()
@@ -129,6 +145,7 @@ export interface WixCaller {
 export async function resolveWixCaller(req: NextApiRequest, res: NextApiResponse): Promise<WixCaller | null> {
   const param = getWixInstanceParam(req)
   if (param) {
+    if (!wixAppConfigured(res)) return null
     const wix = verifyWixInstance(param)
     if (!wix) {
       res.status(401).json({ error: 'Invalid or expired Wix session. Please reopen the app from your Wix dashboard.' })
@@ -162,6 +179,23 @@ function wixPublicKey(): Promise<KeyLike> {
     return pending
   }
   return publicKeyPromise
+}
+
+export function isWixPublicKeyConfigured(): boolean {
+  return !!process.env.WIX_PUBLIC_KEY
+}
+
+/**
+ * Decode a Wix webhook JWT WITHOUT verifying it. Only for the order webhook
+ * while WIX_PUBLIC_KEY is not configured (previous behaviour); never for
+ * billing. Returns null when the body is not a JWT.
+ */
+export function decodeUnverifiedWixWebhook(rawBody: string): JoseJWTPayload | null {
+  try {
+    return decodeJwt(rawBody.trim())
+  } catch {
+    return null
+  }
 }
 
 /** Verify a Wix webhook body (a JWT). Throws if WIX_PUBLIC_KEY is missing; returns null if invalid. */
