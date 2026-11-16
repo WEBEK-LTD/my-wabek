@@ -13,7 +13,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // For main domain — return global brand settings from admin
   const mainDomains = ['waabek.com', 'www.waabek.com', 'localhost', '127.0.0.1']
-  if (mainDomains.some(d => cleanDomain.includes(d))) {
+  if (mainDomains.some(d => cleanDomain === d || cleanDomain.endsWith('.' + d))) {
     const { data: brandRow } = await db
       .from('system_settings')
       .select('value')
@@ -34,11 +34,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ settings: null })
   }
 
+  if (!/^[a-z0-9.-]{1,253}$/.test(cleanDomain)) return res.status(200).json({ settings: null })
+
+  // Branding columns only — never user_id or anything account-related.
   const { data } = await db
     .from('white_label_settings')
-    .select('*')
-    .eq('custom_domain', cleanDomain)
-    .single()
+    .select('brand_name, brand_logo, brand_color, brand_secondary_color, custom_domain, favicon_url, support_email, support_whatsapp, hide_powered_by, custom_css, custom_footer')
+    .ilike('custom_domain', cleanDomain)
+    .limit(1)
+    .maybeSingle()
 
   // Cache for 5 minutes
   res.setHeader('Cache-Control', 'public, s-maxage=300')
