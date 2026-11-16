@@ -1,0 +1,354 @@
+{
+  "version": 1,
+  "base_path": "/docs",
+  "languages": [
+    "ar",
+    "en"
+  ],
+  "default_language": "ar",
+  "sections": [
+    {
+      "id": "getting-started",
+      "order": 1,
+      "title_ar": "البدء",
+      "title_en": "Getting started",
+      "pages": [
+        {
+          "slug": "getting-started/overview",
+          "title_ar": "نظرة عامة",
+          "title_en": "Overview",
+          "file_ar": "ar/getting-started/overview.md",
+          "file_en": "en/getting-started/overview.md"
+        },
+        {
+          "slug": "getting-started/create-account",
+          "title_ar": "إنشاء حساب",
+          "title_en": "Create an account",
+          "file_ar": "ar/getting-started/create-account.md",
+          "file_en": "en/getting-started/create-account.md"
+        },
+        {
+          "slug": "getting-started/connect-number",
+          "title_ar": "ربط رقم واتساب",
+          "title_en": "Connect a WhatsApp number",
+          "file_ar": "ar/getting-started/connect-number.md",
+          "file_en": "en/getting-started/connect-number.md"
+        },
+        {
+          "slug": "getting-started/messaging-window",
+          "title_ar": "نافذة الـ 24 ساعة والقوالب المعتمدة",
+          "title_en": "24-hour window and approved templates",
+          "file_ar": "ar/getting-started/messaging-window.md",
+          "file_en": "en/getting-started/messaging-window.md"
+        },
+        {
+          "slug": "getting-started/plans-limits",
+          "title_ar": "الباقات والحدود",
+          "title_en": "Plans and limits",
+          "file_ar": "ar/getting-started/plans-limits.md",
+          "file_en": "en/getting-started/plans-limits.md"
+        }
+      ]
+    },
+    {
+      "id": "guides",
+      "order": 2,
+      "title_ar": "دليل الاستخدام",
+      "title_en": "User guide",
+      "pages": [
+        {
+          "slug": "guides/inbox",
+          "title_ar": "صندوق الوارد والفريق",
+          "title_en": "Inbox and team",
+          "file_ar": "ar/guides/inbox.md",
+          "file_en": "en/guides/inbox.md"
+        },
+        {
+          "slug": "guides/contacts",
+          "title_ar": "جهات الاتصال والشرائح والاستيراد",
+          "title_en": "Contacts, segments and import",
+          "file_ar": "ar/guides/contacts.md",
+          "file_en": "en/guides/contacts.md"
+        },
+        {
+          "slug": "guides/campaigns",
+          "title_ar": "الحملات",
+          "title_en": "Campaigns",
+          "file_ar": "ar/guides/campaigns.md",
+          "file_en": "en/guides/campaigns.md"
+        },
+        {
+          "slug": "guides/chatbot",
+          "title_ar": "الشات بوت",
+          "title_en": "Chatbot",
+          "file_ar": "ar/guides/chatbot.md",
+          "file_en": "en/guides/chatbot.md"
+        },
+        {
+          "slug": "guides/automation",
+          "title_ar": "الأتمتة",
+          "title_en": "Automation",
+          "file_ar": "ar/guides/automation.md",
+          "file_en": "en/guides/automation.md"
+        },
+        {
+          "slug": "guides/ai-assistant",
+          "title_ar": "مساعد الذكاء الاصطناعي",
+          "title_en": "AI assistant",
+          "file_ar": "ar/guides/ai-assistant.md",
+          "file_en": "en/guides/ai-assistant.md"
+        },
+        {
+          "slug": "guides/quick-replies",
+          "title_ar": "الردود السريعة",
+          "title_en": "Quick replies",
+          "file_ar": "ar/guides/quick-replies.md",
+          "file_en": "en/guides/quick-replies.md"
+        },
+        {
+          "slug": "guides/link-tracking",
+          "title_ar": "تتبّع الروابط",
+          "title_en": "Link tracking",
+          "file_ar": "ar/guides/link-tracking.md",
+          "file_en": "en/guides/link-tracking.md"
+        },
+        {
+          "slug": "guides/team-roles",
+          "title_ar": "الفريق والصلاحيات",
+          "title_en": "Team and roles",
+          "file_ar": "ar/guides/team-roles.md",
+          "file_en": "en/guides/team-roles.md"
+        },
+        {
+          "slug": "guides/sub-accounts",
+          "title_ar": "الحسابات الفرعية",
+          "title_en": "Sub-accounts",
+          "file_ar": "ar/guides/sub-accounts.md",
+          "file_en": "en/guides/sub-accounts.md"
+        },
+        {
+          "slug": "guides/white-label",
+          "title_ar": "العلامة البيضاء",
+          "title_en": "White label",
+          "file_ar": "ar/guides/white-label.md",
+          "file_en": "en/guides/white-label.md"
+        },
+        {
+          "slug": "guides/reseller",
+          "title_ar": "نظام الموزّعين",
+          "title_en": "Reseller program",
+          "file_ar": "ar/guides/reseller.md",
+          "file_en": "en/guides/reseller.md"
+        },
+        {
+          "slug": "guides/billing",
+          "title_ar": "الفوترة",
+          "title_en": "Billing",
+          "file_ar": "ar/guides/billing.md",
+          "file_en": "en/guides/billing.md"
+        }
+      ]
+    },
+    {
+      "id": "integrations",
+      "order": 3,
+      "title_ar": "التكاملات",
+      "title_en": "Integrations",
+      "pages": [
+        {
+          "slug": "integrations/wordpress",
+          "title_ar": "WordPress وWooCommerce",
+          "title_en": "WordPress and WooCommerce",
+          "file_ar": "ar/integrations/wordpress.md",
+          "file_en": "en/integrations/wordpress.md"
+        },
+        {
+          "slug": "integrations/whmcs",
+          "title_ar": "WHMCS",
+          "title_en": "WHMCS",
+          "file_ar": "ar/integrations/whmcs.md",
+          "file_en": "en/integrations/whmcs.md"
+        },
+        {
+          "slug": "integrations/wix",
+          "title_ar": "Wix",
+          "title_en": "Wix",
+          "file_ar": "ar/integrations/wix.md",
+          "file_en": "en/integrations/wix.md"
+        },
+        {
+          "slug": "integrations/zapier-webhooks",
+          "title_ar": "Zapier وMake وWebhooks",
+          "title_en": "Zapier, Make and webhooks",
+          "file_ar": "ar/integrations/zapier-webhooks.md",
+          "file_en": "en/integrations/zapier-webhooks.md"
+        }
+      ]
+    },
+    {
+      "id": "api",
+      "order": 4,
+      "title_ar": "مرجع الـ API",
+      "title_en": "API reference",
+      "pages": [
+        {
+          "slug": "api/authentication",
+          "title_ar": "المصادقة",
+          "title_en": "Authentication",
+          "file_ar": "ar/api/authentication.md",
+          "file_en": "en/api/authentication.md"
+        },
+        {
+          "slug": "api/rate-limits",
+          "title_ar": "حدود المعدّل",
+          "title_en": "Rate limits",
+          "file_ar": "ar/api/rate-limits.md",
+          "file_en": "en/api/rate-limits.md"
+        },
+        {
+          "slug": "api/errors",
+          "title_ar": "الأخطاء ورموزها",
+          "title_en": "Errors",
+          "file_ar": "ar/api/errors.md",
+          "file_en": "en/api/errors.md"
+        },
+        {
+          "slug": "api/send-message",
+          "title_ar": "إرسال رسالة",
+          "title_en": "Send a message",
+          "file_ar": "ar/api/send-message.md",
+          "file_en": "en/api/send-message.md"
+        },
+        {
+          "slug": "api/list-contacts",
+          "title_ar": "عرض جهات الاتصال",
+          "title_en": "List contacts",
+          "file_ar": "ar/api/list-contacts.md",
+          "file_en": "en/api/list-contacts.md"
+        },
+        {
+          "slug": "api/create-contact",
+          "title_ar": "إنشاء جهة اتصال أو تحديثها",
+          "title_en": "Create or update a contact",
+          "file_ar": "ar/api/create-contact.md",
+          "file_en": "en/api/create-contact.md"
+        },
+        {
+          "slug": "api/send-otp",
+          "title_ar": "إرسال رمز تحقق",
+          "title_en": "Send a verification code",
+          "file_ar": "ar/api/send-otp.md",
+          "file_en": "en/api/send-otp.md"
+        },
+        {
+          "slug": "api/verify-otp",
+          "title_ar": "التحقق من رمز",
+          "title_en": "Verify a code",
+          "file_ar": "ar/api/verify-otp.md",
+          "file_en": "en/api/verify-otp.md"
+        },
+        {
+          "slug": "api/whmcs-webhook",
+          "title_ar": "WHMCS Webhook (قديم)",
+          "title_en": "WHMCS webhook (legacy)",
+          "file_ar": "ar/api/whmcs-webhook.md",
+          "file_en": "en/api/whmcs-webhook.md"
+        },
+        {
+          "slug": "api/gateway",
+          "title_ar": "بوابة الرسائل (Gateway)",
+          "title_en": "Message gateway",
+          "file_ar": "ar/api/gateway.md",
+          "file_en": "en/api/gateway.md"
+        },
+        {
+          "slug": "api/trigger",
+          "title_ar": "Trigger (لأدوات الأتمتة)",
+          "title_en": "Trigger (for automation tools)",
+          "file_ar": "ar/api/trigger.md",
+          "file_en": "en/api/trigger.md"
+        },
+        {
+          "slug": "api/wix-automations",
+          "title_ar": "Wix Automations",
+          "title_en": "Wix Automations",
+          "file_ar": "ar/api/wix-automations.md",
+          "file_en": "en/api/wix-automations.md"
+        },
+        {
+          "slug": "api/outgoing-webhooks",
+          "title_ar": "Webhooks الصادرة",
+          "title_en": "Outgoing webhooks",
+          "file_ar": "ar/api/outgoing-webhooks.md",
+          "file_en": "en/api/outgoing-webhooks.md"
+        }
+      ]
+    },
+    {
+      "id": "security",
+      "order": 5,
+      "title_ar": "الأمان والخصوصية",
+      "title_en": "Security and privacy",
+      "pages": [
+        {
+          "slug": "security/api-keys",
+          "title_ar": "أمان المفاتيح",
+          "title_en": "API key security",
+          "file_ar": "ar/security/api-keys.md",
+          "file_en": "en/security/api-keys.md"
+        },
+        {
+          "slug": "security/consent-opt-out",
+          "title_ar": "الموافقة وإلغاء الاشتراك",
+          "title_en": "Consent and opt-out",
+          "file_ar": "ar/security/consent-opt-out.md",
+          "file_en": "en/security/consent-opt-out.md"
+        },
+        {
+          "slug": "security/meta-policies",
+          "title_ar": "سياسات Meta وواتساب",
+          "title_en": "Meta and WhatsApp policies",
+          "file_ar": "ar/security/meta-policies.md",
+          "file_en": "en/security/meta-policies.md"
+        }
+      ]
+    },
+    {
+      "id": "faq",
+      "order": 6,
+      "title_ar": "الأسئلة الشائعة واستكشاف الأخطاء",
+      "title_en": "FAQ and troubleshooting",
+      "pages": [
+        {
+          "slug": "faq/troubleshooting",
+          "title_ar": "استكشاف الأخطاء",
+          "title_en": "Troubleshooting",
+          "file_ar": "ar/faq/troubleshooting.md",
+          "file_en": "en/faq/troubleshooting.md"
+        },
+        {
+          "slug": "faq/faq",
+          "title_ar": "الأسئلة الشائعة",
+          "title_en": "FAQ",
+          "file_ar": "ar/faq/faq.md",
+          "file_en": "en/faq/faq.md"
+        }
+      ]
+    },
+    {
+      "id": "changelog",
+      "order": 7,
+      "title_ar": "سجل التغييرات",
+      "title_en": "Changelog",
+      "pages": [
+        {
+          "slug": "changelog/changelog",
+          "title_ar": "سجل التغييرات",
+          "title_en": "Changelog",
+          "file_ar": "ar/changelog/changelog.md",
+          "file_en": "en/changelog/changelog.md"
+        }
+      ]
+    }
+  ]
+}
