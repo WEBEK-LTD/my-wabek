@@ -234,6 +234,13 @@
 .wabek-status--retrying,
 .wabek-status--sending,
 .wabek-status--queued { background: #def4f5; color: var(--wabek-link); }
+.wabek-delivery { display: block; margin-block-start: 3px; font-size: 11.5px; font-weight: 600; color: var(--wabek-link); }
+.wabek-delivery--read,
+.wabek-delivery--delivered { color: #1f6b2f; }
+.wabek-delivery--failed { color: var(--wabek-danger); }
+.wabek-table td .button-small { margin: 2px; }
+.wabek-advanced { margin-block: 8px; }
+.wabek-advanced > summary { cursor: pointer; color: var(--wabek-link); font-weight: 600; }
 .wabek-empty { text-align: center; padding: 32px 16px; color: var(--wabek-muted); }
 .wabek-empty img { opacity: 0.85; }
 

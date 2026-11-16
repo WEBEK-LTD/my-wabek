@@ -61,19 +61,22 @@ $wabek_wa_base      = function_exists( 'WC' ) && WC()->countries ? WC()->countri
 		<div class="wabek-field">
 			<label for="wabek-instance"><?php esc_html_e( 'Default WhatsApp number', 'wabek-whatsapp' ); ?></label>
 			<select id="wabek-instance" name="instance_id">
-				<option value=""><?php esc_html_e( '— Platform default —', 'wabek-whatsapp' ); ?></option>
+				<option value=""><?php esc_html_e( '— Account default number —', 'wabek-whatsapp' ); ?></option>
 				<?php foreach ( $wabek_wa_instances as $wabek_wa_instance ) : ?>
 					<option value="<?php echo esc_attr( $wabek_wa_instance['id'] ); ?>" <?php selected( $settings['instance_id'], $wabek_wa_instance['id'] ); ?>>
-						<?php echo esc_html( trim( $wabek_wa_instance['name'] . ' ' . $wabek_wa_instance['phone'] ) . ' (' . $wabek_wa_instance['status'] . ')' ); ?>
+						<?php echo esc_html( trim( $wabek_wa_instance['name'] . ' ' . $wabek_wa_instance['phone'] ) . ' (' . $wabek_wa_instance['status'] . ( ! empty( $wabek_wa_instance['default'] ) ? ', ' . __( 'default', 'wabek-whatsapp' ) : '' ) . ')' ); ?>
 					</option>
 				<?php endforeach; ?>
 			</select>
-			<p class="wabek-help"><?php esc_html_e( 'Run “Test connection” to load your numbers. With no choice, WABEK uses your first connected number.', 'wabek-whatsapp' ); ?></p>
+			<p class="wabek-help"><?php esc_html_e( 'Run “Test connection” to load your numbers. With no choice, WABEK uses the default number of your account.', 'wabek-whatsapp' ); ?></p>
 		</div>
-		<div class="wabek-field">
-			<label for="wabek-instance-manual"><?php esc_html_e( 'Or enter an instance ID', 'wabek-whatsapp' ); ?></label>
-			<input type="text" id="wabek-instance-manual" name="instance_manual" class="regular-text" dir="ltr" value="<?php echo esc_attr( $wabek_wa_manual ); ?>" />
-		</div>
+		<details class="wabek-advanced" <?php echo '' !== $wabek_wa_manual ? 'open' : ''; ?>>
+			<summary><?php esc_html_e( 'Advanced', 'wabek-whatsapp' ); ?></summary>
+			<div class="wabek-field">
+				<label for="wabek-instance-manual"><?php esc_html_e( 'Or enter an instance ID', 'wabek-whatsapp' ); ?></label>
+				<input type="text" id="wabek-instance-manual" name="instance_manual" class="regular-text" dir="ltr" value="<?php echo esc_attr( $wabek_wa_manual ); ?>" />
+			</div>
+		</details>
 		<div class="wabek-field">
 			<label for="wabek-country"><?php esc_html_e( 'Default country for phone numbers', 'wabek-whatsapp' ); ?></label>
 			<select id="wabek-country" name="default_country">

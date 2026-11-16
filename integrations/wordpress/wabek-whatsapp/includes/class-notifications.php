@@ -213,7 +213,7 @@ final class Notifications {
 					'phone'           => $phone,
 					'message'         => Message_Builder::render( $template, $values ),
 					'template'        => '',
-					'template_params' => array( 'customer_name' => $values['customer_name'] ),
+					'template_params' => Message_Builder::template_params( '', $values ),
 				)
 			);
 		} catch ( \Throwable $e ) {

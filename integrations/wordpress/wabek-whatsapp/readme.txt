@@ -7,7 +7,7 @@ Requires PHP: 7.4
 Requires Plugins: woocommerce
 WC requires at least: 7.0
 WC tested up to: 10.3
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 License: Proprietary
 License URI: https://waabek.com/legal/terms
 
@@ -22,20 +22,21 @@ Connect your WooCommerce store to your [WABEK](https://waabek.com) account and k
 * Customer messages for: new order, processing, completed, cancelled, refunded, on hold, failed, and "note to customer".
 * Per-event on/off switch and message editor with variables:
   `{customer_name}`, `{order_id}`, `{order_total}`, `{order_status}`, `{order_items}`, `{shipping_address}`, `{tracking_url}`, `{site_name}`, `{payment_url}`, `{customer_note}`, `{customer_phone}`.
-* Per-event approved WhatsApp template (name + named variables) used by WABEK when the customer is outside the 24-hour window.
+* Per-event approved WhatsApp template (name + variables, named or numbered, in your template language — Arabic by default) used by WABEK when the customer is outside the 24-hour window.
 * WhatsApp alert to the store owner for every new order.
 
 = Reliable, non-blocking delivery =
 
 * Messages are queued with Action Scheduler (bundled with WooCommerce; WP-Cron fallback), so checkout never waits for the API.
 * Timeouts, network errors and server errors (5xx) are retried after 1, 5 and 15 minutes. Client errors (4xx) are never retried.
-* Send log with the latest 200 messages (time, order, masked phone, event, status, error) and a one-click "Resend".
+* Every queued message carries an Idempotency-Key, so a retry can never deliver the same message twice.
+* Send log with the latest 200 messages (time, order, masked phone, event, status, error), WhatsApp delivery status on demand and a one-click "Resend".
 
 = Consent and opt-out =
 
 * "I agree to receive order notifications via WhatsApp" checkbox on the classic and block checkout (stored on the order).
 * Choose whether consent is required before messaging.
-* Customers can opt out from My Account → Account details.
+* Customers can opt out from My Account → Account details. Opt-outs, opt-ins and withdrawn consent are synced to your WABEK contacts.
 
 = Abandoned cart reminder (optional, off by default) =
 
@@ -85,10 +86,16 @@ The plugin ships with English and Arabic. Default messages follow the site langu
 
 == Changelog ==
 
+= 1.1.0 =
+* Uses the new WABEK v1 API: number list, account default number, template language and numbered template variables, Idempotency-Key on every send, delivery status, opt-out sync, OTP sent from your own number with your store name.
+
 = 1.0.0 =
 * New plugin, rewritten from scratch (replaces "WAABEK for WooCommerce").
 
 == Upgrade Notice ==
+
+= 1.1.0 =
+Set your template language (Arabic by default) under Order notifications if your approved templates use another language.
 
 = 1.0.0 =
 New plugin slug (wabek-whatsapp). Deactivate the old "WAABEK for WooCommerce" plugin after activating this one.

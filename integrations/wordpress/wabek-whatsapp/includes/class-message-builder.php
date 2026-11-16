@@ -117,13 +117,20 @@ final class Message_Builder {
 	}
 
 	/**
-	 * Template parameters for an approved WhatsApp template.
+	 * Template payload stored with a queued message (snapshot of the settings
+	 * at queue time, so retries and resends make the same template call).
 	 *
-	 * @param string $names  Comma-separated variable names.
+	 * @param string $names  Comma-separated variable names, in template order.
 	 * @param array  $values Variables.
-	 * @return array name => value (always includes customer_name).
+	 * @return array {
+	 *     @type array  $params        name => value (named style) or list of values (positional style).
+	 *     @type string $style         named|positional.
+	 *     @type string $language      Approved template language, e.g. "ar".
+	 *     @type string $customer_name Used by the platform's default template.
+	 * }
 	 */
 	public static function template_params( $names, array $values ) {
+		$style  = 'positional' === Settings::get( 'template_style' ) ? 'positional' : 'named';
 		$params = array();
 		foreach ( Settings::parse_param_names( $names ) as $name ) {
 			$value = isset( $values[ $name ] ) ? (string) $values[ $name ] : '';
@@ -131,10 +138,12 @@ final class Message_Builder {
 			$value           = trim( preg_replace( '/\s{2,}|[\r\n\t]+/', ' ', $value ) );
 			$params[ $name ] = '' !== $value ? $value : '-';
 		}
-		if ( ! isset( $params['customer_name'] ) && ! empty( $values['customer_name'] ) ) {
-			$params['customer_name'] = (string) $values['customer_name'];
-		}
-		return $params;
+		return array(
+			'params'        => 'positional' === $style ? array_values( $params ) : $params,
+			'style'         => $style,
+			'language'      => (string) Settings::get( 'template_language' ),
+			'customer_name' => isset( $values['customer_name'] ) ? (string) $values['customer_name'] : '',
+		);
 	}
 
 	/**

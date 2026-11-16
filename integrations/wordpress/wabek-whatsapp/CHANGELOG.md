@@ -2,6 +2,18 @@
 
 All notable changes to the WABEK WhatsApp for WooCommerce plugin.
 
+## 1.1.0 — 2026-11-16
+
+### Added
+- Template language setting (default `ar`) and named or numbered (positional) template variables, sent as `template_language` / `template_params`.
+- `Idempotency-Key` header on every send, reused across retries of the same queued message; `409 idempotency_in_progress` is retried later.
+- "Check delivery" in the send log (`GET /api/v1/message-status`), stored per message.
+- Opt-out sync with WABEK contacts (`POST /api/v1/contacts-opt-out`) when a customer opts out/in in My Account or withdraws/renews consent at checkout.
+- OTP codes are sent from the store's selected number with the store name (`instance_id`, `brand_name`).
+
+### Changed
+- Number list comes from `GET /api/v1/instances` (default number marked); the manual instance ID moved under "Advanced". Without a selection the account's default number is used.
+
 ## 1.0.0 — 2026-11-16
 
 First release of the rewritten plugin (slug `wabek-whatsapp`), replacing "WAABEK for WooCommerce".

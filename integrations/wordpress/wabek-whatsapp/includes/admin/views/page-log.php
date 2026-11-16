@@ -84,6 +84,9 @@ $wabek_wa_events = Settings::log_event_labels();
 						<td><?php echo esc_html( isset( $wabek_wa_events[ $wabek_wa_row['event'] ] ) ? $wabek_wa_events[ $wabek_wa_row['event'] ] : $wabek_wa_row['event'] ); ?></td>
 						<td>
 							<span class="wabek-status wabek-status--<?php echo esc_attr( $wabek_wa_row['status'] ); ?>"><?php echo esc_html( Admin::status_label( $wabek_wa_row['status'] ) ); ?></span>
+							<?php if ( '' !== $wabek_wa_row['delivery'] ) : ?>
+								<span class="wabek-delivery wabek-delivery--<?php echo esc_attr( $wabek_wa_row['delivery'] ); ?>"><?php echo esc_html( Admin::delivery_label( $wabek_wa_row['delivery'] ) ); ?></span>
+							<?php endif; ?>
 							<?php if ( (int) $wabek_wa_row['attempts'] > 1 ) : ?>
 								<span class="wabek-attempts">
 									<?php
@@ -102,6 +105,9 @@ $wabek_wa_events = Settings::log_event_labels();
 							<?php endif; ?>
 						</td>
 						<td>
+							<?php if ( 'sent' === $wabek_wa_row['status'] && '' !== $wabek_wa_row['message_id'] && ! in_array( $wabek_wa_row['delivery'], array( 'read', 'failed' ), true ) ) : ?>
+								<button type="button" class="button button-small wabek-check-delivery" data-id="<?php echo esc_attr( (string) (int) $wabek_wa_row['id'] ); ?>"><?php esc_html_e( 'Check delivery', 'wabek-whatsapp' ); ?></button>
+							<?php endif; ?>
 							<?php if ( $wabek_wa_final && '' !== $wabek_wa_row['phone'] ) : ?>
 								<a class="button button-small" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=wabek_wa_resend&id=' . (int) $wabek_wa_row['id'] ), 'wabek_wa_resend_' . (int) $wabek_wa_row['id'] ) ); ?>"><?php esc_html_e( 'Resend', 'wabek-whatsapp' ); ?></a>
 							<?php endif; ?>

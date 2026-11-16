@@ -95,15 +95,35 @@ final class Queue {
 	 * @return array API result.
 	 */
 	public static function send_row( array $row ) {
-		$client = new Api_Client();
-		return $client->send_message(
+		$tpl = is_array( $row['template_params'] ) ? $row['template_params'] : array();
+		return ( new Api_Client() )->send_message(
 			Phone::digits( $row['phone'] ),
 			(string) $row['message'],
 			array(
-				'template'        => (string) $row['template'],
-				'template_params' => is_array( $row['template_params'] ) ? $row['template_params'] : array(),
+				'template'          => (string) $row['template'],
+				'template_params'   => isset( $tpl['params'] ) && is_array( $tpl['params'] ) ? $tpl['params'] : array(),
+				'template_language' => isset( $tpl['language'] ) ? (string) $tpl['language'] : '',
+				'customer_name'     => isset( $tpl['customer_name'] ) ? (string) $tpl['customer_name'] : '',
+				// The same key for every retry of this queued message, so a retry after
+				// a timeout never delivers it twice. "Resend" creates a new row = new key.
+				'idempotency_key'   => 'wp-' . self::site_key() . '-' . (int) $row['id'],
 			)
 		);
+	}
+
+	/**
+	 * Random per-site prefix for idempotency keys (stores sharing one WABEK
+	 * account must not collide on log ids).
+	 *
+	 * @return string
+	 */
+	private static function site_key() {
+		$key = (string) get_option( 'wabek_whatsapp_site_key', '' );
+		if ( ! preg_match( '/^[a-z0-9]{12}$/', $key ) ) {
+			$key = strtolower( wp_generate_password( 12, false, false ) );
+			update_option( 'wabek_whatsapp_site_key', $key, true );
+		}
+		return $key;
 	}
 
 	/**

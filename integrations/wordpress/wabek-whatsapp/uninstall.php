@@ -24,6 +24,7 @@ function wabek_whatsapp_uninstall_site() {
 		'wabek_whatsapp_connection',
 		'wabek_whatsapp_db_version',
 		'wabek_whatsapp_legacy_imported',
+		'wabek_whatsapp_site_key',
 	) as $option ) {
 		delete_option( $option );
 	}
@@ -31,6 +32,7 @@ function wabek_whatsapp_uninstall_site() {
 	wp_clear_scheduled_hook( 'wabek_whatsapp_daily' );
 	wp_clear_scheduled_hook( 'wabek_whatsapp_send' );
 	wp_clear_scheduled_hook( 'wabek_whatsapp_abandoned_cart' );
+	wp_clear_scheduled_hook( 'wabek_whatsapp_sync_optout' );
 	if ( function_exists( 'as_unschedule_all_actions' ) ) {
 		as_unschedule_all_actions( '', array(), 'wabek-whatsapp' );
 	}

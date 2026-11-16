@@ -55,7 +55,7 @@
 		}
 		select.add( new Option( i18n.choose, '' ) );
 		list.forEach( function ( item ) {
-			var label = ( ( item.name || '' ) + ' ' + ( item.phone || '' ) ).trim() + ' (' + ( item.status || '' ) + ')';
+			var label = ( ( item.name || '' ) + ' ' + ( item.phone || '' ) ).trim() + ' (' + ( item.status || '' ) + ( item.default ? ', ' + i18n.default : '' ) + ')';
 			select.add( new Option( label, item.id, false, item.id === current ) );
 		} );
 	}
@@ -120,6 +120,33 @@
 			area.value = area.value.slice( 0, start ) + text + area.value.slice( end );
 			area.focus();
 			area.selectionStart = area.selectionEnd = start + text.length;
+		} );
+	} );
+
+	// Delivery status in the send log.
+	document.querySelectorAll( '.wabek-check-delivery' ).forEach( function ( btn ) {
+		btn.addEventListener( 'click', function () {
+			var cell = btn.closest( 'tr' ).querySelector( '.wabek-status' ).parentNode;
+			var badge = cell.querySelector( '.wabek-delivery' );
+			if ( ! badge ) {
+				badge = document.createElement( 'span' );
+				badge.className = 'wabek-delivery';
+				cell.insertBefore( badge, cell.querySelector( '.wabek-status' ).nextSibling );
+			}
+			btn.disabled = true;
+			badge.textContent = i18n.checking;
+			post( 'wabek_wa_check_delivery', { id: btn.getAttribute( 'data-id' ) } )
+				.then( function ( json ) {
+					var data = json && json.data ? json.data : {};
+					badge.className = 'wabek-delivery' + ( json && json.success ? ' wabek-delivery--' + data.status : ' wabek-delivery--failed' );
+					badge.textContent = json && json.success ? data.label : ( data.message || i18n.error );
+				} )
+				.catch( function () {
+					badge.textContent = i18n.error;
+				} )
+				.then( function () {
+					btn.disabled = false;
+				} );
 		} );
 	} );
 

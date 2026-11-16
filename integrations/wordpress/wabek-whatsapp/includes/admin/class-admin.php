@@ -39,6 +39,7 @@ final class Admin {
 		add_action( 'admin_post_wabek_wa_clear_log', array( $this, 'clear_log' ) );
 		add_action( 'wp_ajax_wabek_wa_test_connection', array( $this, 'ajax_test_connection' ) );
 		add_action( 'wp_ajax_wabek_wa_send_test', array( $this, 'ajax_send_test' ) );
+		add_action( 'wp_ajax_wabek_wa_check_delivery', array( $this, 'ajax_check_delivery' ) );
 		add_filter( 'plugin_action_links_' . WABEK_WA_BASENAME, array( $this, 'action_links' ) );
 		add_action( 'admin_notices', array( $this, 'legacy_plugin_notice' ) );
 	}
@@ -142,7 +143,9 @@ final class Admin {
 					'confirm'   => __( 'Delete all finished log entries?', 'wabek-whatsapp' ),
 					'connected' => __( 'Connected', 'wabek-whatsapp' ),
 					'failed'    => __( 'Not connected', 'wabek-whatsapp' ),
-					'choose'    => __( '— Platform default —', 'wabek-whatsapp' ),
+					'choose'    => __( '— Account default number —', 'wabek-whatsapp' ),
+					'default'   => __( 'default', 'wabek-whatsapp' ),
+					'checking'  => __( 'Checking…', 'wabek-whatsapp' ),
 				),
 			)
 		);
@@ -343,6 +346,16 @@ final class Admin {
 			);
 		}
 		Settings::update_events( $events );
+
+		// phpcs:disable WordPress.Security.NonceVerification.Missing
+		$language = isset( $_POST['template_language'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['template_language'] ) ) ) : '';
+		Settings::update(
+			array(
+				'template_language' => preg_match( '/^[a-z]{2,3}(_[A-Z]{2})?$/', $language ) ? $language : 'ar',
+				'template_style'    => isset( $_POST['template_style'] ) && 'positional' === sanitize_key( wp_unslash( $_POST['template_style'] ) ) ? 'positional' : 'named',
+			)
+		);
+		// phpcs:enable
 	}
 
 	/**
@@ -434,7 +447,7 @@ final class Admin {
 			);
 			$status['instances'] = $result['instances'];
 		} else {
-			$status['message']   = __( 'Connected. Your API key is valid, but this WABEK server cannot list numbers by API key yet; enter the instance ID manually or leave it empty to use your first connected number.', 'wabek-whatsapp' );
+			$status['message']   = __( 'Connected. Your API key is valid, but this WABEK server cannot list numbers yet; enter the instance ID under “Advanced” or leave it empty to use your account’s default number.', 'wabek-whatsapp' );
 			$status['instances'] = null;
 		}
 		update_option( Settings::CONNECTION, array_diff_key( $status, array( 'instances' => 1 ) ), false );
@@ -479,6 +492,56 @@ final class Admin {
 		}
 		/* translators: %s: error message */
 		wp_send_json_error( array( 'message' => sprintf( __( 'Sending failed: %s', 'wabek-whatsapp' ), $result['error'] ) ) );
+	}
+
+	/**
+	 * AJAX: fetch the delivery status of a sent message (GET /api/v1/message-status).
+	 *
+	 * @return void
+	 */
+	public function ajax_check_delivery() {
+		check_ajax_referer( self::AJAX_NONCE, 'nonce' );
+		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+			wp_send_json_error( array( 'message' => __( 'You do not have permission to do this.', 'wabek-whatsapp' ) ), 403 );
+		}
+		$id  = isset( $_POST['id'] ) ? absint( $_POST['id'] ) : 0;
+		$row = $id ? Logger::get( $id ) : null;
+		if ( ! $row || '' === $row['message_id'] ) {
+			wp_send_json_error( array( 'message' => __( 'This message has no delivery status.', 'wabek-whatsapp' ) ) );
+		}
+		$result = ( new Api_Client() )->message_status( $row['message_id'] );
+		if ( ! $result['ok'] || empty( $result['data']['status'] ) ) {
+			wp_send_json_error( array( 'message' => '' !== $result['error'] ? $result['error'] : __( 'Delivery status is not available.', 'wabek-whatsapp' ) ) );
+		}
+		$status = substr( sanitize_key( (string) $result['data']['status'] ), 0, 20 );
+		$fields = array( 'delivery' => $status );
+		if ( ! empty( $result['data']['error'] ) && is_string( $result['data']['error'] ) ) {
+			$fields['error'] = sanitize_text_field( $result['data']['error'] );
+		}
+		Logger::update( $id, $fields );
+		wp_send_json_success(
+			array(
+				'status' => $status,
+				'label'  => self::delivery_label( $status ),
+			)
+		);
+	}
+
+	/**
+	 * Translated WhatsApp delivery status.
+	 *
+	 * @param string $status Platform status (sent, delivered, read, failed, …).
+	 * @return string
+	 */
+	public static function delivery_label( $status ) {
+		$labels = array(
+			'sent'      => __( 'Sent to WhatsApp', 'wabek-whatsapp' ),
+			'delivered' => __( 'Delivered', 'wabek-whatsapp' ),
+			'read'      => __( 'Read', 'wabek-whatsapp' ),
+			'failed'    => __( 'Not delivered', 'wabek-whatsapp' ),
+			'pending'   => __( 'Pending', 'wabek-whatsapp' ),
+		);
+		return isset( $labels[ $status ] ) ? $labels[ $status ] : $status;
 	}
 
 	/**

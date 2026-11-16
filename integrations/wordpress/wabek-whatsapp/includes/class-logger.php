@@ -110,6 +110,7 @@ final class Logger {
 			'http_code'  => '%d',
 			'error'      => '%s',
 			'message_id' => '%s',
+			'delivery'   => '%s',
 		);
 		$data    = array( 'updated_at' => current_time( 'mysql', true ) );
 		$formats = array( '%s' );
@@ -132,9 +133,9 @@ final class Logger {
 		global $wpdb;
 		$table = self::table();
 		if ( '' !== $status ) {
-			$sql = $wpdb->prepare( "SELECT id, created_at, order_id, event, phone, status, attempts, http_code, error FROM {$table} WHERE status = %s ORDER BY id DESC LIMIT %d", $status, self::KEEP ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$sql = $wpdb->prepare( "SELECT id, created_at, order_id, event, phone, status, attempts, http_code, error, message_id, delivery FROM {$table} WHERE status = %s ORDER BY id DESC LIMIT %d", $status, self::KEEP ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		} else {
-			$sql = $wpdb->prepare( "SELECT id, created_at, order_id, event, phone, status, attempts, http_code, error FROM {$table} ORDER BY id DESC LIMIT %d", self::KEEP ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$sql = $wpdb->prepare( "SELECT id, created_at, order_id, event, phone, status, attempts, http_code, error, message_id, delivery FROM {$table} ORDER BY id DESC LIMIT %d", self::KEEP ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		}
 		$rows = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
 		return is_array( $rows ) ? $rows : array();
