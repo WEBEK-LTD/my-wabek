@@ -7,13 +7,14 @@ import { LockClosedIcon, CheckCircleIcon, ArrowLeftIcon } from '@heroicons/react
 import { Button, Field } from '@/components/ui'
 import { AuthLayout, AuthHeading } from '@/components/auth/AuthLayout'
 import { AuthAlert, PasswordInput, PasswordStrength } from '@/components/auth/AuthParts'
-import { useAuthCopy } from '@/components/auth/copy'
-import type { AuthCopyKey } from '@/components/auth/copy'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/auth'
+import type { MessageKey as AuthCopyKey } from '@/locales/auth'
 
 export default function ResetPasswordPage() {
   const router = useRouter()
   const token = typeof router.query.token === 'string' ? router.query.token : ''
-  const { c } = useAuthCopy()
+  const { t } = useT(messages)
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [errors, setErrors] = useState<{ password?: AuthCopyKey; confirm?: AuthCopyKey }>({})
@@ -23,8 +24,8 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     if (!done) return
-    const t = setTimeout(() => router.push('/auth/login'), 2000)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => router.push('/auth/login'), 2000)
+    return () => clearTimeout(timer)
   }, [done])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -39,7 +40,7 @@ export default function ResetPasswordPage() {
     try {
       await axios.post('/api/auth/reset-password', { token, password })
       setDone(true)
-      toast.success(c('rp_toast'))
+      toast.success(t('rp_toast'))
     } catch (err: any) {
       const msg = String(err?.response?.data?.error || '')
       if (!err?.response) setServerError({ key: 'err_network' })
@@ -54,38 +55,38 @@ export default function ResetPasswordPage() {
   const missingToken = router.isReady && !token
 
   return (
-    <AuthLayout title={c('rp_title')}>
+    <AuthLayout title={t('rp_title')}>
       {!done ? (
         <>
-          <AuthHeading icon={LockClosedIcon} title={c('rp_title')} subtitle={c('rp_subtitle')} />
+          <AuthHeading icon={LockClosedIcon} title={t('rp_title')} subtitle={t('rp_subtitle')} />
           {missingToken && (
             <AuthAlert tone="warning" className="mb-5">
-              {c('rp_missing_token')}{' '}
-              <Link href="/auth/forgot-password" className="font-semibold text-inherit underline underline-offset-4">{c('rp_request_new')}</Link>
+              {t('rp_missing_token')}{' '}
+              <Link href="/auth/forgot-password" className="font-semibold text-inherit underline underline-offset-4">{t('rp_request_new')}</Link>
             </AuthAlert>
           )}
           <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
             <div>
-              <Field label={c('new_password')} error={errors.password ? c(errors.password) : undefined}>
-                <PasswordInput autoComplete="new-password" autoFocus placeholder={c('new_password_ph')} value={password}
+              <Field label={t('new_password')} error={errors.password ? t(errors.password) : undefined}>
+                <PasswordInput autoComplete="new-password" autoFocus placeholder={t('new_password_ph')} value={password}
                   onChange={e => { setPassword(e.target.value); setErrors(x => ({ ...x, password: undefined })) }} />
               </Field>
               <PasswordStrength password={password} />
             </div>
-            <Field label={c('confirm_password')} error={errors.confirm ? c(errors.confirm) : (confirm && password !== confirm ? c('mismatch') : undefined)}>
-              <PasswordInput autoComplete="new-password" placeholder={c('confirm_ph')} value={confirm}
+            <Field label={t('confirm_password')} error={errors.confirm ? t(errors.confirm) : (confirm && password !== confirm ? t('mismatch') : undefined)}>
+              <PasswordInput autoComplete="new-password" placeholder={t('confirm_ph')} value={confirm}
                 onChange={e => { setConfirm(e.target.value); setErrors(x => ({ ...x, confirm: undefined })) }} />
             </Field>
             {serverError && (
               <AuthAlert tone="danger">
-                {serverError.raw || c(serverError.key)}{' '}
+                {serverError.raw || t(serverError.key)}{' '}
                 {serverError.key === 'rp_expired' && (
-                  <Link href="/auth/forgot-password" className="font-semibold text-inherit underline underline-offset-4">{c('rp_request_new')}</Link>
+                  <Link href="/auth/forgot-password" className="font-semibold text-inherit underline underline-offset-4">{t('rp_request_new')}</Link>
                 )}
               </AuthAlert>
             )}
             <Button type="submit" size="lg" fullWidth loading={loading} disabled={!token}>
-              {loading ? c('rp_saving') : c('rp_save')}
+              {loading ? t('rp_saving') : t('rp_save')}
             </Button>
           </form>
         </>
@@ -94,16 +95,16 @@ export default function ResetPasswordPage() {
           <span className="mb-5 flex h-16 w-16 items-center justify-center rounded-[22px] bg-brand-gradient text-[#04282C] shadow-glow">
             <CheckCircleIcon className="h-8 w-8" aria-hidden="true" />
           </span>
-          <h1 className="text-[26px] font-bold text-ink">{c('rp_done_title')}</h1>
-          <p className="mt-3 text-[15px] leading-relaxed text-muted">{c('rp_done_body')}</p>
-          <Button href="/auth/login" className="mt-6">{c('go_to_login')}</Button>
+          <h1 className="text-[26px] font-bold text-ink">{t('rp_done_title')}</h1>
+          <p className="mt-3 text-[15px] leading-relaxed text-muted">{t('rp_done_body')}</p>
+          <Button href="/auth/login" className="mt-6">{t('go_to_login')}</Button>
         </div>
       )}
 
       {!done && (
         <Link href="/auth/login" className="mt-8 flex items-center justify-center gap-2 text-sm font-medium text-muted hover:text-ink">
           <ArrowLeftIcon className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
-          {c('back_to_login')}
+          {t('back_to_login')}
         </Link>
       )}
     </AuthLayout>

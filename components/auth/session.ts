@@ -1,4 +1,4 @@
-import type { AuthCopyKey } from './copy'
+import type { MessageKey as AuthCopyKey } from '@/locales/auth'
 
 /** Stable per-browser fingerprint (used for "trust this device"). */
 export function getDeviceFingerprint(): string {

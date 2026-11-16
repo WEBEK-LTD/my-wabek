@@ -2,12 +2,13 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/router'
 import { useAuthStore } from '@/lib/store'
 import { AuthStatusScreen } from '@/components/auth/AuthParts'
-import { useAuthCopy } from '@/components/auth/copy'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/auth'
 import { safeRedirect } from '@/components/auth/session'
 
 export default function MagicLogin() {
   const router = useRouter()
-  const { c } = useAuthCopy()
+  const { t } = useT(messages)
 
   useEffect(() => {
     if (!router.isReady) return
@@ -37,5 +38,5 @@ export default function MagicLogin() {
       .catch(() => router.replace('/auth/login'))
   }, [router.isReady, router.query.token])
 
-  return <AuthStatusScreen title={c('st_signing_in')} subtitle={c('st_magic_d')} />
+  return <AuthStatusScreen title={t('st_signing_in')} subtitle={t('st_magic_d')} />
 }

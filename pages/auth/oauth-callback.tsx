@@ -3,13 +3,14 @@ import { useRouter } from 'next/router'
 import axios from 'axios'
 import { useAuthStore } from '@/lib/store'
 import { AuthStatusScreen } from '@/components/auth/AuthParts'
-import { useAuthCopy } from '@/components/auth/copy'
-import type { AuthCopyKey } from '@/components/auth/copy'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/auth'
+import type { MessageKey as AuthCopyKey } from '@/locales/auth'
 
 export default function OAuthCallbackPage() {
   const router = useRouter()
   const { setUser, setToken } = useAuthStore()
-  const { c } = useAuthCopy()
+  const { t } = useT(messages)
   const [status, setStatus] = useState<AuthCopyKey>('st_completing')
 
   useEffect(() => {
@@ -61,5 +62,5 @@ export default function OAuthCallbackPage() {
       })
   }, [])
 
-  return <AuthStatusScreen title={c(status)} subtitle={c('st_wait')} />
+  return <AuthStatusScreen title={t(status)} subtitle={t('st_wait')} />
 }

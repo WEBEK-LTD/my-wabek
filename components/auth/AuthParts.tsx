@@ -4,7 +4,8 @@ import { ExclamationTriangleIcon, XCircleIcon, InformationCircleIcon, CheckCircl
 import { Input, Spinner } from '@/components/ui'
 import type { InputProps } from '@/components/ui'
 import { cn } from '@/components/ui/utils'
-import { useAuthCopy } from './copy'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/auth'
 import type { AuthErrorView } from './session'
 
 /* ── OAuth ─────────────────────────────────────────────────── */
@@ -27,7 +28,7 @@ const PROVIDERS = {
 
 /** OAuth buttons — plain links to /api/auth/oauth/<provider> (server-side redirect). */
 export function OAuthButtons({ providers }: { providers: (keyof typeof PROVIDERS)[] }) {
-  const { c } = useAuthCopy()
+  const { t } = useT(messages)
   const [pending, setPending] = useState<string | null>(null)
   const compact = providers.length > 1
   return (
@@ -40,12 +41,12 @@ export function OAuthButtons({ providers }: { providers: (keyof typeof PROVIDERS
             href={`/api/auth/oauth/${p}`}
             onClick={() => setPending(p)}
             aria-busy={pending === p || undefined}
-            aria-label={compact ? c(label) : undefined}
-            title={compact ? c(label) : undefined}
+            aria-label={compact ? t(label) : undefined}
+            title={compact ? t(label) : undefined}
             className="inline-flex h-11 min-w-0 items-center justify-center gap-2 rounded-btn border border-line bg-surface px-3 text-sm font-medium text-ink shadow-[0_1px_2px_rgb(var(--shadow)/0.04)] transition hover:border-line-strong hover:bg-surface-2 hover:text-ink"
           >
             {pending === p ? <Spinner className="h-4 w-4" /> : <Mark />}
-            <span className="truncate">{compact ? name : c(label)}</span>
+            <span className="truncate">{compact ? name : t(label)}</span>
           </a>
         )
       })}
@@ -66,7 +67,7 @@ export function AuthDivider({ children }: { children: React.ReactNode }) {
 /* ── Password field with visibility toggle ─────────────────── */
 
 export const PasswordInput = forwardRef<HTMLInputElement, Omit<InputProps, 'type' | 'endAdornment'>>(function PasswordInput(props, ref) {
-  const { c } = useAuthCopy()
+  const { t } = useT(messages)
   const [show, setShow] = useState(false)
   return (
     <Input
@@ -78,7 +79,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, Omit<InputProps, 'type
         <button
           type="button"
           onClick={() => setShow(v => !v)}
-          aria-label={show ? c('hide_password') : c('show_password')}
+          aria-label={show ? t('hide_password') : t('show_password')}
           aria-pressed={show}
           className="-me-1 flex h-8 w-8 items-center justify-center rounded-lg text-muted transition hover:bg-surface-3 hover:text-ink"
         >
@@ -104,7 +105,7 @@ export function passwordScore(pw: string): number {
 }
 
 export function PasswordStrength({ password }: { password: string }) {
-  const { c } = useAuthCopy()
+  const { t } = useT(messages)
   if (!password) return null
   const score = passwordScore(password)
   const levels = ['strength_weak', 'strength_weak', 'strength_fair', 'strength_good', 'strength_strong'] as const
@@ -117,8 +118,8 @@ export function PasswordStrength({ password }: { password: string }) {
         ))}
       </div>
       <p className="mt-1.5 flex flex-wrap justify-between gap-x-3 text-xs text-muted">
-        <span>{c('strength', { level: c(levels[score]) })}</span>
-        {score < 3 && <span>{c('strength_tip')}</span>}
+        <span>{t('strength', { level: t(levels[score]) })}</span>
+        {score < 3 && <span>{t('strength_tip')}</span>}
       </p>
     </div>
   )
@@ -135,7 +136,7 @@ export function OtpCodeInput({ value, onChange, invalid, autoFocus, disabled, on
   onComplete?: (v: string) => void
   describedBy?: string
 }) {
-  const { c } = useAuthCopy()
+  const { t } = useT(messages)
   const refs = useRef<(HTMLInputElement | null)[]>([])
   const digits = Array.from({ length: 6 }, (_, i) => value[i] || '')
 
@@ -153,7 +154,7 @@ export function OtpCodeInput({ value, onChange, invalid, autoFocus, disabled, on
   }
 
   return (
-    <div role="group" aria-label={c('otp_label')} dir="ltr" className="flex justify-between gap-2 sm:gap-2.5">
+    <div role="group" aria-label={t('otp_label')} dir="ltr" className="flex justify-between gap-2 sm:gap-2.5">
       {digits.map((d, i) => (
         <input
           key={i}
@@ -163,7 +164,7 @@ export function OtpCodeInput({ value, onChange, invalid, autoFocus, disabled, on
           inputMode="numeric"
           pattern="[0-9]*"
           autoComplete={i === 0 ? 'one-time-code' : 'off'}
-          aria-label={c('otp_digit', { n: i + 1 })}
+          aria-label={t('otp_digit', { n: i + 1 })}
           aria-invalid={invalid || undefined}
           aria-describedby={describedBy}
           onFocus={e => {
@@ -233,11 +234,11 @@ export function AuthAlert({ tone = 'danger', title, children, className }: { ton
 
 /** Renders a described server error (see describeAuthError). */
 export function AuthErrorAlert({ error, className }: { error: AuthErrorView | null; className?: string }) {
-  const { c } = useAuthCopy()
+  const { t } = useT(messages)
   if (!error) return null
   return (
-    <AuthAlert tone={error.tone} title={error.title ? c(error.title) : undefined} className={className}>
-      {error.raw || c(error.body, error.vars)}
+    <AuthAlert tone={error.tone} title={error.title ? t(error.title) : undefined} className={className}>
+      {error.raw || t(error.body, error.vars)}
     </AuthAlert>
   )
 }
@@ -266,8 +267,8 @@ export function useCooldown(initial = 0) {
   const [left, setLeft] = useState(initial)
   useEffect(() => {
     if (left <= 0) return
-    const t = setTimeout(() => setLeft(l => l - 1), 1000)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => setLeft(l => l - 1), 1000)
+    return () => clearTimeout(timer)
   }, [left])
   return [left, setLeft] as const
 }
