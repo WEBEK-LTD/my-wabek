@@ -1,18 +1,19 @@
-// @ts-nocheck
 import { useEffect } from 'react'
 import { useRouter } from 'next/router'
+import { useAuthStore } from '@/lib/store'
+import { AuthStatusScreen } from '@/components/auth/AuthParts'
+import { useAuthCopy } from '@/components/auth/copy'
+import { safeRedirect } from '@/components/auth/session'
 
 export default function MagicLogin() {
   const router = useRouter()
+  const { c } = useAuthCopy()
 
   useEffect(() => {
     if (!router.isReady) return
     const token = router.query.token as string
     // Same-origin relative paths only ("/x", never "//host" or "/\\host").
-    const rawRedirect = router.query.redirect
-    const redirect = typeof rawRedirect === 'string' && /^\/(?![\/\\])[^\\\s]*$/.test(rawRedirect)
-      ? rawRedirect
-      : '/dashboard'
+    const redirect = safeRedirect(router.query.redirect)
     if (!token) { router.replace('/auth/login'); return }
 
     fetch('/api/auth/magic-verify', {
@@ -23,23 +24,12 @@ export default function MagicLogin() {
     })
       .then(r => r.json())
       .then(d => {
-        if (d.success && d.token) {
-          // Save in both keys — wabek_token (direct) + wabek-auth (zustand persist)
-          localStorage.setItem('wabek_token', d.token)
-          
-          // Also update zustand persist store directly
-          try {
-            const existing = JSON.parse(localStorage.getItem('wabek-auth') || '{}')
-            existing.state = existing.state || {}
-            existing.state.token = d.token
-            existing.state.user = d.user || existing.state.user
-            localStorage.setItem('wabek-auth', JSON.stringify(existing))
-          } catch {}
-
-          // Full page navigation to force store rehydration
-          setTimeout(() => {
-            window.location.href = redirect
-          }, 100)
+        if (d.success) {
+          // The server set the HttpOnly session cookie. Keep only the profile
+          // (persisted) — the token itself is never written to storage.
+          if (d.user) useAuthStore.getState().setUser(d.user)
+          // Full page navigation so the app boots on the new session.
+          setTimeout(() => { window.location.href = redirect }, 100)
         } else {
           router.replace('/auth/login?error=invalid_link')
         }
@@ -47,13 +37,5 @@ export default function MagicLogin() {
       .catch(() => router.replace('/auth/login'))
   }, [router.isReady, router.query.token])
 
-  return (
-    <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'#0f1117',color:'#f1f5f9',fontFamily:'system-ui'}}>
-      <div style={{textAlign:'center'}}>
-        <div style={{width:40,height:40,border:'3px solid #1e2433',borderTopColor:'#25D366',borderRadius:'50%',animation:'spin .8s linear infinite',margin:'0 auto 16px'}}/>
-        <p style={{color:'#94a3b8',fontSize:14}}>Signing you in...</p>
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      </div>
-    </div>
-  )
+  return <AuthStatusScreen title={c('st_signing_in')} subtitle={c('st_magic_d')} />
 }
