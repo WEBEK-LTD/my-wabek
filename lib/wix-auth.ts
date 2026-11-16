@@ -92,6 +92,27 @@ export async function getLinkedUserId(wixInstanceId: string): Promise<string | n
   return data?.[0]?.user_id || null
 }
 
+/**
+ * Link a (verified) Wix instance to a WABEK user. Refuses when the store is
+ * already linked to another account, and never overwrites an existing
+ * installation owner.
+ */
+export async function linkWixInstance(userId: string, wixInstanceId: string): Promise<'linked' | 'taken'> {
+  const db = supabaseAdmin()
+  const { data: links } = await db.from('wix_user_links').select('user_id').eq('wix_instance_id', wixInstanceId)
+  if (links?.some(l => l.user_id !== userId)) return 'taken'
+
+  const now = new Date().toISOString()
+  const { data: install } = await db.from('wix_installations').select('id').eq('wix_instance_id', wixInstanceId).maybeSingle()
+  if (!install) {
+    await db.from('wix_installations').insert({ wix_instance_id: wixInstanceId, owner_id: userId, installed_at: now, updated_at: now })
+  }
+  if (!links?.length) {
+    await db.from('wix_user_links').upsert({ user_id: userId, wix_instance_id: wixInstanceId, connected_at: now }, { onConflict: 'user_id,wix_instance_id' })
+  }
+  return 'linked'
+}
+
 export interface WixCaller {
   userId: string
   /** Set when the caller proved a Wix site via a signed instance. */

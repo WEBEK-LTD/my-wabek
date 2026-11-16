@@ -2,6 +2,12 @@
 import { useState, useEffect } from 'react'
 import Head from 'next/head'
 
+// The signed Wix `instance` param proves which store this page belongs to.
+// Every /api/wix call sends it; the server derives the account from it.
+let WIX_INSTANCE = ''
+const wixFetch = (url: string, init: any = {}) =>
+  fetch(url, { ...init, headers: { ...(init.headers || {}), 'x-wix-instance': WIX_INSTANCE } })
+
 export default function WixSetupPage() {
   const [loading, setLoading]         = useState(true)
   const [error, setError]             = useState('')
@@ -38,8 +44,9 @@ export default function WixSetupPage() {
     const params  = new URLSearchParams(window.location.search)
     const instJwt = params.get('instance') || ''
     if (!instJwt) { setError('Please open from your Wix Dashboard.'); setLoading(false); return }
+    WIX_INSTANCE = instJwt
 
-    fetch('/api/wix/auto-connect', {
+    wixFetch('/api/wix/auto-connect', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ instance: instJwt }),
@@ -66,7 +73,7 @@ export default function WixSetupPage() {
 
   const loadStats = async (uid: string) => {
     try {
-      const r = await fetch(`/api/wix/stats?user_id=${uid}`)
+      const r = await wixFetch(`/api/wix/stats`)
       const d = await r.json()
       if (d) setStats({ messages: d.messages || 0, contacts: d.contacts || 0, campaigns: d.campaigns || 0 })
     } catch {}
@@ -74,19 +81,19 @@ export default function WixSetupPage() {
 
   const loadInstances = async (instId: string) => {
     if (!instId) return
-    const r = await fetch(`/api/wix/instances?instance_id=${instId}`).catch(() => null)
+    const r = await wixFetch(`/api/wix/instances`).catch(() => null)
     const d = await r?.json().catch(() => null)
     if (d?.instances) setInstances(d.instances)
   }
 
   const loadUserPlan = async (uid: string) => {
-    const r = await fetch(`/api/wix/user-plan?user_id=${uid}`).catch(() => null)
+    const r = await wixFetch(`/api/wix/user-plan`).catch(() => null)
     const d = await r?.json().catch(() => null)
     if (d?.plan) setUserPlan(d.plan)
   }
 
   const loadTemplates = async (instId: string) => {
-    const r = await fetch(`/api/wix/templates?instance_id=${instId}`).catch(() => null)
+    const r = await wixFetch(`/api/wix/templates`).catch(() => null)
     const d = await r?.json().catch(() => null)
     setTemplates({ ...DEFAULT_TEMPLATES, ...(d?.templates || {}) })
   }
@@ -98,7 +105,7 @@ export default function WixSetupPage() {
 
     // 1. Check Wix instance link
     try {
-      const r = await fetch(`/api/wix/instances?instance_id=${instanceId}`)
+      const r = await wixFetch(`/api/wix/instances`)
       const d = await r.json()
       const linked = !!(d.instances)
       checks.push({ label: 'Wix store linked to WABEK account', ok: linked, detail: linked ? `Instance: ${instanceId}` : 'No link found in DB' })
@@ -125,10 +132,10 @@ export default function WixSetupPage() {
   const openDashboard = async (path = '/dashboard') => {
     setOpeningDash(true)
     try {
-      const r = await fetch('/api/wix/magic-link', {
+      const r = await wixFetch('/api/wix/magic-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId }),
+        body: JSON.stringify({}),
       })
       const d = await r.json()
       // Append redirect param so magic login goes to correct page
@@ -145,7 +152,7 @@ export default function WixSetupPage() {
 
   const saveTemplates = async () => {
     setTplSaving(true)
-    await fetch('/api/wix/templates', {
+    await wixFetch('/api/wix/templates', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ instance_id: instanceId, templates }),

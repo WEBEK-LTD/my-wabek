@@ -1,24 +1,36 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requestQRCode } from '@/lib/wa-web'
+import { checkInstanceCreateAllowed } from '@/lib/wa-smart-send'
+import { resolveWixCaller } from '@/lib/wix-auth'
 import { v4 as uuidv4 } from 'uuid'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { user_id, reuse_instance_id } = req.body
-  if (!user_id) return res.status(400).json({ error: 'user_id required' })
+  const caller = await resolveWixCaller(req, res)
+  if (!caller) return
+  const userId = caller.userId
 
+  const { reuse_instance_id } = req.body || {}
   const db = supabaseAdmin()
 
-  let instanceId = reuse_instance_id || ''
+  let instanceId = ''
+
+  // A reused instance must be the caller's own WA Web instance
+  if (reuse_instance_id) {
+    const { data: own } = await db.from('whatsapp_instances').select('id')
+      .eq('id', reuse_instance_id).eq('user_id', userId).maybeSingle()
+    if (!own) return res.status(404).json({ error: 'Instance not found' })
+    instanceId = own.id
+  }
 
   // Try to find existing wa_web instance — ALWAYS reuse to avoid spam detection
   if (!instanceId) {
     const { data: existing } = await db
       .from('whatsapp_instances')
       .select('id, status')
-      .eq('user_id', user_id)
+      .eq('user_id', userId)
       .in('instance_type', ['wa_web'])
       .order('created_at', { ascending: true })
       .limit(1)
@@ -28,10 +40,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Only create new instance if none exists at all
   if (!instanceId) {
+    const limit = await checkInstanceCreateAllowed(userId)
+    if (!limit.allowed) return res.status(403).json({ qr: null, error: limit.error, code: 'PLAN_LIMIT' })
+
     instanceId = uuidv4()
     await db.from('whatsapp_instances').insert({
       id:            instanceId,
-      user_id,
+      user_id:       userId,
       name:          'WhatsApp',
       instance_type: 'wa_web',
       type:          'wa_web',
@@ -44,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Request QR — reuses existing Baileys session if available
   try {
-    const result = await requestQRCode(instanceId, user_id)
+    const result = await requestQRCode(instanceId, userId)
 
     if (result.qrCode) {
       return res.status(200).json({ qr: result.qrCode, instance_id: instanceId })
@@ -56,12 +71,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       message:     result.message,
     })
   } catch (err: unknown) {
-    const msg = (err as Error)?.message || 'Unknown error'
-    console.error('[wix generate-qr] error:', msg)
-    return res.status(500).json({
+    console.error('[wix generate-qr] error:', (err as Error)?.message)
+    return res.status(502).json({
       qr:          null,
       instance_id: instanceId,
-      error:       msg,
+      error:       'Could not get a QR code from the WhatsApp Web server. Please try again.',
     })
   }
 }
