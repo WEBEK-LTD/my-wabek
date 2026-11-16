@@ -17,6 +17,30 @@ interface WhiteLabelSettings {
   custom_footer?: string
 }
 
+/** Official WABEK brand assets (the only logo). */
+export const BRAND_ASSETS = {
+  mark: '/brand/logo-mark.png',
+  mark512: '/brand/logo-mark-512.png',
+  favicon: '/brand/favicon-32.png',
+  appleTouch: '/brand/apple-touch-icon.png',
+  name: 'WABEK',
+} as const
+
+/**
+ * The previous default logo lived on Cloudinary and is still stored in some
+ * system settings rows. Treat it (and empty values) as "no override" so the
+ * official /brand assets are used instead.
+ */
+export function isLegacyBrandAsset(url?: string | null): boolean {
+  if (!url) return true
+  return /res\.cloudinary\.com\/dkl7ntpgw\//.test(url)
+}
+
+/** Returns a tenant override URL, or null when the default brand should be used. */
+export function brandOverride(url?: string | null): string | null {
+  return isLegacyBrandAsset(url) ? null : (url as string)
+}
+
 const MAIN_DOMAINS = ['waabek.com', 'www.waabek.com', 'localhost', '127.0.0.1']
 
 export function useWhiteLabel() {
@@ -54,12 +78,18 @@ export function useWhiteLabel() {
     return (user ? userWL?.settings : domainWL?.settings) || domainWL?.settings || {}
   }, [onMain, user, userWL, domainWL])
 
+  const customLogo = brandOverride(settings.brand_logo)
+  const customFavicon = brandOverride(settings.favicon_url)
+
   return {
     brandName:           settings.brand_name || null,
-    brandColor:          settings.brand_color || '#25D366',
-    brandLogo:           settings.brand_logo || 'https://res.cloudinary.com/dkl7ntpgw/image/upload/f_auto,q_auto/%D8%AA%D8%B5%D9%85%D9%8A%D9%85_%D8%A8%D8%AF%D9%88%D9%86_%D8%B9%D9%86%D9%88%D8%A7%D9%86_1_kejdrs',
-    brandSecondaryColor: settings.brand_secondary_color || '#0D1117',
-    favIcon:             settings.favicon_url || null,
+    brandColor:          settings.brand_color || '#12B5BE',
+    /** Always a usable logo URL: tenant override or the official mark. */
+    brandLogo:           customLogo || BRAND_ASSETS.mark,
+    /** Tenant logo override only (null = use the official WABEK mark). */
+    customLogo,
+    brandSecondaryColor: settings.brand_secondary_color || '#04282C',
+    favIcon:             customFavicon,
     hidePoweredBy:       settings.hide_powered_by || false,
     customCss:           settings.custom_css || null,
     customFooter:        settings.custom_footer || null,
