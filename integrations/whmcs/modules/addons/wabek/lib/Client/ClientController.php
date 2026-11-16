@@ -26,6 +26,9 @@ if (!defined('WHMCS')) {
  */
 final class ClientController
 {
+    /** Allowed "return" targets of a posted toggle. */
+    private const RETURNS = ['home' => 'clientarea.php'];
+
     /** @var array */
     private $vars;
 
@@ -44,10 +47,21 @@ final class ClientController
         }
 
         if ($clientId > 0 && Security::isPost()) {
+            // One-click toggle from the homepage panel / account pages: back to where it was clicked (allow-list).
+            $return = self::RETURNS[Security::post('return', 10)] ?? '';
             if (!Security::validPost(false)) {
                 $this->flash('error', Lang::t('err_csrf'));
+                $return = '';
             } else {
                 $this->post($clientId, Security::post('wb_action', 20));
+            }
+            if ($return !== '') {
+                $flash = $_SESSION['wabek_flash'] ?? null;
+                unset($_SESSION['wabek_flash']);
+                if (is_array($flash) && $flash[0] === 'success') {
+                    $_SESSION[HomePanel::FLASH] = (string) $flash[1];
+                }
+                $this->redirect($return);
             }
             $this->redirect('index.php?m=wabek' . ($action === 'verify' ? '&action=verify' : ''));
         }

@@ -407,4 +407,10 @@ $_ADDONLANG = [
     'pf_phone_help' => 'Optional, in international format. Leave empty to use the phone number above.',
     'pf_phone_field_note' => 'Set in the custom field "{name}".',
     'pf_consent_field_note' => 'Change it with the custom field "{name}" on this page.',
+
+    // Client area: account status, homepage panel (4.2.0)
+    'client_state_line_on' => 'WhatsApp notifications are on for your account',
+    'client_state_line_off' => 'WhatsApp notifications are off for your account',
+    'client_sent_to' => 'Messages are sent to',
+    'client_hp_manage' => 'Manage preferences',
 ];

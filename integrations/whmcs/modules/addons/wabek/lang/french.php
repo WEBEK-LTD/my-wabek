@@ -64,4 +64,8 @@ $_ADDONLANG = [
     // Champ personnalisé natif
     'cf_consent_name' => 'Recevoir les notifications WhatsApp',
     'cf_consent_desc' => 'Informations sur vos commandes, votre facturation et le support sur WhatsApp. Les avis essentiels concernant votre compte peuvent toujours être envoyés.',
+    'client_state_line_on' => 'Les notifications WhatsApp sont activées pour votre compte',
+    'client_state_line_off' => 'Les notifications WhatsApp sont désactivées pour votre compte',
+    'client_sent_to' => 'Les messages sont envoyés au',
+    'client_hp_manage' => 'Gérer les préférences',
 ];

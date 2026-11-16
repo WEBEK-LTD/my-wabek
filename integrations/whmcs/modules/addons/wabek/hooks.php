@@ -15,6 +15,7 @@ require_once __DIR__ . '/bootstrap.php';
 use WABEK\Admin\ClientProfile;
 use WABEK\Admin\ClientSummary;
 use WABEK\Checkout;
+use WABEK\Client\HomePanel;
 use WABEK\Config;
 use WABEK\Consent;
 use WABEK\ConsentField;
@@ -374,13 +375,44 @@ add_hook('ClientAreaPrimarySidebar', 1, function ($sidebar) {
     });
 });
 
-// Scoped stylesheet, only on index.php?m=wabek and the checkout step.
+// "WhatsApp notifications" item in the "My Account" sidebar panel of the account pages (details, contacts,
+// password, security, email history), with the current state as its badge. The Account dropdown item above
+// stays the way in from every other page.
+add_hook('ClientAreaPrimarySidebar', 2, function ($sidebar) {
+    wabek_safe('ClientAreaPrimarySidebar account', function () use ($sidebar) {
+        $clientId = (int) ($_SESSION['uid'] ?? 0);
+        if ($clientId <= 0 || !is_object($sidebar) || Otp::loginPending()) {
+            return;
+        }
+        $account = $sidebar->getChild('My Account');
+        if (!$account || $account->getChild('wabek-whatsapp')) {
+            return;
+        }
+        Lang::initForSession(false);
+        $on = Consent::subscribed($clientId);
+        $account->addChild('wabek-whatsapp', [
+            'label' => Lang::t('client_nav'),
+            'uri'   => 'index.php?m=wabek',
+            'order' => 75,
+            'badge' => Security::e(Lang::t($on ? 'client_state_on' : 'client_state_off')),
+        ]);
+    });
+});
+
+// Homepage panel (clientarea.php): state, number and a one-click on/off button.
+add_hook('ClientAreaHomepagePanels', 1, function ($panels) {
+    wabek_safe('ClientAreaHomepagePanels', function () use ($panels) {
+        HomePanel::add($panels);
+    });
+});
+
+// Scoped stylesheet, only on index.php?m=wabek, the client-area homepage (panel) and the checkout step.
 add_hook('ClientAreaHeadOutput', 1, function ($vars) {
     return (string) wabek_safe('ClientAreaHeadOutput', function () use ($vars) {
         $file = (string) ($vars['filename'] ?? '');
         $module = isset($_GET['m']) && is_string($_GET['m']) ? $_GET['m'] : '';
         $step = isset($_GET['a']) && is_string($_GET['a']) ? $_GET['a'] : '';
-        $onModule = $module === 'wabek';
+        $onModule = $module === 'wabek' || ($file === 'clientarea' && !isset($_GET['action']) && !empty($_SESSION['uid']));
         $onCheckout = $file === 'cart' && in_array($step, ['view', 'checkout'], true) && Checkout::enabled();
         if (!$onModule && !$onCheckout) {
             return '';

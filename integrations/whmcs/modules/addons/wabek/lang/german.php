@@ -64,4 +64,8 @@ $_ADDONLANG = [
     // Natives benutzerdefiniertes Feld
     'cf_consent_name' => 'WhatsApp-Benachrichtigungen erhalten',
     'cf_consent_desc' => 'Bestell-, Rechnungs- und Support-Updates per WhatsApp. Wichtige Hinweise zu Ihrem Konto können weiterhin gesendet werden.',
+    'client_state_line_on' => 'WhatsApp-Benachrichtigungen sind für Ihr Konto aktiviert',
+    'client_state_line_off' => 'WhatsApp-Benachrichtigungen sind für Ihr Konto deaktiviert',
+    'client_sent_to' => 'Nachrichten werden gesendet an',
+    'client_hp_manage' => 'Einstellungen verwalten',
 ];
