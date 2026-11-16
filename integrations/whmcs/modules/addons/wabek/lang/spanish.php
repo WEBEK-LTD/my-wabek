@@ -1,0 +1,103 @@
+<?php
+/**
+ * WABEK for WHMCS — Spanish strings (client area and checkout only; everything else falls back to English).
+ */
+
+if (!defined('WHMCS')) {
+    die('This file cannot be accessed directly');
+}
+
+$_ADDONLANG = [
+    '_language' => 'spanish',
+    '_dir' => 'ltr',
+
+    'err_csrf' => 'Su token de sesión no es válido o ha caducado. Recargue la página e inténtelo de nuevo.',
+    'err_unknown_action' => 'Acción desconocida.',
+
+    'otp_disabled' => 'La verificación por WhatsApp no está activada.',
+    'otp_no_phone' => 'Su perfil no tiene un número de WhatsApp válido.',
+    'otp_rate_limited' => 'Se han solicitado demasiados códigos. Inténtelo de nuevo más tarde.',
+    'otp_too_soon' => 'Espere {seconds} segundos antes de solicitar un código nuevo.',
+    'otp_send_failed' => 'No pudimos enviar el código. Inténtelo de nuevo más tarde.',
+    'otp_invalid' => 'El código no es correcto.',
+    'otp_expired' => 'El código ha caducado. Solicite uno nuevo.',
+    'otp_too_many' => 'Demasiados intentos fallidos. Solicite un código nuevo.',
+    'otp_service_down' => 'La verificación no está disponible en este momento. Inténtelo de nuevo en breve.',
+
+    'client_nav' => 'Notificaciones de WhatsApp',
+    'client_nav_prefs' => 'Preferencias',
+    'client_prefs_title' => 'Notificaciones de WhatsApp',
+    'client_prefs_intro' => 'Elija si podemos contactarle por WhatsApp.',
+    'client_number' => 'Su número de WhatsApp',
+    'client_number_help' => 'Utilizamos el número de teléfono de su perfil.',
+    'client_no_phone' => 'Su perfil no tiene un número de teléfono válido con el prefijo del país.',
+    'client_edit_profile' => 'Actualizar su perfil',
+    'client_notifications' => 'Notificaciones',
+    'client_state_on' => 'Activadas',
+    'client_state_off' => 'Desactivadas',
+    'client_subscribed' => 'Recibe notificaciones de WhatsApp',
+    'client_unsubscribed' => 'No recibe notificaciones de WhatsApp',
+    'client_critical_note' => 'Es posible que sigamos enviándole avisos esenciales sobre su cuenta y su facturación.',
+    'client_btn_subscribe' => 'Activar las notificaciones de WhatsApp',
+    'client_btn_unsubscribe' => 'Dejar de recibir notificaciones de WhatsApp',
+    'client_ok_subscribed' => 'Las notificaciones de WhatsApp están activadas.',
+    'client_ok_unsubscribed' => 'Las notificaciones de WhatsApp están desactivadas.',
+    'client_verify_title' => 'Verifique su número de WhatsApp',
+    'client_verify_intro' => 'Le enviaremos un código de un solo uso por WhatsApp.',
+    'client_login_gate' => 'Por su seguridad, introduzca el código que le enviamos por WhatsApp para continuar.',
+    'client_btn_verify' => 'Verificar número',
+    'client_code_to' => 'El código se enviará al',
+    'client_code_label' => 'Código de verificación',
+    'client_btn_send_code' => 'Enviar código',
+    'client_btn_resend' => 'Enviar un código nuevo',
+    'client_btn_confirm' => 'Confirmar',
+    'client_ok_code_sent' => 'Se ha enviado un código al {phone}.',
+    'client_ok_verified' => 'Su número de WhatsApp está verificado.',
+    'client_ok_login_verified' => 'Verificado. ¡Bienvenido de nuevo!',
+    'client_verified_badge' => 'Verificado',
+    'client_back' => 'Volver',
+    'client_logout' => 'Cerrar sesión',
+
+    'checkout_consent_label' => 'Quiero recibir avisos sobre pedidos, facturación y soporte por WhatsApp',
+    'checkout_consent_help' => 'Puede cambiarlo en cualquier momento en Cuenta → Notificaciones de WhatsApp.',
+
+    // Campo personalizado nativo
+    'cf_consent_name' => 'Recibir notificaciones por WhatsApp',
+    'cf_consent_desc' => 'Novedades de pedidos, facturación y soporte por WhatsApp. Es posible que se sigan enviando avisos esenciales de su cuenta.',
+    'client_state_line_on' => 'Las notificaciones por WhatsApp están activadas para su cuenta',
+    'client_state_line_off' => 'Las notificaciones por WhatsApp están desactivadas para su cuenta',
+    'client_sent_to' => 'Los mensajes se envían al',
+    'client_hp_manage' => 'Gestionar preferencias',
+
+    // 4.3.0: WhatsApp number & verification codes (OTP)
+    'client_otp_intro' => 'Los avisos de la cuenta y los códigos de verificación de un solo uso (OTP) se envían a este número de WhatsApp.',
+    'client_not_verified_badge' => 'No verificado',
+    'client_number_custom' => 'Elegiste este número para WhatsApp; el teléfono de tu perfil no cambia.',
+    'client_verified_on' => 'Verificado el',
+    'client_btn_use_profile' => 'Usar el número de mi perfil:',
+    'client_change_number' => 'Cambiar número de WhatsApp',
+    'client_add_number' => 'Añadir un número de WhatsApp',
+    'client_new_phone_ph' => '+34 612 34 56 78',
+    'client_change_help' => 'Enviamos un código al número nuevo. Sustituye al actual solo cuando confirmes el código.',
+    'client_login_code_title' => 'Código de WhatsApp al iniciar sesión',
+    'client_login_code_on_line' => 'Se pide un código de WhatsApp cada vez que inicias sesión',
+    'client_login_code_off_line' => 'No se pide código de WhatsApp al iniciar sesión',
+    'client_login_code_forced' => 'Obligatorio para todas las cuentas por decisión del administrador.',
+    'client_login_code_help' => 'Protección extra: tras la contraseña pedimos un código enviado a tu número de WhatsApp verificado. Verifica primero tu número.',
+    'client_btn_login_code_off' => 'Desactivar código de acceso',
+    'client_btn_login_code_on' => 'Activar código de acceso',
+    'client_change_intro' => 'Introduce el código que enviamos a tu nuevo número de WhatsApp para confirmarlo.',
+    'client_btn_cancel_change' => 'Cancelar y mantener mi número actual',
+    'client_ok_number_reset' => 'Se vuelve a usar el teléfono de tu perfil para WhatsApp.',
+    'client_err_verify_first' => 'Verifica primero tu número de WhatsApp.',
+    'client_ok_login_code_on' => 'El código de WhatsApp al iniciar sesión está activado.',
+    'client_ok_login_code_off' => 'El código de WhatsApp al iniciar sesión está desactivado.',
+    'client_ok_number_changed' => 'Tu nuevo número de WhatsApp está confirmado y guardado.',
+    'client_err_new_phone' => 'Este número de WhatsApp no es válido. Escríbelo con el prefijo del país, por ejemplo +34 612 34 56 78.',
+    'client_hp_verify' => 'Verificar número',
+    'client_hp_otp_line' => 'Los códigos de verificación (OTP) llegan a este número.',
+    'otp_optional' => 'Los clientes pueden activar ellos mismos un código de WhatsApp al iniciar sesión',
+    'cs_login_code' => 'Código de acceso',
+    'cs_login_code_on' => 'Activado (elección del cliente)',
+    'cs_login_code_off' => 'Desactivado',
+];

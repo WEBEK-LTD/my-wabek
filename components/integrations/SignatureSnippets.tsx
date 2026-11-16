@@ -1,7 +1,10 @@
 import React, { useState } from 'react'
 import { ShieldCheckIcon, BookOpenIcon } from '@heroicons/react/24/outline'
 import { Button, Card, CardHeader, Tabs } from '@/components/ui'
-import { CodeBlock } from '@/components/settings/Shared'
+import { CodeBlock } from '@/components/campaigns/copy'
+import { rich } from '@/components/campaigns/rich'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/integrations'
 
 // Signing (lib/outgoing-webhooks.ts → signWebhookBody):
 //   X-WABEK-Signature: sha256=hex(HMAC_SHA256(secret, `${X-WABEK-Timestamp}.${raw body}`))
@@ -97,32 +100,32 @@ X-WABEK-Signature: sha256=<hex>
 export const OUTGOING_WEBHOOKS_DOC = '/docs/api/outgoing-webhooks'
 
 export function SignatureSnippets() {
+  const { t } = useT(messages)
   const [lang, setLang] = useState('js')
   const s = SNIPPETS[lang]
   return (
     <Card padding="none">
-      <CardHeader className="px-5 pt-5 sm:px-6" icon={ShieldCheckIcon} title="التحقق من التوقيع"
-        subtitle="تأكّد أن الطلب صادر من WABEK"
-        action={<Button size="sm" variant="ghost" icon={BookOpenIcon} href={OUTGOING_WEBHOOKS_DOC}>التوثيق</Button>} />
+      <CardHeader className="px-5 pt-5 sm:px-6" icon={ShieldCheckIcon} title={t('sig_title')}
+        subtitle={t('sig_sub')}
+        action={<Button size="sm" variant="ghost" icon={BookOpenIcon} href={OUTGOING_WEBHOOKS_DOC}>{t('docs')}</Button>} />
       <div className="space-y-4 p-5 sm:p-6">
         <div className="rounded-card border border-line-soft bg-surface-2 p-4 text-sm leading-relaxed text-body">
           <p>
-            يحمل كل طلب الترويسة <code dir="ltr" className="font-mono text-[12.5px] text-ink">X-WABEK-Signature: sha256=&lt;hex&gt;</code>،
-            وهي توقيع HMAC-SHA256 بمفتاح الـ Webhook للنص:
+            {rich(t('sig_intro'), { header: <code dir="ltr" className="font-mono text-[12.5px] text-ink">X-WABEK-Signature: sha256=&lt;hex&gt;</code> })}
           </p>
           <p dir="ltr" className="mt-2 rounded-lg bg-surface px-3 py-2 text-start font-mono text-[12.5px] text-ink">X-WABEK-Timestamp + &quot;.&quot; + raw_body</p>
           <ul className="mt-3 list-disc space-y-1 ps-5 text-[13px] text-muted">
-            <li>اقرأ جسم الطلب الخام قبل تحليل JSON، وقارن التوقيع بمقارنة ثابتة الزمن.</li>
-            <li>ارفض الطلب إذا ابتعد <code dir="ltr" className="font-mono">X-WABEK-Timestamp</code> أكثر من 5 دقائق عن ساعتك.</li>
-            <li>استخدم <code dir="ltr" className="font-mono">X-WABEK-Delivery</code> لتجاهل تسليم عالجته من قبل؛ إعادة المحاولة تحمل المعرّف نفسه.</li>
+            <li>{t('sig_li1')}</li>
+            <li>{rich(t('sig_li2'), { ts: <code dir="ltr" className="font-mono">X-WABEK-Timestamp</code> })}</li>
+            <li>{rich(t('sig_li3'), { delivery: <code dir="ltr" className="font-mono">X-WABEK-Delivery</code> })}</li>
           </ul>
         </div>
-        <Tabs variant="segmented" size="sm" value={lang} onChange={setLang} idPrefix="sig" aria-label="لغة البرمجة"
+        <Tabs variant="segmented" size="sm" value={lang} onChange={setLang} idPrefix="sig" aria-label={t('sig_lang_aria')}
           tabs={Object.entries(SNIPPETS).map(([id, v]) => ({ id, label: v.label }))} />
         <CodeBlock label={s.file} code={s.code} />
         <details className="group rounded-card border border-line-soft">
           <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-ink marker:hidden">
-            مثال على طلب كامل (message_received)
+            {t('sig_example')}
           </summary>
           <div className="px-3 pb-3"><CodeBlock label="HTTP" code={HEADERS} /></div>
         </details>

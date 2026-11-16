@@ -4,7 +4,7 @@ import {
   ArrowTrendingUpIcon, ClipboardDocumentCheckIcon, DocumentMagnifyingGlassIcon, ExclamationTriangleIcon, GlobeAltIcon,
   MagnifyingGlassIcon, PresentationChartLineIcon, SparklesIcon, TagIcon,
 } from '@heroicons/react/24/outline'
-import { Button, PageHeader, StatCard, Tabs, formatNumber } from '@/components/ui'
+import { Button, PageHeader, StatCard, Tabs } from '@/components/ui'
 import { useAdminT } from '@/components/admin/i18n'
 import { ScoreRing } from '@/components/admin/shared'
 import { PUBLIC_PAGES } from '@/components/admin/seo/data'
@@ -15,36 +15,37 @@ import { AnalyticsTab, MetaTab, OgTab, SchemaTab, SitemapTab, TechnicalTab } fro
 import { BacklinksTab, CompetitorsTab, KeywordsTab, RankTab, RedirectsTab } from '@/components/admin/seo/tabs/GrowthTabs'
 import { GscTab } from '@/components/admin/seo/tabs/GscTab'
 import { AiTab } from '@/components/admin/seo/tabs/AiTab'
+import messages from '@/locales/admin/seo/page'
 
 type Group = { id: string; label: string; icon: React.ElementType; tabs: { id: string; label: string }[] }
 
 export default function SeoAdminPage() {
-  const { tr } = useAdminT()
+  const { t, fmtNumber } = useAdminT(messages)
   const s = useSeoAdmin()
 
   // 19 tools grouped in five areas; `s.tab` stays the leaf id so deep jumps (e.g. to "gsc") keep working.
   const groups: Group[] = [
-    { id: 'overview', label: tr('نظرة عامة', 'Overview'), icon: PresentationChartLineIcon, tabs: [{ id: 'overview', label: tr('نظرة عامة', 'Overview') }] },
+    { id: 'overview', label: t('overview'), icon: PresentationChartLineIcon, tabs: [{ id: 'overview', label: t('overview') }] },
     {
-      id: 'audit', label: tr('التدقيق', 'Audit'), icon: DocumentMagnifyingGlassIcon, tabs: [
-        { id: 'pages', label: tr('محلل الصفحات', 'Page analyzer') }, { id: 'content', label: tr('المحتوى', 'Content SEO') },
-        { id: 'crawl', label: tr('مراقبة الفحص', 'Crawl monitor') }, { id: 'speed', label: tr('مؤشرات الأداء', 'Core Web Vitals') },
-        { id: 'links', label: tr('الروابط الداخلية', 'Internal links') },
+      id: 'audit', label: t('audit'), icon: DocumentMagnifyingGlassIcon, tabs: [
+        { id: 'pages', label: t('pageAnalyzer') }, { id: 'content', label: t('contentSeo') },
+        { id: 'crawl', label: t('crawlMonitor') }, { id: 'speed', label: t('coreWebVitals') },
+        { id: 'links', label: t('internalLinks') },
       ],
     },
     {
-      id: 'onpage', label: tr('داخل الصفحة', 'On-page'), icon: TagIcon, tabs: [
-        { id: 'meta', label: tr('وسوم Meta', 'Meta tags') }, { id: 'og', label: 'Open Graph' }, { id: 'schema', label: tr('البيانات المنظمة', 'Structured data') },
-        { id: 'sitemap', label: tr('خريطة الموقع', 'Sitemap') }, { id: 'technical', label: tr('تقني', 'Technical') }, { id: 'analytics', label: tr('التحليلات', 'Analytics') },
+      id: 'onpage', label: t('page'), icon: TagIcon, tabs: [
+        { id: 'meta', label: t('metaTags') }, { id: 'og', label: 'Open Graph' }, { id: 'schema', label: t('structuredData') },
+        { id: 'sitemap', label: t('sitemap') }, { id: 'technical', label: t('technical') }, { id: 'analytics', label: t('analytics') },
       ],
     },
     {
-      id: 'growth', label: tr('البحث والنمو', 'Search & growth'), icon: ArrowTrendingUpIcon, tabs: [
-        { id: 'gsc', label: 'Search Console' }, { id: 'keywords', label: tr('الكلمات المفتاحية', 'Keywords') }, { id: 'rank', label: tr('متتبّع الترتيب', 'Rank tracker') },
-        { id: 'competitors', label: tr('المنافسون', 'Competitors') }, { id: 'backlinks', label: tr('الروابط الخلفية', 'Backlinks') }, { id: 'redirects', label: tr('التحويلات', 'Redirects') },
+      id: 'growth', label: t('searchGrowth'), icon: ArrowTrendingUpIcon, tabs: [
+        { id: 'gsc', label: 'Search Console' }, { id: 'keywords', label: t('keywords') }, { id: 'rank', label: t('rankTracker') },
+        { id: 'competitors', label: t('competitors') }, { id: 'backlinks', label: t('backlinks') }, { id: 'redirects', label: t('redirects') },
       ],
     },
-    { id: 'ai', label: tr('المساعد الذكي', 'AI assistant'), icon: SparklesIcon, tabs: [{ id: 'ai', label: tr('المساعد الذكي', 'AI assistant') }] },
+    { id: 'ai', label: t('aiAssistant'), icon: SparklesIcon, tabs: [{ id: 'ai', label: t('aiAssistant') }] },
   ]
   const group = groups.find(g => g.tabs.some(t => t.id === s.tab)) || groups[0]
   const pickGroup = (id: string) => { const g = groups.find(x => x.id === id); if (g) s.setTab(g.tabs[0].id) }
@@ -57,34 +58,34 @@ export default function SeoAdminPage() {
   }
 
   return (
-    <AdminLayout title={tr('إدارة SEO', 'SEO manager')}>
+    <AdminLayout title={t('seoManager')}>
       <PageHeader className="mb-6"
         eyebrow="SEO"
-        title={tr('إدارة SEO', 'SEO manager')}
-        description={tr('حلّل صفحاتك، وحسّن الوسوم والمحتوى، وتابع ظهورك في Google من مكان واحد.', 'Analyze pages, improve tags and content, and track your Google presence in one place.')}
+        title={t('seoManager')}
+        description={t('analyzePagesImproveTags')}
         actions={<>
-          <Button variant="secondary" icon={MagnifyingGlassIcon} loading={s.analyzeAll} onClick={s.runAnalyzeAll}>{tr('تحليل كل الصفحات', 'Analyze all pages')}</Button>
-          <Button loading={s.saving} disabled={!s.formLoaded} onClick={() => s.save()}>{tr('حفظ الإعدادات', 'Save settings')}</Button>
+          <Button variant="secondary" icon={MagnifyingGlassIcon} loading={s.analyzeAll} onClick={s.runAnalyzeAll}>{t('analyzeAllPages')}</Button>
+          <Button loading={s.saving} disabled={!s.formLoaded} onClick={() => s.save()}>{t('saveSettings')}</Button>
         </>}
       >
         <div className="-mx-4 overflow-x-auto px-4 scrollbar-none sm:mx-0 sm:px-0">
-          <Tabs idPrefix="seo-group" value={group.id} onChange={pickGroup} aria-label={tr('أقسام SEO', 'SEO areas')}
+          <Tabs idPrefix="seo-group" value={group.id} onChange={pickGroup} aria-label={t('seoAreas')}
             tabs={groups.map(g => ({ id: g.id, label: g.label, icon: g.icon }))} />
         </div>
       </PageHeader>
 
       <div className="mb-5 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
         <div className="flex items-center gap-4 rounded-card border border-line bg-surface p-5 shadow-card">
-          <ScoreRing value={s.avgScore} size={64} label={tr('درجة SEO', 'SEO score')} />
+          <ScoreRing value={s.avgScore} size={64} label={t('seoScore')} />
           <div>
-            <p className="text-[13px] text-muted">{tr('متوسط درجة SEO', 'Average SEO score')}</p>
-            <p className="text-xs text-muted">{s.analyzed ? tr(`من ${s.analyzed} صفحة محلَّلة`, `across ${s.analyzed} analyzed pages`) : tr('لم يبدأ التحليل', 'Not analyzed yet')}</p>
+            <p className="text-[13px] text-muted">{t('averageSeoScore')}</p>
+            <p className="text-xs text-muted">{s.analyzed ? t('acrossAnalyzedPages', { analyzed: s.analyzed }) : t('notAnalyzedYet')}</p>
           </div>
         </div>
-        <StatCard icon={ClipboardDocumentCheckIcon} label={tr('الصفحات المحلَّلة', 'Pages analyzed')} value={<span dir="ltr">{s.analyzed}<span className="text-lg text-muted"> / {PUBLIC_PAGES.length}</span></span>}
+        <StatCard icon={ClipboardDocumentCheckIcon} label={t('pagesAnalyzed')} value={<span dir="ltr">{s.analyzed}<span className="text-lg text-muted"> / {PUBLIC_PAGES.length}</span></span>}
           progress={s.analyzed} progressMax={PUBLIC_PAGES.length} />
-        <StatCard icon={GlobeAltIcon} label={tr('صفحات مفهرسة', 'Pages indexed')} value={s.analyzed ? formatNumber(s.indexed) : '—'} sub={tr('جاهزة لـ Google', 'ready for Google')} subTone="success" />
-        <StatCard icon={ExclamationTriangleIcon} label={tr('مشكلات مكتشفة', 'Issues found')} value={s.analyzed ? formatNumber(s.issues) : '—'} sub={tr('تحتاج إصلاحًا', 'need fixing')} subTone={s.issues > 10 ? 'danger' : 'warning'} />
+        <StatCard icon={GlobeAltIcon} label={t('pagesIndexed')} value={s.analyzed ? fmtNumber(s.indexed) : '—'} sub={t('readyGoogle')} subTone="success" />
+        <StatCard icon={ExclamationTriangleIcon} label={t('issuesFound')} value={s.analyzed ? fmtNumber(s.issues) : '—'} sub={t('needFixing')} subTone={s.issues > 10 ? 'danger' : 'warning'} />
       </div>
 
       {group.tabs.length > 1 && (

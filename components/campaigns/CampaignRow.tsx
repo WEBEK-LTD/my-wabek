@@ -4,9 +4,11 @@ import {
   PlayIcon, PauseIcon, TrashIcon, CalendarDaysIcon, UsersIcon, CheckBadgeIcon, ClockIcon, EllipsisHorizontalIcon, ChartBarIcon,
 } from '@heroicons/react/24/outline'
 import { Button, Card, Dropdown, StatusPill } from '@/components/ui'
-import { fmtDate, fmtDateTime } from '@/components/settings/format'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/campaign-components'
+import common from '@/locales/dashboard/common-a'
 import { DeliveryBar, funnel } from './DeliveryBar'
-import { campaignStatus, fmtNum, pct } from './shared'
+import { campaignStatus, pct } from './shared'
 import { ForwardArrowIcon } from './icons'
 
 export interface CampaignRowData {
@@ -31,7 +33,10 @@ export function CampaignRow({ c, canWrite, busy, onAction, onDelete }: {
   onAction: (action: 'start' | 'pause') => void
   onDelete: () => void
 }) {
-  const st = campaignStatus(c.status)
+  const { t, fmtNumber, fmtDate, fmtDateTime } = useT(messages)
+  const { t: tc } = useT(common)
+  const fmtNum = (n: number | null | undefined) => fmtNumber(Number(n) || 0)
+  const st = campaignStatus(c.status, tc)
   const f = funnel({ total: c.total_contacts, sent: c.sent_count, delivered: c.delivered_count, read: c.read_count, failed: c.failed_count })
   const progress = pct(f.sent + f.failed, f.total)
   const startable = ['draft', 'scheduled', 'paused'].includes(c.status)
@@ -51,7 +56,7 @@ export function CampaignRow({ c, canWrite, busy, onAction, onDelete }: {
             </StatusPill>
           </div>
           <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-            <span className="flex items-center gap-1"><UsersIcon className="h-3.5 w-3.5" aria-hidden="true" /><span className="tabular">{fmtNum(c.total_contacts)}</span> مستلم</span>
+            <span className="flex items-center gap-1 tabular"><UsersIcon className="h-3.5 w-3.5" aria-hidden="true" />{t('row_recipients', { n: fmtNum(c.total_contacts) })}</span>
             {c.status === 'scheduled' && c.scheduled_at ? (
               <span className="flex items-center gap-1 text-warning"><CalendarDaysIcon className="h-3.5 w-3.5" aria-hidden="true" />{fmtDateTime(c.scheduled_at)}</span>
             ) : (
@@ -67,35 +72,35 @@ export function CampaignRow({ c, canWrite, busy, onAction, onDelete }: {
           {f.total > 0 || f.sent > 0 ? (
             <>
               <div className="mb-1.5 flex items-center justify-between text-xs">
-                <span className="text-muted">وصلت <span className="font-semibold text-ink tabular">{pct(f.delivered, f.sent)}%</span> · قُرئت <span className="font-semibold text-ink tabular">{pct(f.read, f.sent)}%</span></span>
+                <span className="text-muted">{t('row_delivered')} <span className="font-semibold text-ink tabular">{pct(f.delivered, f.sent)}%</span> · {t('row_read')} <span className="font-semibold text-ink tabular">{pct(f.read, f.sent)}%</span></span>
                 <span className="text-muted tabular">{fmtNum(f.sent + f.failed)} / {fmtNum(f.total)}</span>
               </div>
               <DeliveryBar counts={{ total: c.total_contacts, sent: c.sent_count, delivered: c.delivered_count, read: c.read_count, failed: c.failed_count }} />
-              {f.failed > 0 && <p className="mt-1 text-[11.5px] text-danger">فشلت <span className="tabular">{fmtNum(f.failed)}</span></p>}
+              {f.failed > 0 && <p className="mt-1 text-[11.5px] text-danger tabular">{t('row_failed', { n: fmtNum(f.failed) })}</p>}
             </>
           ) : (
-            <p className="text-xs text-muted">لم يبدأ الإرسال بعد</p>
+            <p className="text-xs text-muted">{t('row_not_started')}</p>
           )}
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
           {canWrite && startable && (
             <Button size="sm" icon={PlayIcon} loading={busy} onClick={() => onAction('start')}>
-              {c.status === 'paused' ? 'استئناف' : c.status === 'scheduled' ? 'ابدأ الآن' : 'ابدأ'}
+              {c.status === 'paused' ? t('row_resume') : c.status === 'scheduled' ? t('row_start_now') : t('row_start')}
             </Button>
           )}
           {canWrite && running && (
-            <Button size="sm" variant="secondary" icon={PauseIcon} loading={busy} onClick={() => onAction('pause')}>إيقاف مؤقت</Button>
+            <Button size="sm" variant="secondary" icon={PauseIcon} loading={busy} onClick={() => onAction('pause')}>{t('row_pause')}</Button>
           )}
-          <Button size="sm" variant="ghost" href={href} iconEnd={ForwardArrowIcon}>التفاصيل</Button>
+          <Button size="sm" variant="ghost" href={href} iconEnd={ForwardArrowIcon}>{t('row_details')}</Button>
           {canWrite && !running && (
             <Dropdown
-              label="خيارات الحملة"
+              label={t('row_options')}
               align="end"
               trigger={<span className="flex h-8 w-8 items-center justify-center rounded-btn text-muted transition hover:bg-surface-3 hover:text-ink"><EllipsisHorizontalIcon className="h-5 w-5" aria-hidden="true" /></span>}
               items={[
-                { label: 'عرض التقرير', icon: ChartBarIcon, href },
-                { label: 'حذف الحملة', icon: TrashIcon, danger: true, divider: true, onClick: onDelete },
+                { label: t('row_view_report'), icon: ChartBarIcon, href },
+                { label: t('row_delete'), icon: TrashIcon, danger: true, divider: true, onClick: onDelete },
               ]}
             />
           )}

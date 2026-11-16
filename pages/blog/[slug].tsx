@@ -7,9 +7,10 @@ import { useWhiteLabel } from '@/hooks/useWhiteLabel'
 import { Button, EmptyState, Skeleton } from '@/components/ui'
 import { cn } from '@/components/ui/utils'
 import { MarketingPage, Section } from '@/components/marketing/MarketingPage'
-import { CategoryPill, PostCard, PostCover, PostMeta, postView } from '@/components/marketing/blog'
+import { CategoryPill, PostCard, PostCover, PostMeta, blogT, postView } from '@/components/marketing/blog'
 import { Prose, withHeadingIds } from '@/components/marketing/Prose'
-import { usePublicLang } from '@/components/marketing/usePublicLang'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/public/blog'
 import { posts } from '@/lib/blog-posts'
 import { getPostContent } from '@/lib/blog-translations'
 
@@ -18,12 +19,13 @@ export default function BlogPost() {
   const name = brandName || 'WABEK'
   const router = useRouter()
   const { slug } = router.query
-  const { lang, setLang, dir, t } = usePublicLang()
+  const { t, lang, dir } = useT(messages)
+  const tk = useMemo(() => blogT(lang), [lang])
   const [current, setCurrent] = useState('')
 
   const postIndex = posts.findIndex(p => p.slug === slug)
   const post = posts[postIndex]
-  const view = post ? postView(post, postIndex, t) : null
+  const view = post ? postView(post, postIndex, tk) : null
 
   // Article HTML is repository-authored (lib/blog-posts.ts, lib/blog-translations.ts), never user input.
   const translatedContent = post ? getPostContent(post.slug, lang) : null
@@ -37,9 +39,9 @@ export default function BlogPost() {
   // Related: same category first, then the most recent others.
   const related = useMemo(() => {
     if (!view) return []
-    const all = posts.map((p, i) => postView(p, i, t)).filter(v => v.post.slug !== view.post.slug)
+    const all = posts.map((p, i) => postView(p, i, tk)).filter(v => v.post.slug !== view.post.slug)
     return [...all.filter(v => v.keys.cat === view.keys.cat), ...all.filter(v => v.keys.cat !== view.keys.cat)].slice(0, 3)
-  }, [view?.post.slug, view?.keys.cat, t]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view?.post.slug, view?.keys.cat, tk]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!toc.length || typeof IntersectionObserver === 'undefined') return
@@ -64,7 +66,7 @@ export default function BlogPost() {
 
   if (!router.isReady) {
     return (
-      <MarketingPage active="/blog" lang={lang} dir={dir} onLangChange={setLang}>
+      <MarketingPage active="/blog" lang={lang} dir={dir}>
         <div className="mx-auto max-w-3xl px-4 py-16" aria-busy="true">
           <Skeleton className="mb-4 h-5 w-32" />
           <Skeleton className="mb-6 h-10 w-full" />
@@ -82,7 +84,7 @@ export default function BlogPost() {
           <link rel="icon" href="/brand/favicon-32.png" />
           <title>{`${t('mk_article_not_found')} | ${name}`}</title>
         </Head>
-        <MarketingPage active="/blog" lang={lang} dir={dir} onLangChange={setLang}>
+        <MarketingPage active="/blog" lang={lang} dir={dir}>
           <Section narrow>
             <EmptyState
               variant="card"
@@ -106,7 +108,7 @@ export default function BlogPost() {
         <meta property="og:title" content={view.title} />
         <meta property="og:description" content={view.excerpt} />
       </Head>
-      <MarketingPage active="/blog" lang={lang} dir={dir} onLangChange={setLang}>
+      <MarketingPage active="/blog" lang={lang} dir={dir}>
         <article>
           {/* Header */}
           <header className="mx-auto max-w-[1180px] px-4 pt-8 sm:px-8 sm:pt-12">
@@ -120,7 +122,7 @@ export default function BlogPost() {
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-gradient text-xs font-bold text-[#04282C]" aria-hidden="true">{name.slice(0, 1)}</span>
                   <div className="flex flex-col">
                     <span className="text-sm font-semibold text-ink">{name}</span>
-                    <PostMeta post={post} lang={lang} t={t} />
+                    <PostMeta post={post} />
                   </div>
                 </div>
               </div>
@@ -183,7 +185,7 @@ export default function BlogPost() {
           <div className="border-t border-line bg-surface-2">
             <Section align="start" title={t('mk_related')} action={<Link href="/blog" className="text-sm font-semibold">{t('blog_all')}</Link>}>
               <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {related.map(v => <li key={v.post.slug}><PostCard view={v} lang={lang} t={t} /></li>)}
+                {related.map(v => <li key={v.post.slug}><PostCard view={v} /></li>)}
               </ul>
             </Section>
           </div>

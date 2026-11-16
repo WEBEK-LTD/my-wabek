@@ -15,15 +15,18 @@ export interface PublicFooterProps {
 export default function PublicFooter({ lang: langProp = '', onLangChange = null, variant = 'light' }: PublicFooterProps) {
   const { brandName, customLogo, hidePoweredBy } = useWhiteLabel()
   const name = brandName || 'WABEK'
-  const [lang, setLang] = useState(langProp || 'ar')
+  // The page's language wins when it passes one (derived during render, so the
+  // footer switches in the same render as the page).
+  const [ownLang, setLang] = useState('ar')
+  const lang = langProp || ownLang
   const year = new Date().getFullYear()
 
   useEffect(() => {
-    setLang(langProp || getStoredLang())
+    setLang(getStoredLang())
     const handler = (e: Event) => { const d = (e as CustomEvent<string>).detail; if (typeof d === 'string') setLang(d) }
     window.addEventListener('langchange', handler)
     return () => window.removeEventListener('langchange', handler)
-  }, [langProp])
+  }, [])
 
   const changeLang = (code: string) => {
     setLang(code)
@@ -41,6 +44,7 @@ export default function PublicFooter({ lang: langProp = '', onLangChange = null,
     [t(lang, 'pub_legal'), '/legal'],
   ]
   const secondary: [string, string][] = [
+    [t(lang, 'home'), '/'],
     [t(lang, 'pub_product'), '/features'],
     [t(lang, 'integrations'), '/integrations'],
     [t(lang, 'pricing'), '/pricing'],

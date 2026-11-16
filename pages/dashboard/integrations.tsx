@@ -6,40 +6,43 @@ import { Button, PageHeader, TabPanel, Tabs } from '@/components/ui'
 import { IntegrationHub, AutomationGuides } from '@/components/integrations/Hub'
 import { WebhooksPanel } from '@/components/integrations/WebhooksPanel'
 import { SignatureSnippets, OUTGOING_WEBHOOKS_DOC } from '@/components/integrations/SignatureSnippets'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/integrations'
 
 const TABS = ['hub', 'webhooks', 'automation']
 
 export default function IntegrationsPage() {
+  const { t } = useT(messages)
   const router = useRouter()
   const [activeTab, setActiveTab] = useState('hub')
   const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://waabek.com'
 
   // ?tab=webhooks deep links
   useEffect(() => {
-    const t = String(router.query.tab || '')
-    if (TABS.includes(t)) setActiveTab(t)
+    const tab = String(router.query.tab || '')
+    if (TABS.includes(tab)) setActiveTab(tab)
   }, [router.query.tab])
 
-  const openTab = (t: string) => {
-    setActiveTab(t)
-    router.replace({ pathname: router.pathname, query: t === 'hub' ? {} : { tab: t } }, undefined, { shallow: true })
+  const openTab = (tab: string) => {
+    setActiveTab(tab)
+    router.replace({ pathname: router.pathname, query: tab === 'hub' ? {} : { tab } }, undefined, { shallow: true })
   }
 
   return (
-    <DashboardLayout title="Integrations & Webhooks">
+    <DashboardLayout title={t('page_title')}>
       <div className="space-y-6">
         <PageHeader
-          eyebrow="التكاملات"
-          title="التكاملات و Webhooks"
-          description="اربط WABEK بمتجرك ونظام الفوترة وأدوات الأتمتة، واستقبل أحداث حسابك لحظيًا على خوادمك."
-          actions={<Button variant="secondary" icon={BookOpenIcon} href={OUTGOING_WEBHOOKS_DOC}>مرجع Webhooks</Button>}
+          eyebrow={t('eyebrow')}
+          title={t('title')}
+          description={t('description')}
+          actions={<Button variant="secondary" icon={BookOpenIcon} href={OUTGOING_WEBHOOKS_DOC}>{t('webhooks_ref')}</Button>}
         >
           <div className="-mx-1 overflow-x-auto px-1 scrollbar-none">
-            <Tabs idPrefix="integ" value={activeTab} onChange={openTab} aria-label="أقسام التكاملات"
+            <Tabs idPrefix="integ" value={activeTab} onChange={openTab} aria-label={t('tabs_aria')}
               tabs={[
-                { id: 'hub', label: 'التطبيقات والإضافات', icon: PuzzlePieceIcon },
-                { id: 'webhooks', label: 'Webhooks الصادرة', icon: BoltIcon },
-                { id: 'automation', label: 'Zapier وMake', icon: ArrowsRightLeftIcon },
+                { id: 'hub', label: t('tab_hub'), icon: PuzzlePieceIcon },
+                { id: 'webhooks', label: t('tab_webhooks'), icon: BoltIcon },
+                { id: 'automation', label: t('tab_automation'), icon: ArrowsRightLeftIcon },
               ]} />
           </div>
         </PageHeader>

@@ -1,0 +1,103 @@
+<?php
+/**
+ * WABEK for WHMCS — Turkish strings (client area and checkout only; everything else falls back to English).
+ */
+
+if (!defined('WHMCS')) {
+    die('This file cannot be accessed directly');
+}
+
+$_ADDONLANG = [
+    '_language' => 'turkish',
+    '_dir' => 'ltr',
+
+    'err_csrf' => 'Oturum anahtarınız geçersiz veya süresi dolmuş. Sayfayı yenileyip tekrar deneyin.',
+    'err_unknown_action' => 'Bilinmeyen işlem.',
+
+    'otp_disabled' => 'WhatsApp doğrulaması etkin değil.',
+    'otp_no_phone' => 'Profilinizde geçerli bir WhatsApp numarası yok.',
+    'otp_rate_limited' => 'Çok fazla kod istendi. Lütfen daha sonra tekrar deneyin.',
+    'otp_too_soon' => 'Yeni bir kod istemeden önce lütfen {seconds} saniye bekleyin.',
+    'otp_send_failed' => 'Kod gönderilemedi. Lütfen daha sonra tekrar deneyin.',
+    'otp_invalid' => 'Kod hatalı.',
+    'otp_expired' => 'Kodun süresi doldu. Yeni bir kod isteyin.',
+    'otp_too_many' => 'Çok fazla hatalı deneme. Yeni bir kod isteyin.',
+    'otp_service_down' => 'Doğrulama geçici olarak kullanılamıyor. Lütfen birazdan tekrar deneyin.',
+
+    'client_nav' => 'WhatsApp bildirimleri',
+    'client_nav_prefs' => 'Tercihler',
+    'client_prefs_title' => 'WhatsApp bildirimleri',
+    'client_prefs_intro' => 'Sizinle WhatsApp üzerinden iletişim kurup kuramayacağımızı seçin.',
+    'client_number' => 'WhatsApp numaranız',
+    'client_number_help' => 'Profilinizdeki telefon numarasını kullanıyoruz.',
+    'client_no_phone' => 'Profilinizde ülke koduyla birlikte geçerli bir telefon numarası yok.',
+    'client_edit_profile' => 'Profilinizi güncelleyin',
+    'client_notifications' => 'Bildirimler',
+    'client_state_on' => 'Açık',
+    'client_state_off' => 'Kapalı',
+    'client_subscribed' => 'WhatsApp bildirimleri alıyorsunuz',
+    'client_unsubscribed' => 'WhatsApp bildirimleri almıyorsunuz',
+    'client_critical_note' => 'Hesabınız ve faturalarınızla ilgili temel bildirimler yine de gönderilebilir.',
+    'client_btn_subscribe' => 'WhatsApp bildirimlerini aç',
+    'client_btn_unsubscribe' => 'WhatsApp bildirimlerini durdur',
+    'client_ok_subscribed' => 'WhatsApp bildirimleri açıldı.',
+    'client_ok_unsubscribed' => 'WhatsApp bildirimleri kapatıldı.',
+    'client_verify_title' => 'WhatsApp numaranızı doğrulayın',
+    'client_verify_intro' => 'WhatsApp numaranıza tek kullanımlık bir kod göndereceğiz.',
+    'client_login_gate' => 'Güvenliğiniz için devam etmek üzere WhatsApp’a gönderdiğimiz kodu girin.',
+    'client_btn_verify' => 'Numarayı doğrula',
+    'client_code_to' => 'Kodun gönderileceği numara:',
+    'client_code_label' => 'Doğrulama kodu',
+    'client_btn_send_code' => 'Kodu gönder',
+    'client_btn_resend' => 'Yeni kod gönder',
+    'client_btn_confirm' => 'Onayla',
+    'client_ok_code_sent' => '{phone} numarasına bir kod gönderildi.',
+    'client_ok_verified' => 'WhatsApp numaranız doğrulandı.',
+    'client_ok_login_verified' => 'Doğrulandı. Tekrar hoş geldiniz!',
+    'client_verified_badge' => 'Doğrulandı',
+    'client_back' => 'Geri',
+    'client_logout' => 'Çıkış yap',
+
+    'checkout_consent_label' => 'Sipariş, fatura ve destek bilgilendirmelerini WhatsApp üzerinden almak istiyorum',
+    'checkout_consent_help' => 'Bunu istediğiniz zaman Hesap → WhatsApp bildirimleri bölümünden değiştirebilirsiniz.',
+
+    // Yerel özel alan
+    'cf_consent_name' => 'WhatsApp bildirimlerini al',
+    'cf_consent_desc' => 'Sipariş, fatura ve destek güncellemeleri WhatsApp üzerinden. Hesabınızla ilgili önemli bildirimler yine de gönderilebilir.',
+    'client_state_line_on' => 'Hesabınız için WhatsApp bildirimleri açık',
+    'client_state_line_off' => 'Hesabınız için WhatsApp bildirimleri kapalı',
+    'client_sent_to' => 'Mesajların gönderildiği numara:',
+    'client_hp_manage' => 'Tercihleri yönet',
+
+    // 4.3.0: WhatsApp number & verification codes (OTP)
+    'client_otp_intro' => 'Hesap bildirimleri ve tek kullanımlık doğrulama kodları (OTP) bu WhatsApp numarasına gönderilir.',
+    'client_not_verified_badge' => 'Doğrulanmadı',
+    'client_number_custom' => 'Bu numarayı WhatsApp için siz seçtiniz; profilinizdeki telefon numarası değişmez.',
+    'client_verified_on' => 'Doğrulama tarihi',
+    'client_btn_use_profile' => 'Bunun yerine profil numaramı kullan:',
+    'client_change_number' => 'WhatsApp numarasını değiştir',
+    'client_add_number' => 'WhatsApp numarası ekle',
+    'client_new_phone_ph' => '+90 532 123 45 67',
+    'client_change_help' => 'Yeni numaraya bir kod göndeririz. Kodu onayladıktan sonra mevcut numaranın yerini alır.',
+    'client_login_code_title' => 'Girişte WhatsApp kodu',
+    'client_login_code_on_line' => 'Her girişte bir WhatsApp kodu istenir',
+    'client_login_code_off_line' => 'Girişte WhatsApp kodu istenmez',
+    'client_login_code_forced' => 'Site yöneticisi tarafından tüm hesaplar için zorunludur.',
+    'client_login_code_help' => 'Ek koruma: şifreden sonra doğrulanmış WhatsApp numaranıza gönderilen bir kod isteriz. Önce numaranızı doğrulayın.',
+    'client_btn_login_code_off' => 'Giriş kodunu kapat',
+    'client_btn_login_code_on' => 'Giriş kodunu aç',
+    'client_change_intro' => 'Onaylamak için yeni WhatsApp numaranıza gönderdiğimiz kodu girin.',
+    'client_btn_cancel_change' => 'İptal et ve mevcut numaramı koru',
+    'client_ok_number_reset' => 'WhatsApp için yeniden profil telefon numaranız kullanılıyor.',
+    'client_err_verify_first' => 'Önce WhatsApp numaranızı doğrulayın.',
+    'client_ok_login_code_on' => 'Girişte WhatsApp kodu açıldı.',
+    'client_ok_login_code_off' => 'Girişte WhatsApp kodu kapatıldı.',
+    'client_ok_number_changed' => 'Yeni WhatsApp numaranız onaylandı ve kaydedildi.',
+    'client_err_new_phone' => 'Bu WhatsApp numarası geçerli değil. Ülke koduyla yazın, örneğin +90 532 123 45 67.',
+    'client_hp_verify' => 'Numarayı doğrula',
+    'client_hp_otp_line' => 'Doğrulama kodları (OTP) bu numaraya gönderilir.',
+    'otp_optional' => 'Müşteriler girişte WhatsApp kodunu kendileri açabilir',
+    'cs_login_code' => 'Giriş kodu',
+    'cs_login_code_on' => 'Açık (müşteri seçimi)',
+    'cs_login_code_off' => 'Kapalı',
+];

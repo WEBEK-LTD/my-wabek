@@ -1,6 +1,8 @@
 import React from 'react'
 import { CheckIcon } from '@heroicons/react/20/solid'
 import { cn } from '@/components/ui'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/campaign-components'
 
 export interface WizardStep { id: number; label: string; hint?: string; icon: React.ElementType }
 
@@ -11,8 +13,9 @@ export function Stepper({ steps, current, maxReached, onGo }: {
   maxReached: number
   onGo: (step: number) => void
 }) {
+  const { t } = useT(messages)
   return (
-    <nav aria-label="خطوات إنشاء الحملة">
+    <nav aria-label={t('stepper_aria')}>
       <ol className="flex items-stretch gap-1.5 sm:gap-2">
         {steps.map((s, i) => {
           const done = s.id < current
@@ -41,17 +44,17 @@ export function Stepper({ steps, current, maxReached, onGo }: {
                   {done ? <CheckIcon className="h-4 w-4" aria-hidden="true" /> : <Icon className="h-4 w-4" aria-hidden="true" />}
                 </span>
                 <span className="hidden min-w-0 sm:block">
-                  <span className={cn('block text-[11px]', active ? 'text-deep-muted' : 'text-muted')}>الخطوة {i + 1}</span>
+                  <span className={cn('block text-[11px]', active ? 'text-deep-muted' : 'text-muted')}>{t('step_n', { n: i + 1 })}</span>
                   <span className={cn('block truncate text-sm font-semibold', active ? 'text-deep-ink' : done ? 'text-ink' : 'text-muted')}>{s.label}</span>
                 </span>
-                <span className="sr-only sm:hidden">{`الخطوة ${i + 1}: ${s.label}`}</span>
+                <span className="sr-only sm:hidden">{t('step_n_label', { n: i + 1, label: s.label })}</span>
               </button>
             </li>
           )
         })}
       </ol>
       <p className="mt-2 text-sm font-semibold text-ink sm:hidden">
-        الخطوة {current} من {steps.length}: {steps.find(s => s.id === current)?.label}
+        {t('step_of', { n: current, total: steps.length, label: steps.find(s => s.id === current)?.label })}
       </p>
     </nav>
   )

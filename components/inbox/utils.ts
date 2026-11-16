@@ -1,6 +1,6 @@
 import { isToday, isYesterday } from 'date-fns'
-import { localeTag } from '@/components/auth/makeCopy'
-import type { InboxCopyKey } from './copy'
+import { localeFor } from '@/lib/i18n-local'
+import type { MessageKey as InboxCopyKey } from '@/locales/dashboard/inbox'
 
 type C = (k: InboxCopyKey, v?: Record<string, string | number>) => string
 
@@ -11,13 +11,13 @@ export function formatTime(d: string | number | Date | null | undefined, lang: s
   if (!d) return ''
   const date = new Date(d)
   if (Number.isNaN(date.getTime())) return ''
-  if (isToday(date)) return new Intl.DateTimeFormat(localeTag(lang), { hour: '2-digit', minute: '2-digit', hour12: false }).format(date)
+  if (isToday(date)) return new Intl.DateTimeFormat(localeFor(lang), { hour: '2-digit', minute: '2-digit', hour12: false }).format(date)
   if (isYesterday(date)) return c('yesterday')
-  return new Intl.DateTimeFormat(localeTag(lang), { day: 'numeric', month: 'short' }).format(date)
+  return new Intl.DateTimeFormat(localeFor(lang), { day: 'numeric', month: 'short' }).format(date)
 }
 
 export function clockTime(d: string | Date, lang: string): string {
-  return new Intl.DateTimeFormat(localeTag(lang), { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(d))
+  return new Intl.DateTimeFormat(localeFor(lang), { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(d))
 }
 
 /** Day separator label. */
@@ -25,12 +25,12 @@ export function dayLabel(d: string | Date, lang: string, c: C): string {
   const date = new Date(d)
   if (isToday(date)) return c('today')
   if (isYesterday(date)) return c('yesterday')
-  return new Intl.DateTimeFormat(localeTag(lang), { weekday: 'long', day: 'numeric', month: 'long', year: date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }).format(date)
+  return new Intl.DateTimeFormat(localeFor(lang), { weekday: 'long', day: 'numeric', month: 'long', year: date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }).format(date)
 }
 
 export function dateTime(d: string | null | undefined, lang: string): string {
   if (!d) return '—'
-  return new Intl.DateTimeFormat(localeTag(lang), { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(d))
+  return new Intl.DateTimeFormat(localeFor(lang), { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(d))
 }
 
 export function formatBytes(bytes: number): string {
@@ -80,4 +80,30 @@ export function windowState(messages: any[], instance: { id?: string; instance_t
 
 export function isAiMessage(m: any): boolean {
   return m?.type === 'ai_reply' || m?.meta?.source === 'ai_assistant'
+}
+
+const ERROR_CODES: Record<string, InboxCopyKey> = {
+  templates_cloud_only: 'err_templates_cloud_only',
+  template_not_approved: 'err_template_not_approved',
+  no_inbound: 'err_no_inbound',
+  opted_out: 'err_blocked',
+  blocked: 'err_blocked',
+  plan_limit: 'err_plan_limit',
+}
+
+/**
+ * Localized text for a failed inbox API call: known error codes and HTTP
+ * statuses are translated; otherwise the server's (English) message is shown
+ * only in the English UI and other languages get the translated fallback.
+ */
+export function apiErrorText(e: any, c: C, lang: string, fallback: InboxCopyKey): string {
+  const data = e?.response?.data ?? e
+  const code = typeof data?.code === 'string' ? data.code : ''
+  if (code && ERROR_CODES[code]) return c(ERROR_CODES[code])
+  const status = e?.response?.status
+  if (status === 413) return c('file_too_large')
+  if (status === 415) return c('err_file_type')
+  if (status === 429) return c('err_rate_limit')
+  const raw = typeof data?.error === 'string' ? data.error : ''
+  return lang === 'en' && raw ? raw : c(fallback)
 }

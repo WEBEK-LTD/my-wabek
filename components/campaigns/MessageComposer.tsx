@@ -8,16 +8,27 @@ import {
   BookOpenIcon, VariableIcon,
 } from '@heroicons/react/24/outline'
 import { Badge, Button, Card, Field, Select, Textarea, cn } from '@/components/ui'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/message-composer'
 import { friendlyError } from './shared'
+import { rich } from './rich'
 
 export interface Block { id: string; type: string; content: string }
 
-export const BLOCK_TYPES: Array<{ type: string; label: string; icon: React.ElementType }> = [
-  { type: 'header', label: 'عنوان', icon: Bars3BottomRightIcon },
-  { type: 'text', label: 'نص', icon: ChatBubbleBottomCenterTextIcon },
-  { type: 'image', label: 'رابط صورة', icon: PhotoIcon },
-  { type: 'button', label: 'زر دعوة', icon: CursorArrowRaysIcon },
-  { type: 'divider', label: 'فاصل', icon: MinusIcon },
+type Key = keyof typeof messages.en
+type T = (key: Key) => string
+
+/** Heading icon: bars aligned to the start side in both directions. */
+function HeadingIcon({ className, ...p }: React.ComponentProps<'svg'>) {
+  return <Bars3BottomRightIcon {...p} className={cn(className, 'ltr:-scale-x-100')} />
+}
+
+export const BLOCK_TYPES: Array<{ type: string; labelKey: Key; icon: React.ElementType }> = [
+  { type: 'header', labelKey: 'block_header', icon: HeadingIcon },
+  { type: 'text', labelKey: 'block_text', icon: ChatBubbleBottomCenterTextIcon },
+  { type: 'image', labelKey: 'block_image', icon: PhotoIcon },
+  { type: 'button', labelKey: 'block_button', icon: CursorArrowRaysIcon },
+  { type: 'divider', labelKey: 'block_divider', icon: MinusIcon },
 ]
 
 // Emoji are message content here (inserted into the text), not UI icons.
@@ -27,64 +38,36 @@ export const VARIABLES = ['{{name}}', '{{phone}}', '{{email}}', '{{company}}', '
 
 const uid = () => `${Date.now()}${Math.random().toString(36).slice(2, 7)}`
 
-export const STARTER_TEMPLATES: Array<{ id: string; name: string; category: string; blocks: Block[] }> = [
-  {
-    id: 'promo', name: 'عرض ترويجي', category: 'التسويق',
-    blocks: [
-      { id: '1', type: 'header', content: 'عرض خاص لك يا {{name}}' },
-      { id: '2', type: 'text', content: 'مرحبًا {{name}}، لدينا عرض حصري أعددناه لك.' },
-      { id: '3', type: 'text', content: '- خصم *{{amount}}%* على طلبك القادم\n- صالح حتى {{date}}\n- لفترة محدودة' },
-      { id: '4', type: 'button', content: 'تسوّق الآن: {{link}}' },
-      { id: '5', type: 'text', content: '_لإلغاء الاشتراك أرسل STOP_' },
-    ],
-  },
-  {
-    id: 'reminder', name: 'تذكير بالدفع', category: 'المالية',
-    blocks: [
-      { id: '1', type: 'header', content: 'تذكير بموعد الدفع' },
-      { id: '2', type: 'text', content: 'عزيزي {{name}}،' },
-      { id: '3', type: 'text', content: 'يستحق مبلغ *{{amount}}* بتاريخ *{{date}}*.' },
-      { id: '4', type: 'button', content: 'ادفع الآن: {{link}}' },
-      { id: '5', type: 'text', content: 'هل تحتاج إلى مساعدة؟ ردّ على هذه الرسالة.' },
-    ],
-  },
-  {
-    id: 'welcome', name: 'رسالة ترحيب', category: 'الترحيب',
-    blocks: [
-      { id: '1', type: 'header', content: 'أهلًا بك في {{company}}' },
-      { id: '2', type: 'text', content: 'مرحبًا {{name}}، يسعدنا انضمامك إلينا.' },
-      { id: '3', type: 'text', content: 'يمكنك الآن:\n- تصفّح منتجاتنا\n- الحصول على عروض حصرية\n- التواصل مع الدعم في أي وقت' },
-      { id: '4', type: 'button', content: 'ابدأ الآن: {{link}}' },
-    ],
-  },
-  {
-    id: 'feedback', name: 'طلب تقييم', category: 'التفاعل',
-    blocks: [
-      { id: '1', type: 'header', content: 'كيف كانت تجربتك؟' },
-      { id: '2', type: 'text', content: 'مرحبًا {{name}}، شكرًا لاختيارك {{company}}.' },
-      { id: '3', type: 'text', content: 'يسعدنا سماع رأيك، ولن يستغرق ذلك أكثر من 30 ثانية.' },
-      { id: '4', type: 'button', content: 'اترك تقييمك: {{link}}' },
-    ],
-  },
-  {
-    id: 'restock', name: 'عودة منتج للمخزون', category: 'التجارة الإلكترونية',
-    blocks: [
-      { id: '1', type: 'header', content: 'خبر سار يا {{name}}' },
-      { id: '2', type: 'text', content: 'المنتج الذي طلبته *عاد إلى المخزون*.' },
-      { id: '3', type: 'text', content: 'سارع بالطلب، فالكمية محدودة.' },
-      { id: '4', type: 'button', content: 'اشترِ الآن: {{link}}' },
-    ],
-  },
-  {
-    id: 'appointment', name: 'تذكير بموعد', category: 'الخدمات',
-    blocks: [
-      { id: '1', type: 'header', content: 'تذكير بموعدك' },
-      { id: '2', type: 'text', content: 'مرحبًا {{name}}، نذكّرك بموعدك القادم.' },
-      { id: '3', type: 'text', content: '*التاريخ:* {{date}}\n*الوقت:* {{time}}\n*المكان:* {{location}}' },
-      { id: '4', type: 'text', content: 'أرسل *تأكيد* للتأكيد أو *إلغاء* للإلغاء.' },
-    ],
-  },
-]
+/** Starter library, in the UI language (the user edits the text afterwards). */
+export function starterTemplates(t: T): Array<{ id: string; name: string; category: string; blocks: Block[] }> {
+  const b = (id: string, type: string, key: Key): Block => ({ id, type, content: t(key) })
+  return [
+    {
+      id: 'promo', name: t('promo_name'), category: t('cat_marketing'),
+      blocks: [b('1', 'header', 'promo_1'), b('2', 'text', 'promo_2'), b('3', 'text', 'promo_3'), b('4', 'button', 'promo_4'), b('5', 'text', 'promo_5')],
+    },
+    {
+      id: 'reminder', name: t('reminder_name'), category: t('cat_finance'),
+      blocks: [b('1', 'header', 'reminder_1'), b('2', 'text', 'reminder_2'), b('3', 'text', 'reminder_3'), b('4', 'button', 'reminder_4'), b('5', 'text', 'reminder_5')],
+    },
+    {
+      id: 'welcome', name: t('welcome_name'), category: t('cat_welcome'),
+      blocks: [b('1', 'header', 'welcome_1'), b('2', 'text', 'welcome_2'), b('3', 'text', 'welcome_3'), b('4', 'button', 'welcome_4')],
+    },
+    {
+      id: 'feedback', name: t('feedback_name'), category: t('cat_engagement'),
+      blocks: [b('1', 'header', 'feedback_1'), b('2', 'text', 'feedback_2'), b('3', 'text', 'feedback_3'), b('4', 'button', 'feedback_4')],
+    },
+    {
+      id: 'restock', name: t('restock_name'), category: t('cat_ecommerce'),
+      blocks: [b('1', 'header', 'restock_1'), b('2', 'text', 'restock_2'), b('3', 'text', 'restock_3'), b('4', 'button', 'restock_4')],
+    },
+    {
+      id: 'appointment', name: t('appointment_name'), category: t('cat_services'),
+      blocks: [b('1', 'header', 'appointment_1'), b('2', 'text', 'appointment_2'), b('3', 'text', 'appointment_3'), b('4', 'text', 'appointment_4')],
+    },
+  ]
+}
 
 export function buildMessage(blocks: Block[]): string {
   return blocks.map(b => {
@@ -94,11 +77,14 @@ export function buildMessage(blocks: Block[]): string {
   }).filter(Boolean).join('\n\n')
 }
 
-export const DEFAULT_BLOCKS: Block[] = [
-  { id: '1', type: 'header', content: 'مرحبًا {{name}}' },
-  { id: '2', type: 'text', content: 'لدينا شيء مميز لك اليوم.' },
-  { id: '3', type: 'button', content: 'اكتشفه الآن: https://example.com' },
-]
+/** Default message for a new campaign, in the UI language. */
+export function defaultBlocks(t: T): Block[] {
+  return [
+    { id: '1', type: 'header', content: t('def_1') },
+    { id: '2', type: 'text', content: t('def_2') },
+    { id: '3', type: 'button', content: t('def_3') },
+  ]
+}
 
 /* ── Block editor ─────────────────────────────────────────── */
 
@@ -107,11 +93,12 @@ export function BlockEditor({ blocks, setBlocks, extraVariables = [] }: {
   setBlocks: React.Dispatch<React.SetStateAction<Block[]>>
   extraVariables?: string[]
 }) {
+  const { t } = useT(messages)
   const [showEmoji, setShowEmoji] = useState<string | null>(null)
   const [focusId, setFocusId] = useState<string | null>(null)
 
   const addBlock = (type: string) => {
-    const defaults: Record<string, string> = { header: 'العنوان هنا', text: 'اكتب رسالتك هنا…', image: 'https://example.com/image.jpg', button: 'اضغط هنا: https://example.com', divider: '' }
+    const defaults: Record<string, string> = { header: t('new_header'), text: t('new_text'), image: 'https://example.com/image.jpg', button: t('new_button'), divider: '' }
     setBlocks(prev => [...prev, { id: uid(), type, content: defaults[type] || '' }])
   }
   const updateBlock = (id: string, content: string) => setBlocks(prev => prev.map(b => (b.id === id ? { ...b, content } : b)))
@@ -139,15 +126,15 @@ export function BlockEditor({ blocks, setBlocks, extraVariables = [] }: {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap gap-2" role="group" aria-label="إضافة كتلة">
+      <div className="flex flex-wrap gap-2" role="group" aria-label={t('add_block_aria')}>
         {BLOCK_TYPES.map(bt => (
-          <Button key={bt.type} type="button" size="xs" variant="secondary" icon={bt.icon} onClick={() => addBlock(bt.type)}>{bt.label}</Button>
+          <Button key={bt.type} type="button" size="xs" variant="secondary" icon={bt.icon} onClick={() => addBlock(bt.type)}>{t(bt.labelKey)}</Button>
         ))}
       </div>
 
       <div className="rounded-card border border-line-soft bg-surface-2 p-3">
         <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted">
-          <VariableIcon className="h-4 w-4 text-brand-ink" aria-hidden="true" /> إدراج متغير
+          <VariableIcon className="h-4 w-4 text-brand-ink" aria-hidden="true" /> {t('insert_variable')}
         </p>
         <div className="flex flex-wrap gap-1.5">
           {vars.map(v => (
@@ -158,44 +145,48 @@ export function BlockEditor({ blocks, setBlocks, extraVariables = [] }: {
           ))}
         </div>
         <p className="mt-2 text-[11.5px] leading-relaxed text-muted">
-          يُستبدل <code dir="ltr" className="font-mono">{'{{name}}'}</code> و<code dir="ltr" className="font-mono">{'{{phone}}'}</code> تلقائيًا لكل مستلم، وتُملأ بقية المتغيرات من متغيرات جهة الاتصال بالاسم نفسه، وتُحذف إن لم توجد.
+          {rich(t('vars_help'), {
+            c1: <code dir="ltr" className="font-mono">{'{{name}}'}</code>,
+            c2: <code dir="ltr" className="font-mono">{'{{phone}}'}</code>,
+          })}
         </p>
       </div>
 
       {blocks.length === 0 ? (
         <div className="rounded-card border-2 border-dashed border-line px-4 py-8 text-center text-sm text-muted">
-          أضف كتلة من الأزرار أعلاه لبناء رسالتك.
+          {t('empty_blocks')}
         </div>
       ) : (
         <ol className="space-y-2.5">
           {blocks.map((block, idx) => {
             const meta = BLOCK_TYPES.find(b => b.type === block.type)
             const Icon = meta?.icon || ChatBubbleBottomCenterTextIcon
+            const label = meta ? t(meta.labelKey) : block.type
             return (
               <li key={block.id} className={cn('overflow-hidden rounded-card border bg-surface transition', focusId === block.id ? 'border-brand-teal shadow-ring' : 'border-line')}>
                 <div className="flex items-center gap-2 border-b border-line-soft bg-surface-2 px-3 py-1.5">
                   <Icon className="h-4 w-4 text-brand-ink" aria-hidden="true" />
-                  <span className="flex-1 text-xs font-medium text-muted">{meta?.label || block.type}</span>
+                  <span className="flex-1 text-xs font-medium text-muted">{label}</span>
                   <div className="flex items-center">
-                    <Button type="button" variant="ghost" size="icon-sm" icon={ChevronUpIcon} disabled={idx === 0} onClick={() => moveBlock(block.id, 'up')} aria-label="نقل لأعلى" />
-                    <Button type="button" variant="ghost" size="icon-sm" icon={ChevronDownIcon} disabled={idx === blocks.length - 1} onClick={() => moveBlock(block.id, 'down')} aria-label="نقل لأسفل" />
-                    <Button type="button" variant="ghost" size="icon-sm" icon={DocumentDuplicateIcon} onClick={() => duplicateBlock(block.id)} aria-label="تكرار الكتلة" />
+                    <Button type="button" variant="ghost" size="icon-sm" icon={ChevronUpIcon} disabled={idx === 0} onClick={() => moveBlock(block.id, 'up')} aria-label={t('move_up')} />
+                    <Button type="button" variant="ghost" size="icon-sm" icon={ChevronDownIcon} disabled={idx === blocks.length - 1} onClick={() => moveBlock(block.id, 'down')} aria-label={t('move_down')} />
+                    <Button type="button" variant="ghost" size="icon-sm" icon={DocumentDuplicateIcon} onClick={() => duplicateBlock(block.id)} aria-label={t('duplicate_block')} />
                     {block.type !== 'divider' && (
-                      <Button type="button" variant="ghost" size="icon-sm" icon={FaceSmileIcon} onClick={() => setShowEmoji(showEmoji === block.id ? null : block.id)} aria-label="إدراج رمز تعبيري" aria-expanded={showEmoji === block.id} />
+                      <Button type="button" variant="ghost" size="icon-sm" icon={FaceSmileIcon} onClick={() => setShowEmoji(showEmoji === block.id ? null : block.id)} aria-label={t('insert_emoji')} aria-expanded={showEmoji === block.id} />
                     )}
-                    <Button type="button" variant="ghost" size="icon-sm" icon={XMarkIcon} onClick={() => removeBlock(block.id)} aria-label="حذف الكتلة" className="hover:text-danger" />
+                    <Button type="button" variant="ghost" size="icon-sm" icon={XMarkIcon} onClick={() => removeBlock(block.id)} aria-label={t('remove_block')} className="hover:text-danger" />
                   </div>
                 </div>
                 {showEmoji === block.id && (
                   <div className="flex flex-wrap gap-1 border-b border-line-soft bg-surface-2/60 px-3 py-2">
                     {EMOJIS.map(e => (
                       <button key={e} type="button" onClick={() => { updateBlock(block.id, block.content + e); setShowEmoji(null) }}
-                        className="rounded-md p-1 text-lg transition hover:scale-110 hover:bg-surface-3" aria-label={`إدراج ${e}`}>{e}</button>
+                        className="rounded-md p-1 text-lg transition hover:scale-110 hover:bg-surface-3" aria-label={t('insert_x', { e })}>{e}</button>
                     ))}
                   </div>
                 )}
                 {block.type === 'divider' ? (
-                  <div className="px-3 py-2 text-center text-sm text-muted" aria-label="فاصل">──────────────</div>
+                  <div className="px-3 py-2 text-center text-sm text-muted" aria-label={t('block_divider')}>──────────────</div>
                 ) : (
                   <textarea
                     value={block.content}
@@ -203,9 +194,9 @@ export function BlockEditor({ blocks, setBlocks, extraVariables = [] }: {
                     onFocus={() => setFocusId(block.id)}
                     rows={block.type === 'header' ? 1 : 3}
                     dir={block.type === 'image' ? 'ltr' : 'auto'}
-                    aria-label={meta?.label || 'نص الكتلة'}
+                    aria-label={meta ? label : t('block_text_aria')}
                     className="block w-full resize-none bg-transparent px-3 py-2 text-sm text-ink outline-none placeholder:text-muted"
-                    placeholder={block.type === 'image' ? 'https://example.com/image.jpg' : 'اكتب المحتوى…'}
+                    placeholder={block.type === 'image' ? 'https://example.com/image.jpg' : t('content_placeholder')}
                   />
                 )}
               </li>
@@ -220,6 +211,7 @@ export function BlockEditor({ blocks, setBlocks, extraVariables = [] }: {
 /* ── Starter library ──────────────────────────────────────── */
 
 export function StarterLibrary({ onPick }: { onPick: (blocks: Block[], name: string) => void }) {
+  const { t, fmtNumber } = useT(messages)
   const [open, setOpen] = useState(false)
   return (
     <Card padding="none">
@@ -229,19 +221,19 @@ export function StarterLibrary({ onPick }: { onPick: (blocks: Block[], name: str
           <BookOpenIcon className="h-[18px] w-[18px]" aria-hidden="true" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block font-semibold text-ink">مكتبة النماذج</span>
-          <span className="block text-xs text-muted">ابدأ من نموذج جاهز ثم عدّله</span>
+          <span className="block font-semibold text-ink">{t('library_title')}</span>
+          <span className="block text-xs text-muted">{t('library_sub')}</span>
         </span>
         <ChevronDownIcon className={cn('h-5 w-5 text-muted transition-transform', open && 'rotate-180')} aria-hidden="true" />
       </button>
       {open && (
         <div className="grid gap-2 border-t border-line-soft p-4 sm:grid-cols-2">
-          {STARTER_TEMPLATES.map(tpl => (
+          {starterTemplates(t).map(tpl => (
             <button key={tpl.id} type="button"
               onClick={() => { onPick(tpl.blocks.map(b => ({ ...b, id: uid() })), tpl.name); setOpen(false) }}
               className="rounded-card border border-line bg-surface-2 p-3 text-start transition hover:border-brand-teal hover:bg-chip/40">
               <span className="block text-sm font-medium text-ink">{tpl.name}</span>
-              <span className="mt-0.5 block text-xs text-muted">{tpl.category} · {tpl.blocks.length} كتل</span>
+              <span className="mt-0.5 block text-xs text-muted">{tpl.category} · {t('blocks_count', { n: fmtNumber(tpl.blocks.length) })}</span>
             </button>
           ))}
         </div>
@@ -253,6 +245,7 @@ export function StarterLibrary({ onPick }: { onPick: (blocks: Block[], name: str
 /* ── AI writer ────────────────────────────────────────────── */
 
 export function AIGenerator({ onGenerate }: { onGenerate: (blocks: Block[]) => void }) {
+  const { t } = useT(messages)
   const [open, setOpen] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [tone, setTone] = useState('friendly')
@@ -260,14 +253,14 @@ export function AIGenerator({ onGenerate }: { onGenerate: (blocks: Block[]) => v
   const [loading, setLoading] = useState(false)
 
   const generate = async () => {
-    if (!prompt) { toast.error('صف حملتك أولًا'); return }
+    if (!prompt) { toast.error(t('ai_describe_first')); return }
     setLoading(true)
     try {
       const { data } = await axios.post('/api/campaigns/ai-generate', { prompt, tone, type })
       onGenerate(data.blocks)
-      toast.success('تمت كتابة الرسالة بالذكاء الاصطناعي')
+      toast.success(t('ai_done'))
     } catch (e) {
-      toast.error(friendlyError(e, 'تعذّر توليد الرسالة. تحقّق من إعداد مفتاح الذكاء الاصطناعي.'))
+      toast.error(friendlyError(e, t('ai_failed')))
     } finally { setLoading(false) }
   }
 
@@ -279,44 +272,43 @@ export function AIGenerator({ onGenerate }: { onGenerate: (blocks: Block[]) => v
           <SparklesIcon className="h-[18px] w-[18px]" aria-hidden="true" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2 font-semibold text-ink">الكتابة بالذكاء الاصطناعي <Badge tone="violet" size="sm">Claude</Badge></span>
-          <span className="block text-xs text-muted">صف الحملة وسنكتب لك مسودة تعدّلها كما تشاء</span>
+          <span className="flex items-center gap-2 font-semibold text-ink">{t('ai_title')} <Badge tone="violet" size="sm">Claude</Badge></span>
+          <span className="block text-xs text-muted">{t('ai_sub')}</span>
         </span>
         <ChevronDownIcon className={cn('h-5 w-5 text-muted transition-transform', open && 'rotate-180')} aria-hidden="true" />
       </button>
       {open && (
         <div className="space-y-3 border-t border-line-soft p-4">
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="نوع الرسالة">
+            <Field label={t('ai_msg_type')}>
               <Select size="sm" value={type} onChange={e => setType(e.target.value)} options={[
-                { value: 'promotional', label: 'ترويجية' },
-                { value: 'reminder', label: 'تذكير' },
-                { value: 'announcement', label: 'إعلان' },
-                { value: 'welcome', label: 'ترحيب' },
-                { value: 'reengagement', label: 'إعادة تفاعل' },
-                { value: 'feedback', label: 'طلب رأي' },
+                { value: 'promotional', label: t('type_promotional') },
+                { value: 'reminder', label: t('type_reminder') },
+                { value: 'announcement', label: t('type_announcement') },
+                { value: 'welcome', label: t('type_welcome') },
+                { value: 'reengagement', label: t('type_reengagement') },
+                { value: 'feedback', label: t('type_feedback') },
               ]} />
             </Field>
-            <Field label="الأسلوب">
+            <Field label={t('ai_tone')}>
               <Select size="sm" value={tone} onChange={e => setTone(e.target.value)} options={[
-                { value: 'friendly', label: 'ودّي' },
-                { value: 'professional', label: 'مهني' },
-                { value: 'urgent', label: 'عاجل' },
-                { value: 'casual', label: 'بسيط' },
-                { value: 'formal', label: 'رسمي' },
+                { value: 'friendly', label: t('tone_friendly') },
+                { value: 'professional', label: t('tone_professional') },
+                { value: 'urgent', label: t('tone_urgent') },
+                { value: 'casual', label: t('tone_casual') },
+                { value: 'formal', label: t('tone_formal') },
               ]} />
             </Field>
           </div>
-          <Field label="صف حملتك">
+          <Field label={t('ai_describe')}>
             <Textarea rows={3} value={prompt} onChange={e => setPrompt(e.target.value)}
-              placeholder="مثال: خصم 50% على جميع المنتجات في عطلة نهاية الأسبوع للعملاء الحاليين، مع إحساس بالاستعجال" />
+              placeholder={t('ai_describe_ph')} />
           </Field>
           <Button type="button" fullWidth icon={loading ? undefined : SparklesIcon} loading={loading} disabled={!prompt} onClick={generate}>
-            {loading ? 'جارٍ الكتابة…' : 'اكتب الرسالة'}
+            {loading ? t('ai_writing') : t('ai_write')}
           </Button>
         </div>
       )}
     </Card>
   )
 }
-

@@ -107,7 +107,8 @@ export async function disconnectWAWeb(instanceId: string): Promise<void> {
   const db = supabaseAdmin()
   if (!isValidInstanceId(instanceId)) throw new Error('Invalid instance id')
   try {
-    await callWAServer(`/instance/${instanceId}/disconnect`)
+    // POST-only route on the WA server (no body would make this a GET).
+    await callWAServer(`/instance/${instanceId}/disconnect`, {})
   } catch {}
   await db.from('whatsapp_instances').update({ status: 'disconnected', qr_code: null }).eq('id', instanceId)
 }

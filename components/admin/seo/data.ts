@@ -1,25 +1,25 @@
 // Static SEO reference data (moved out of pages/admin/seo.tsx).
 
-export interface PublicPage { path: string; label: string; ar: string; priority: string; changefreq: string }
+export interface PublicPage { path: string; label: string; priority: string; changefreq: string }
 
 export const PUBLIC_PAGES: PublicPage[] = [
-  { path: '/', label: 'Homepage', ar: 'الصفحة الرئيسية', priority: '1.0', changefreq: 'daily' },
-  { path: '/features', label: 'Features', ar: 'الميزات', priority: '0.9', changefreq: 'weekly' },
-  { path: '/integrations', label: 'Integrations', ar: 'التكاملات', priority: '0.9', changefreq: 'weekly' },
-  { path: '/pricing', label: 'Pricing', ar: 'الأسعار', priority: '0.9', changefreq: 'weekly' },
-  { path: '/about', label: 'About Us', ar: 'من نحن', priority: '0.7', changefreq: 'monthly' },
-  { path: '/support', label: 'Support', ar: 'الدعم', priority: '0.8', changefreq: 'weekly' },
-  { path: '/blog', label: 'Blog Index', ar: 'المدونة', priority: '0.8', changefreq: 'daily' },
-  { path: '/blog/whatsapp-automation-guide-2026', label: 'Blog: Automation Guide', ar: 'مقال: دليل الأتمتة', priority: '0.8', changefreq: 'monthly' },
-  { path: '/blog/whatsapp-chatbot-setup-2026', label: 'Blog: Chatbot Setup', ar: 'مقال: إعداد الروبوت', priority: '0.8', changefreq: 'monthly' },
-  { path: '/blog/ai-whatsapp-replies-2026', label: 'Blog: AI Replies', ar: 'مقال: الردود الذكية', priority: '0.8', changefreq: 'monthly' },
-  { path: '/blog/whatsapp-bulk-campaigns-2026', label: 'Blog: Bulk Campaigns', ar: 'مقال: الحملات الجماعية', priority: '0.8', changefreq: 'monthly' },
-  { path: '/blog/whatsapp-cloud-api-vs-web-2026', label: 'Blog: Cloud API vs Web', ar: 'مقال: Cloud API مقابل Web', priority: '0.8', changefreq: 'monthly' },
-  { path: '/blog/whatsapp-reseller-business-2026', label: 'Blog: Reseller Business', ar: 'مقال: أعمال الموزّعين', priority: '0.8', changefreq: 'monthly' },
-  { path: '/blog/whmcs-whatsapp-integration-2026', label: 'Blog: WHMCS Integration', ar: 'مقال: تكامل WHMCS', priority: '0.8', changefreq: 'monthly' },
-  { path: '/legal/privacy', label: 'Privacy Policy', ar: 'سياسة الخصوصية', priority: '0.3', changefreq: 'yearly' },
-  { path: '/legal/terms', label: 'Terms of Service', ar: 'شروط الخدمة', priority: '0.3', changefreq: 'yearly' },
-  { path: '/legal/license', label: 'License', ar: 'الترخيص', priority: '0.2', changefreq: 'yearly' },
+  { path: '/', label: 'Homepage', priority: '1.0', changefreq: 'daily' },
+  { path: '/features', label: 'Features', priority: '0.9', changefreq: 'weekly' },
+  { path: '/integrations', label: 'Integrations', priority: '0.9', changefreq: 'weekly' },
+  { path: '/pricing', label: 'Pricing', priority: '0.9', changefreq: 'weekly' },
+  { path: '/about', label: 'About Us', priority: '0.7', changefreq: 'monthly' },
+  { path: '/support', label: 'Support', priority: '0.8', changefreq: 'weekly' },
+  { path: '/blog', label: 'Blog Index', priority: '0.8', changefreq: 'daily' },
+  { path: '/blog/whatsapp-automation-guide-2026', label: 'Blog: Automation Guide', priority: '0.8', changefreq: 'monthly' },
+  { path: '/blog/whatsapp-chatbot-setup-2026', label: 'Blog: Chatbot Setup', priority: '0.8', changefreq: 'monthly' },
+  { path: '/blog/ai-whatsapp-replies-2026', label: 'Blog: AI Replies', priority: '0.8', changefreq: 'monthly' },
+  { path: '/blog/whatsapp-bulk-campaigns-2026', label: 'Blog: Bulk Campaigns', priority: '0.8', changefreq: 'monthly' },
+  { path: '/blog/whatsapp-cloud-api-vs-web-2026', label: 'Blog: Cloud API vs Web', priority: '0.8', changefreq: 'monthly' },
+  { path: '/blog/whatsapp-reseller-business-2026', label: 'Blog: Reseller Business', priority: '0.8', changefreq: 'monthly' },
+  { path: '/blog/whmcs-whatsapp-integration-2026', label: 'Blog: WHMCS Integration', priority: '0.8', changefreq: 'monthly' },
+  { path: '/legal/privacy', label: 'Privacy Policy', priority: '0.3', changefreq: 'yearly' },
+  { path: '/legal/terms', label: 'Terms of Service', priority: '0.3', changefreq: 'yearly' },
+  { path: '/legal/license', label: 'License', priority: '0.2', changefreq: 'yearly' },
 ]
 
 /** Keyword targets. Volume/difficulty are manual estimates, not live data. */

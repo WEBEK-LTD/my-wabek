@@ -10,15 +10,15 @@ import { cn } from '@/components/ui/utils'
 import { useAuthStore } from '@/lib/store'
 import { useRouter } from 'next/router'
 import { useRequireAuth } from '@/hooks/useAuth'
-import { localeTag } from '@/components/auth/makeCopy'
-import { useInboxCopy } from '@/components/inbox/copy'
+import { useT } from '@/lib/i18n-local'
+import inboxMessages from '@/locales/dashboard/inbox'
 import { ConversationList, STATUS_KEYS } from '@/components/inbox/ConversationList'
 import type { AssignFilter } from '@/components/inbox/ConversationList'
 import { MessageBubble } from '@/components/inbox/MessageBubble'
 import { Composer } from '@/components/inbox/Composer'
 import { CustomerPanel } from '@/components/inbox/CustomerPanel'
 import { TemplatesModal, type InboxTemplate, type TemplateParams } from '@/components/inbox/TemplatesModal'
-import { dayLabel, isAiMessage, windowState } from '@/components/inbox/utils'
+import { apiErrorText, dayLabel, isAiMessage, windowState } from '@/components/inbox/utils'
 
 /** ≥1280px: the customer panel sits beside the thread instead of over it. */
 function useIsWide() {
@@ -36,7 +36,7 @@ function useIsWide() {
 export default function ChatPage() {
   useRequireAuth()
   const { user } = useAuthStore()
-  const { c, lang } = useInboxCopy()
+  const { t, lang, locale } = useT(inboxMessages)
   const isWide = useIsWide()
 
   // State
@@ -376,7 +376,7 @@ export default function ChatPage() {
 
     try {
       const instance = sendingInstance()
-      if (!instance) { toast.error(c('no_instance')); return }
+      if (!instance) { toast.error(t('no_instance')); return }
 
       const sendResp = await axios.post('/api/whatsapp/chat-send', {
         instance_id: instance.id,
@@ -408,7 +408,7 @@ export default function ChatPage() {
         setWindowWarning('outside')
       } else {
         setMessages(prev => prev.map(m => m.id === tempMsg.id ? { ...m, status: 'failed' } : m))
-        toast.error(data?.error || c('send_failed'))
+        toast.error(apiErrorText(e, t, lang, 'send_failed'))
         setText(msgText)
       }
     } finally { setSending(false) }
@@ -418,7 +418,7 @@ export default function ChatPage() {
   const sendTemplate = async (tpl: InboxTemplate, params: TemplateParams) => {
     if (!activeConv) return
     const instance = sendingInstance()
-    if (!instance) { toast.error(c('no_instance')); throw new Error('no_instance') }
+    if (!instance) { toast.error(t('no_instance')); throw new Error('no_instance') }
     try {
       const { data } = await axios.post('/api/whatsapp/chat-send', {
         instance_id: instance.id,
@@ -435,9 +435,9 @@ export default function ChatPage() {
       setConversations(prev => prev.map(cv =>
         cv.id === activeConv.id ? { ...cv, last_message: { content, direction: 'outbound', created_at: now } } : cv
       ))
-      toast.success(c('tpl_sent'))
+      toast.success(t('tpl_sent'))
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || c('tpl_send_failed'))
+      toast.error(apiErrorText(e, t, lang, 'tpl_send_failed'))
       throw e
     }
   }
@@ -454,7 +454,7 @@ export default function ChatPage() {
   const pickAttachment = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 16 * 1024 * 1024) { toast.error(c('file_too_large')); return }
+    if (file.size > 16 * 1024 * 1024) { toast.error(t('file_too_large')); return }
     const previewUrl = file.type.startsWith('image/') || file.type.startsWith('video/')
       ? URL.createObjectURL(file) : null
     setAttachment({ file, previewUrl, type: mimeToWaType(file.type), caption: '' })
@@ -472,7 +472,7 @@ export default function ChatPage() {
 
     try {
       const instance = sendingInstance()
-      if (!instance) { toast.error(c('no_instance')); return }
+      if (!instance) { toast.error(t('no_instance')); return }
 
       // 1. Upload to our storage
       const formData = new FormData()
@@ -516,7 +516,7 @@ export default function ChatPage() {
         setWindowWarning('outside')
       } else {
         setMessages(prev => prev.map(m => m.status === 'sending' ? { ...m, status: 'failed' } : m))
-        toast.error(data?.error || c('attachment_failed'))
+        toast.error(apiErrorText(e, t, lang, 'attachment_failed'))
       }
     } finally { setUploadingAttachment(false) }
   }
@@ -527,9 +527,9 @@ export default function ChatPage() {
       const { data } = await axios.put(`/api/inbox/${activeConv.id}`, updates)
       setActiveConv((prev: any) => ({ ...prev, ...data.conversation }))
       setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, ...data.conversation } : c))
-      toast.success(successMsg || c('updated'))
+      toast.success(successMsg || t('updated'))
       return true
-    } catch { toast.error(c('update_failed')); return false }
+    } catch { toast.error(t('update_failed')); return false }
   }
 
   // ── Internal notes (stored in the conversation's notes field) ──────────
@@ -537,10 +537,10 @@ export default function ChatPage() {
     const note = text.trim()
     if (!note || !activeConv || savingNote) return
     setSavingNote(true)
-    const stamp = new Intl.DateTimeFormat(localeTag(lang), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())
+    const stamp = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())
     const entry = `[${stamp}${user?.name ? ` · ${user.name}` : ''}] ${note}`
     const next = (activeConv.notes ? `${activeConv.notes}\n` : '') + entry
-    const ok = await updateConversation({ notes: next }, c('note_added'))
+    const ok = await updateConversation({ notes: next }, t('note_added'))
     if (ok) setText('')
     setSavingNote(false)
   }
@@ -556,10 +556,10 @@ export default function ChatPage() {
         ? { conversation_id: activeConv.id }
         : { contact_id: activeConv.contact_id, instance_id: activeConv.instance_id || undefined })
       if (data?.suggestion) setAiSuggestion(String(data.suggestion).trim())
-      else toast.error(c('ai_failed'))
+      else toast.error(t('ai_failed'))
     } catch (e: any) {
-      if (e?.response?.data?.upgrade_required) { setAiBlocked(true); toast.error(c('ai_upgrade')) }
-      else toast.error(e?.response?.data?.error || c('ai_failed'))
+      if (e?.response?.data?.upgrade_required) { setAiBlocked(true); toast.error(t('ai_upgrade')) }
+      else toast.error(apiErrorText(e, t, lang, 'ai_failed'))
     } finally { setAiLoading(false) }
   }
 
@@ -599,7 +599,7 @@ export default function ChatPage() {
       const d = m.created_at ? new Date(m.created_at) : new Date()
       const day = d.toDateString()
       if (day !== prevDay) {
-        out.push({ kind: 'day', key: `day-${day}`, label: dayLabel(d, lang, c) })
+        out.push({ kind: 'day', key: `day-${day}`, label: dayLabel(d, lang, t) })
         prevDay = day
         prev = null
       }
@@ -608,7 +608,7 @@ export default function ChatPage() {
       prev = m
     }
     return out
-  }, [messages, lang])
+  }, [messages, lang, t])
 
   const contact = activeConv ? (contactDetails[activeConv.contact_id] || null) : null
   const aiAvailable = !aiBlocked && !!lastInbound && messages[messages.length - 1]?.direction === 'inbound'
@@ -629,7 +629,7 @@ export default function ChatPage() {
   ) : null
 
   return (
-    <DashboardLayout title={c('title')}>
+    <DashboardLayout title={t('title')}>
       <div className="flex h-[calc(100dvh-56px-2rem)] min-h-[460px] overflow-hidden rounded-panel border border-line bg-surface shadow-card md:h-[calc(100dvh-56px-3rem)]">
 
         {/* Conversations */}
@@ -660,18 +660,18 @@ export default function ChatPage() {
             <section aria-label={activeConv.contacts?.name || activeConv.contacts?.phone} className="flex min-w-0 flex-1 flex-col">
               {/* Header */}
               <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-line-soft px-3 sm:px-4">
-                <Button size="icon-sm" variant="ghost" icon={ArrowLeftIcon} aria-label={c('back')} onClick={() => setActiveConv(null)} className="md:hidden rtl:[&_svg]:rotate-180" />
+                <Button size="icon-sm" variant="ghost" icon={ArrowLeftIcon} aria-label={t('back')} onClick={() => setActiveConv(null)} className="md:hidden rtl:[&_svg]:rotate-180" />
                 <Avatar name={activeConv.contacts?.name || activeConv.contacts?.phone} size="sm" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-ink" dir="auto">{activeConv.contacts?.name || activeConv.contacts?.phone}</p>
                   <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted">
                     {!loadingMessages && effectiveWin.kind !== 'na' ? (
-                      <span title={c('window_hint')} className={cn('inline-flex min-w-0 items-center gap-1 font-medium', effectiveWin.kind === 'open' ? 'text-success' : 'text-warning')}>
+                      <span title={t('window_hint')} className={cn('inline-flex min-w-0 items-center gap-1 font-medium', effectiveWin.kind === 'open' ? 'text-success' : 'text-warning')}>
                         <ClockIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                         <span className="truncate">
                           {effectiveWin.kind === 'open'
-                            ? (effectiveWin.msLeft >= 3600000 ? c('window_open', { h: Math.floor(effectiveWin.msLeft / 3600000) }) : c('window_open_m', { m: Math.max(1, Math.floor(effectiveWin.msLeft / 60000)) }))
-                            : effectiveWin.lastInbound ? c('window_closed') : c('window_none')}
+                            ? (effectiveWin.msLeft >= 3600000 ? t('window_open', { h: Math.floor(effectiveWin.msLeft / 3600000) }) : t('window_open_m', { m: Math.max(1, Math.floor(effectiveWin.msLeft / 60000)) }))
+                            : effectiveWin.lastInbound ? t('window_closed') : t('window_none')}
                         </span>
                       </span>
                     ) : (
@@ -685,20 +685,20 @@ export default function ChatPage() {
                 <div className={cn('hidden shrink-0', !(isWide && showDetails) && 'sm:block')}>
                   <Select
                     size="sm"
-                    aria-label={c('status')}
+                    aria-label={t('status')}
                     value={activeConv.status}
                     onChange={e => updateConversation({ status: e.target.value })}
                     className="w-[124px]"
-                    options={['open', 'pending', 'resolved', 'spam'].map(s => ({ value: s, label: c(STATUS_KEYS[s]) }))}
+                    options={['open', 'pending', 'resolved', 'spam'].map(s => ({ value: s, label: t(STATUS_KEYS[s]) }))}
                   />
                 </div>
                 {activeConv.status !== 'resolved' && (
-                  <Tooltip content={c('mark_resolved')}>
-                    <Button size="icon-sm" variant="ghost" icon={CheckBadgeIcon} aria-label={c('mark_resolved')} onClick={() => updateConversation({ status: 'resolved' })} className="hidden sm:inline-flex" />
+                  <Tooltip content={t('mark_resolved')}>
+                    <Button size="icon-sm" variant="ghost" icon={CheckBadgeIcon} aria-label={t('mark_resolved')} onClick={() => updateConversation({ status: 'resolved' })} className="hidden sm:inline-flex" />
                   </Tooltip>
                 )}
-                <Tooltip content={c('details')}>
-                  <Button size="icon-sm" variant={showDetails ? 'secondary' : 'ghost'} icon={isWide ? InformationCircleIcon : UserCircleIcon} aria-label={c('details')} aria-pressed={showDetails} onClick={() => setShowDetails(v => !v)} />
+                <Tooltip content={t('details')}>
+                  <Button size="icon-sm" variant={showDetails ? 'secondary' : 'ghost'} icon={isWide ? InformationCircleIcon : UserCircleIcon} aria-label={t('details')} aria-pressed={showDetails} onClick={() => setShowDetails(v => !v)} />
                 </Tooltip>
               </div>
 
@@ -710,7 +710,7 @@ export default function ChatPage() {
                 aria-busy={loadingMessages || undefined}
               >
                 {loadingMessages ? (
-                  <div className="flex flex-col gap-3" aria-label={c('loading_messages')}>
+                  <div className="flex flex-col gap-3" aria-label={t('loading_messages')}>
                     {[0, 1, 2, 3].map(i => (
                       <div key={i} className={cn('flex', i % 2 ? 'justify-end' : 'justify-start')}>
                         <Skeleton className={cn('h-12 rounded-[18px]', i % 2 ? 'w-1/2' : 'w-2/5')} />
@@ -720,7 +720,7 @@ export default function ChatPage() {
                 ) : messages.length === 0 ? (
                   <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
                     <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-chip text-chip-ink"><ChatBubbleLeftRightIcon className="h-6 w-6" aria-hidden="true" /></span>
-                    <p className="text-sm text-muted">{c('thread_empty')}</p>
+                    <p className="text-sm text-muted">{t('thread_empty')}</p>
                   </div>
                 ) : (
                   thread.map(item => item.kind === 'day' ? (
@@ -774,16 +774,16 @@ export default function ChatPage() {
             <span className="flex h-20 w-20 items-center justify-center rounded-[26px] bg-brand-gradient text-[#04282C] shadow-glow">
               <ChatBubbleLeftRightIcon className="h-10 w-10" aria-hidden="true" />
             </span>
-            <h2 className="mt-2 text-xl font-bold text-ink">{c('select_title')}</h2>
-            <p className="max-w-xs text-sm text-muted">{c('select_d')}</p>
+            <h2 className="mt-2 text-xl font-bold text-ink">{t('select_title')}</h2>
+            <p className="max-w-xs text-sm text-muted">{t('select_d')}</p>
           </div>
         )}
       </div>
 
       {!isWide && panel && (
-        <div className="fixed inset-0 z-overlay flex justify-end" role="dialog" aria-modal="true" aria-label={c('details')}
+        <div className="fixed inset-0 z-overlay flex justify-end" role="dialog" aria-modal="true" aria-label={t('details')}
           onKeyDown={e => { if (e.key === 'Escape') setShowDetails(false) }}>
-          <button type="button" className="absolute inset-0 bg-overlay/50 backdrop-blur-[2px]" aria-label={c('close')} onClick={() => setShowDetails(false)} />
+          <button type="button" className="absolute inset-0 bg-overlay/50 backdrop-blur-[2px]" aria-label={t('close')} onClick={() => setShowDetails(false)} />
           <div className="relative h-full w-[min(92vw,380px)] shadow-dropdown">{panel}</div>
         </div>
       )}

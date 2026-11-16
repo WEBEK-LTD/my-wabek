@@ -1,6 +1,6 @@
 import Document, { Html, Head, Main, NextScript, type DocumentContext, type DocumentInitialProps } from 'next/document'
 import { THEME_INIT_SCRIPT, THEME_COLORS } from '@/hooks/useTheme'
-import { LANG_INIT_SCRIPT, DEFAULT_LANG, LANG_COOKIE, routeLang, translations } from '@/lib/i18n'
+import { LANG_INIT_SCRIPT, LANG_PENDING_CSS, DEFAULT_LANG, LANG_COOKIE, routeLang, translations } from '@/lib/i18n'
 
 interface Props extends DocumentInitialProps {
   lang: string
@@ -36,6 +36,7 @@ export default class AppDocument extends Document<Props> {
           <link rel="apple-touch-icon" sizes="180x180" href="/brand/apple-touch-icon.png" />
 
           {/* Set language/direction and theme before first paint (no flash). */}
+          <style dangerouslySetInnerHTML={{ __html: LANG_PENDING_CSS }} />
           <script dangerouslySetInnerHTML={{ __html: LANG_INIT_SCRIPT + THEME_INIT_SCRIPT }} />
 
           {/* Readex Pro (Arabic + Latin) for UI, Fira Code for code blocks */}

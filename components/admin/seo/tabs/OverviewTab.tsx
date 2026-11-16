@@ -6,44 +6,46 @@ import { useAdminT } from '../../i18n'
 import { ScoreRing } from '../../shared'
 import { PUBLIC_PAGES } from '../data'
 import type { SeoState } from '../useSeoAdmin'
-import { PriorityBadge, ScoreBadge, SeoCard } from '../ui'
+import { PriorityBadge, ScoreBadge, SeoCard, usePageLabel } from '../ui'
+import messages from '@/locales/admin/seo/overview'
 
 export function OverviewTab({ s }: { s: SeoState }) {
-  const { tr, lang } = useAdminT()
+  const { t } = useAdminT(messages)
+  const pageLabel = usePageLabel()
   const f = s.form as Record<string, unknown>
   const actions = [
-    { p: 'HIGH', t: tr('إرسال خريطة الموقع إلى Google Search Console', 'Submit sitemap to Google Search Console'), url: 'https://search.google.com/search-console', done: !!s.gscStatus?.connected },
-    { p: 'HIGH', t: tr('إضافة تتبّع Google Analytics 4', 'Add Google Analytics 4 tracking'), go: 'analytics', done: !!f.ga_id },
-    { p: 'HIGH', t: tr('ربط Google Search Console للحصول على بيانات حقيقية', 'Connect Google Search Console for real data'), go: 'gsc', done: !!s.gscStatus?.connected },
-    { p: 'HIGH', t: tr('حفظ مخطط Organization (البيانات المنظمة)', 'Save Organization JSON-LD schema (Structured data)'), go: 'schema', done: !!f.schema_organization },
-    { p: 'HIGH', t: tr('ضبط العنوان والوصف العامين (وسوم Meta)', 'Set global meta title & description (Meta tags)'), go: 'meta', done: !!(f.site_title && f.site_description) },
-    { p: 'MEDIUM', t: tr('إنشاء صورة og:image بمقاس 1200×630', 'Create og:image (1200x630px) for social sharing'), go: 'og', done: !!f.og_image },
-    { p: 'MEDIUM', t: tr('إضافة النطاق الأساسي (canonical)', 'Add canonical domain to prevent duplicate content'), go: 'meta', done: !!f.canonical },
-    { p: 'MEDIUM', t: tr('تحليل 5 صفحات على الأقل (محلل الصفحات)', 'Run full page analysis (Page analyzer)'), go: 'pages', done: Object.keys(s.pageScores).length >= 5 },
-    { p: 'MEDIUM', t: tr('فحص الموقع لاكتشاف 404 والروابط المعطلة', 'Run site crawl to find 404s & broken links'), go: 'crawl', done: s.crawlResults.length > 0 },
-    { p: 'MEDIUM', t: tr('الإدراج في G2 وCapterra وProduct Hunt للروابط الخلفية', 'List on G2, Capterra, Product Hunt for backlinks'), go: 'backlinks', done: false },
-    { p: 'LOW', t: tr('إضافة نص بديل لكل الصور', 'Optimize image alt tags across all pages'), go: 'content', done: !Object.values(s.pageScores).some((p: { imgWithoutAlt?: number }) => (p?.imgWithoutAlt || 0) > 0) },
-    { p: 'LOW', t: tr('إضافة مخطط FAQ للرئيسية وصفحة الدعم', 'Add FAQ schema to homepage & support page'), go: 'schema', done: !!f.schema_faqpage },
-    { p: 'LOW', t: tr('حفظ لقطة لمراكز الكلمات (متتبّع الترتيب)', 'Save keyword rank snapshot (Rank tracker)'), go: 'rank', done: Object.keys(s.rankHistory).length > 0 },
+    { p: 'HIGH', t: t('submitSitemapGoogleSearch'), url: 'https://search.google.com/search-console', done: !!s.gscStatus?.connected },
+    { p: 'HIGH', t: t('addGoogleAnalytics4'), go: 'analytics', done: !!f.ga_id },
+    { p: 'HIGH', t: t('connectGoogleSearchConsole'), go: 'gsc', done: !!s.gscStatus?.connected },
+    { p: 'HIGH', t: t('saveOrganizationJsonLd'), go: 'schema', done: !!f.schema_organization },
+    { p: 'HIGH', t: t('setGlobalMetaTitle'), go: 'meta', done: !!(f.site_title && f.site_description) },
+    { p: 'MEDIUM', t: t('createOgImage1200x630px'), go: 'og', done: !!f.og_image },
+    { p: 'MEDIUM', t: t('addCanonicalDomainPrevent'), go: 'meta', done: !!f.canonical },
+    { p: 'MEDIUM', t: t('runFullPageAnalysis'), go: 'pages', done: Object.keys(s.pageScores).length >= 5 },
+    { p: 'MEDIUM', t: t('runSiteCrawlFind'), go: 'crawl', done: s.crawlResults.length > 0 },
+    { p: 'MEDIUM', t: t('listG2CapterraProduct'), go: 'backlinks', done: false },
+    { p: 'LOW', t: t('optimizeImageAltTags'), go: 'content', done: !Object.values(s.pageScores).some((p: { imgWithoutAlt?: number }) => (p?.imgWithoutAlt || 0) > 0) },
+    { p: 'LOW', t: t('addFaqSchemaHomepage'), go: 'schema', done: !!f.schema_faqpage },
+    { p: 'LOW', t: t('saveKeywordRankSnapshot'), go: 'rank', done: Object.keys(s.rankHistory).length > 0 },
   ]
   const done = actions.filter(a => a.done).length
 
   return (
     <div className="grid gap-5 xl:grid-cols-5">
-      <SeoCard className="xl:col-span-3" title={tr('صحة الصفحات', 'Page health')} subtitle={tr('الأشرطة: العنوان · الوصف · H1 · السرعة · الجوال', 'Bars: Title · Meta · H1 · Speed · Mobile')}>
+      <SeoCard className="xl:col-span-3" title={t('pageHealth')} subtitle={t('barsTitleMetaH1')}>
         {!s.analyzed ? (
-          <EmptyState size="sm" icon={MagnifyingGlassIcon} title={tr('لم تُحلَّل أي صفحة بعد', 'No pages analyzed yet')} description={tr('شغّل التحليل للحصول على درجات SEO الفعلية لكل صفحة.', 'Run the analysis to get real SEO scores for each page.')}
-            action={<Button size="sm" loading={s.analyzeAll} onClick={s.runAnalyzeAll}>{tr('بدء التحليل', 'Start analysis')}</Button>} />
+          <EmptyState size="sm" icon={MagnifyingGlassIcon} title={t('noPagesAnalyzedYet')} description={t('runAnalysisGetReal')}
+            action={<Button size="sm" loading={s.analyzeAll} onClick={s.runAnalyzeAll}>{t('startAnalysis')}</Button>} />
         ) : (
           <ul className="space-y-2">
             {PUBLIC_PAGES.map(p => {
               const sc = s.pageScores[p.path]
-              const label = lang === 'ar' ? p.ar : p.label
+              const label = pageLabel(p)
               if (!sc || sc.error) return (
                 <li key={p.path} className="flex items-center gap-3 rounded-xl bg-surface-2 px-3 py-2.5 opacity-60">
                   <ScoreRing value={null} size={36} />
                   <span className="min-w-0 flex-1 truncate text-sm text-muted">{label}</span>
-                  <span className="text-xs text-muted">{sc?.error ? tr('تعذّر الجلب', 'Fetch failed') : tr('لم يُحلَّل', 'Not analyzed')}</span>
+                  <span className="text-xs text-muted">{sc?.error ? t('fetchFailed') : t('notAnalyzed')}</span>
                 </li>
               )
               return (
@@ -61,7 +63,7 @@ export function OverviewTab({ s }: { s: SeoState }) {
                     ))}
                   </div>
                   <ScoreBadge score={sc.score} />
-                  <span className={cn('text-xs', sc.indexed ? 'text-success' : 'text-danger')}>{sc.indexed ? tr('مفهرسة', 'Indexed') : tr('غير مفهرسة', 'Not indexed')}</span>
+                  <span className={cn('text-xs', sc.indexed ? 'text-success' : 'text-danger')}>{sc.indexed ? t('indexed') : t('notIndexed')}</span>
                 </li>
               )
             })}
@@ -69,16 +71,16 @@ export function OverviewTab({ s }: { s: SeoState }) {
         )}
       </SeoCard>
 
-      <SeoCard className="xl:col-span-2" icon={RocketLaunchIcon} title={tr('إجراءات ذات أولوية', 'Priority actions')} subtitle={tr(`${done} من ${actions.length} منجزة`, `${done} of ${actions.length} done`)}>
-        <ProgressBar value={done} max={actions.length} size="sm" aria-label={tr('التقدّم', 'Progress')} />
+      <SeoCard className="xl:col-span-2" icon={RocketLaunchIcon} title={t('priorityActions')} subtitle={t('done', { done, actionsCount: actions.length })}>
+        <ProgressBar value={done} max={actions.length} size="sm" aria-label={t('progress')} />
         <ul className="space-y-2">
           {actions.map((a, i) => (
             <li key={i} className="flex items-center gap-2.5 rounded-xl bg-surface-2 px-3 py-2.5">
               {a.done ? <CheckCircleIcon className="h-5 w-5 shrink-0 text-success" aria-hidden="true" /> : <PriorityBadge p={a.p} />}
               <p className={cn('min-w-0 flex-1 text-sm', a.done ? 'text-muted line-through' : 'text-ink')}>{a.t}</p>
               {!a.done && (a.url
-                ? <a href={a.url} target="_blank" rel="noopener noreferrer" className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-link hover:text-link-hover">{tr('اذهب', 'Go')}<ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" aria-hidden="true" /></a>
-                : a.go ? <button type="button" onClick={() => s.setTab(a.go!)} className="shrink-0 text-xs font-medium text-link hover:text-link-hover">{tr('افتح', 'Open')}</button> : null)}
+                ? <a href={a.url} target="_blank" rel="noopener noreferrer" className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-link hover:text-link-hover">{t('go')}<ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" aria-hidden="true" /></a>
+                : a.go ? <button type="button" onClick={() => s.setTab(a.go!)} className="shrink-0 text-xs font-medium text-link hover:text-link-hover">{t('openAlt')}</button> : null)}
             </li>
           ))}
         </ul>

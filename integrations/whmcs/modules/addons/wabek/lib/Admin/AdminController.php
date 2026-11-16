@@ -6,6 +6,7 @@ use WABEK\ApiClient;
 use WABEK\Bulk;
 use WABEK\Config;
 use WABEK\Consent;
+use WABEK\ConsentField;
 use WABEK\Context;
 use WABEK\Events;
 use WABEK\Lang;
@@ -121,6 +122,19 @@ final class AdminController
                 $n = Bulk::cancel(Security::postInt('bulk_id', 1));
                 $this->flash[] = ['success', Lang::t('ok_bulk_cancelled', ['{n}' => (string) $n])];
                 break;
+            case 'client_toggle':
+                // Posted from the WhatsApp box of the client summary page.
+                $clientId = Security::postInt('client', 1);
+                if (!ClientSummary::toggle($clientId, Security::post('consent', 4) === 'in', $this->adminId)) {
+                    $this->flash[] = ['error', Lang::t('err_client_not_found')];
+                    break;
+                }
+                if (Security::post('return', 10) === 'summary' && !headers_sent()) {
+                    header('Location: clientssummary.php?userid=' . $clientId, true, 303);
+                    exit;
+                }
+                $this->flash[] = ['success', Lang::t('ok_saved')];
+                break;
             case 'set_consent':
                 $clientId = $this->resolveClient(Security::post('client', 190));
                 if ($clientId <= 0) {
@@ -138,6 +152,12 @@ final class AdminController
     private function saveSettings(): void
     {
         $errors = [];
+        $before = [
+            'consent_mode'          => Config::get('consent_mode'),
+            'consent_field_id'      => Config::get('consent_field_id'),
+            'consent_field_meaning' => Config::get('consent_field_meaning'),
+            'consent_field_auto'    => Config::get('consent_field_auto'),
+        ];
         $url = rtrim(Security::post('api_base_url', 200), '/');
         if (!Config::isValidBaseUrl($url)) {
             $errors[] = Lang::t('err_base_url');
@@ -179,13 +199,16 @@ final class AdminController
             'message_language' => ['auto', 'english', 'arabic'],
             'admin_language'   => ['english', 'arabic'],
             'consent_mode'     => ['opt_out', 'opt_in'],
-            'otp_mode'         => ['off', 'verify', 'login'],
+            'otp_mode'         => ['off', 'verify', 'optional', 'login'],
         ];
         foreach ($choices as $k => $allowed) {
             Config::set($k, Security::choice(Security::post($k, 20), $allowed, Config::DEFAULTS[$k]));
         }
 
-        foreach (['immediate_critical', 'reminder_on_due', 'include_credentials', 'otp_skip_no_phone'] as $k) {
+        Config::set('consent_field_meaning', Security::choice(Security::post('consent_field_meaning', 10),
+            [ConsentField::RECEIVE, ConsentField::OPT_OUT], ConsentField::meaning()));
+
+        foreach (['immediate_critical', 'reminder_on_due', 'include_credentials', 'otp_skip_no_phone', 'checkout_consent', 'consent_field_auto'] as $k) {
             Config::set($k, Security::postBool($k) ? '1' : '0');
         }
 
@@ -211,12 +234,43 @@ final class AdminController
         }
 
         Config::flush();
+        $this->applyConsentField($before, $errors);
         if ($errors) {
             foreach ($errors as $err) {
                 $this->flash[] = ['error', $err];
             }
         } else {
             $this->flash[] = ['success', Lang::t('ok_settings_saved')];
+        }
+    }
+
+    /** Create / hide / resync the native consent custom field after the settings changed. */
+    private function applyConsentField(array $before, array &$errors): void
+    {
+        try {
+            ConsentField::flush();
+            $hadField = ConsentField::id();
+            if (Config::bool('consent_field_auto')) {
+                $id = ConsentField::ensure();
+                if ($id !== $hadField) {
+                    $this->flash[] = ['success', Lang::t('ok_consent_field_created', ['{name}' => ConsentField::name(), '{id}' => (string) $id])];
+                    return; // ensure() already wrote every value
+                }
+            } elseif ($before['consent_field_auto'] === '1') {
+                ConsentField::retire();
+            }
+            Config::flush();
+            foreach (['consent_mode', 'consent_field_id', 'consent_field_meaning'] as $k) {
+                if ($before[$k] !== Config::get($k)) {
+                    ConsentField::resyncAll();
+                    break;
+                }
+            }
+        } catch (\Throwable $e) {
+            $errors[] = Lang::t('err_consent_field');
+            if (function_exists('logActivity')) {
+                logActivity('WABEK: consent custom field update failed: ' . substr($e->getMessage(), 0, 300));
+            }
         }
     }
 
@@ -261,7 +315,7 @@ final class AdminController
 
     private function testSend(): void
     {
-        $phone = Phone::toE164(Security::post('test_phone', 32));
+        $phone = Phone::fromPost('test_phone');
         if ($phone === null) {
             $this->flash[] = ['error', Lang::t('err_phone')];
             return;
@@ -306,7 +360,7 @@ final class AdminController
     {
         $key = Security::post('event', 48);
         $event = Events::get($key);
-        $phone = Phone::toE164(Security::post('test_phone', 32));
+        $phone = Phone::fromPost('test_phone');
         if (!$event || $phone === null) {
             $this->flash[] = ['error', Lang::t('err_phone')];
             return;
@@ -327,7 +381,7 @@ final class AdminController
             return;
         }
         $phoneInput = Security::post('phone', 32);
-        $phone = $phoneInput !== '' ? Phone::toE164($phoneInput) : ($clientId > 0 ? Phone::forClient($clientId) : null);
+        $phone = $phoneInput !== '' ? Phone::fromPost('phone') : ($clientId > 0 ? Phone::forClient($clientId) : null);
         if ($phone === null) {
             $this->flash[] = ['error', Lang::t('err_phone')];
             return;
@@ -545,12 +599,22 @@ final class AdminController
             . View::toggle('reminder_on_due', $s['reminder_on_due'] === '1', Lang::t('set_reminder_on_due'));
 
         $privacy = View::field(Lang::t('set_consent_mode'), View::select('consent_mode', ['opt_out' => Lang::t('consent_opt_out'), 'opt_in' => Lang::t('consent_opt_in')], $s['consent_mode']), Lang::t('help_consent_mode'))
+            . View::toggle('consent_field_auto', $s['consent_field_auto'] === '1', Lang::t('set_consent_field_auto'))
+            . '<small class="wb-help">' . View::e(Lang::t('help_consent_field_auto')) . '</small>'
+            . '<div class="wb-grid-2">'
             . View::field(Lang::t('set_consent_field'), View::select('consent_field_id', $tickFields, $s['consent_field_id']), Lang::t('help_consent_field'))
+            . View::field(Lang::t('set_consent_field_meaning'), View::select('consent_field_meaning', [
+                ConsentField::RECEIVE => Lang::t('consent_field_receive'),
+                ConsentField::OPT_OUT => Lang::t('consent_field_opt_out'),
+            ], ConsentField::meaning()))
+            . '</div>'
+            . View::toggle('checkout_consent', $s['checkout_consent'] === '1', Lang::t('set_checkout_consent'))
+            . '<small class="wb-help">' . View::e(Lang::t('help_checkout_consent')) . '</small>'
             . View::toggle('include_credentials', $s['include_credentials'] === '1', Lang::t('set_include_credentials'))
             . '<small class="wb-help">' . View::e(Lang::t('help_include_credentials')) . '</small>'
             . View::field(Lang::t('set_log_retention_days'), View::input('log_retention_days', $s['log_retention_days'], 'number', ['min' => '0', 'max' => '3650']), Lang::t('help_log_retention'));
 
-        $otp = View::field(Lang::t('set_otp_mode'), View::select('otp_mode', ['off' => Lang::t('otp_off'), 'verify' => Lang::t('otp_verify'), 'login' => Lang::t('otp_login')], $s['otp_mode']), Lang::t('help_otp_mode'))
+        $otp = View::field(Lang::t('set_otp_mode'), View::select('otp_mode', ['off' => Lang::t('otp_off'), 'verify' => Lang::t('otp_verify'), 'optional' => Lang::t('otp_optional'), 'login' => Lang::t('otp_login')], $s['otp_mode']), Lang::t('help_otp_mode'))
             . View::toggle('otp_skip_no_phone', $s['otp_skip_no_phone'] === '1', Lang::t('set_otp_skip_no_phone'))
             . '<div class="wb-grid-4">'
             . View::field(Lang::t('set_otp_per_hour'), View::input('otp_per_hour', $s['otp_per_hour'], 'number', ['min' => '1', 'max' => '20']))
@@ -572,7 +636,7 @@ final class AdminController
                 '<p>' . View::e(Lang::t('help_test_connection')) . '</p>' . View::button(Lang::t('btn_test_connection'), 'secondary'))
             . '<hr class="wb-sep">'
             . View::form('test_send', 'settings', $this->link,
-                View::field(Lang::t('set_test_phone'), View::input('test_phone', '', 'tel', ['placeholder' => '+966500000000', 'required' => true, 'maxlength' => '32']))
+                View::field(Lang::t('set_test_phone'), View::input('test_phone', '', 'tel', ['placeholder' => '501234567', 'required' => true, 'maxlength' => '32']))
                 . View::button(Lang::t('btn_send_test'), 'secondary'));
 
         $instTable = '';
@@ -742,7 +806,7 @@ final class AdminController
         $prefill = (int) Security::get('client', 10);
         $inner = '<div class="wb-grid-2">'
             . View::field(Lang::t('lbl_client'), View::input('client', $prefill ?: Security::post('client', 190), 'text', ['placeholder' => Lang::t('placeholder_client')]), Lang::t('help_client'))
-            . View::field(Lang::t('lbl_phone_override'), View::input('phone', '', 'tel', ['placeholder' => '+966500000000', 'maxlength' => '32']), Lang::t('help_phone_override'))
+            . View::field(Lang::t('lbl_phone_override'), View::input('phone', '', 'tel', ['placeholder' => '501234567', 'maxlength' => '32']), Lang::t('help_phone_override'))
             . '</div>'
             . View::field(Lang::t('lbl_message'), View::textarea('message', Security::postText('message'), 7, ['required' => true, 'dir' => 'auto', 'maxlength' => '4000']))
             . View::chips(['client_name', 'first_name', 'company', 'email', 'client_id', 'client_area_url', 'system_name'])

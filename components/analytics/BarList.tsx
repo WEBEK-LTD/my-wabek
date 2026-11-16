@@ -1,6 +1,8 @@
 import React from 'react'
 import Link from 'next/link'
-import { cn, formatNumber } from '@/components/ui'
+import { cn } from '@/components/ui'
+import { useT } from '@/lib/i18n-local'
+import common from '@/locales/dashboard/common-a'
 
 export interface BarListItem {
   key: string
@@ -15,7 +17,7 @@ export interface BarListItem {
 
 export interface BarListProps {
   items: BarListItem[]
-  /** Unit shown after the value, e.g. "نقرة". */
+  /** Unit shown after the value, e.g. "clicks". */
   unit?: string
   color?: string
   ranked?: boolean
@@ -28,6 +30,7 @@ export interface BarListProps {
  * width is relative to the largest value in the list.
  */
 export function BarList({ items, unit, color = '#12B5BE', ranked, className, ariaLabel }: BarListProps) {
+  const { fmtNumber } = useT(common)
   const max = Math.max(1, ...items.map(i => i.value || 0))
   return (
     <ol className={cn('flex flex-col gap-3.5', className)} aria-label={ariaLabel}>
@@ -43,7 +46,7 @@ export function BarList({ items, unit, color = '#12B5BE', ranked, className, ari
                 {item.sub && <span className="hidden truncate text-xs text-muted sm:inline">{item.sub}</span>}
               </div>
               <span className="tabular shrink-0 text-xs font-semibold text-ink">
-                {formatNumber(item.value || 0)}{unit && <span className="ms-1 font-normal text-muted">{unit}</span>}
+                {fmtNumber(item.value || 0)}{unit && <span className="ms-1 font-normal text-muted">{unit}</span>}
               </span>
             </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-track">

@@ -21,12 +21,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Manually join wix_installations (no FK exists → PostgREST can't do it automatically)
     const instanceIds = links.map(l => l.wix_instance_id)
+    // '*': status / removed_at exist only after migration 034
     const { data: installations } = await db
       .from('wix_installations')
-      .select('wix_instance_id, site_name, site_url, installed_at')
+      .select('*')
       .in('wix_instance_id', instanceIds)
 
-    const installMap = Object.fromEntries((installations || []).map(i => [i.wix_instance_id, i]))
+    const installMap = Object.fromEntries((installations || []).map(i => [i.wix_instance_id, {
+      wix_instance_id: i.wix_instance_id, site_name: i.site_name, site_url: i.site_url, installed_at: i.installed_at,
+      status: i.status || 'active', removed_at: i.removed_at || null,
+    }]))
 
     const connections = links.map(link => ({
       ...link,

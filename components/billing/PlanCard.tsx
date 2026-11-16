@@ -2,6 +2,11 @@ import React from 'react'
 import { CheckIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import { Badge, Button, cn } from '@/components/ui'
 import { fmtLimit } from '@/components/settings/format'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/billing'
+import { localizePlanText } from '@/lib/plan-text'
+
+type T = (key: keyof typeof messages.en, vars?: Record<string, string | number>) => string
 
 export interface Plan {
   id: string
@@ -29,19 +34,20 @@ export interface Plan {
   currency?: string
 }
 
-export function planFeatures(plan: Plan): string[] {
+export function planFeatures(plan: Plan, t: T, lang: string): string[] {
+  const numbers = plan.max_instances ?? 1
   return [
-    `${fmtLimit(plan.max_messages_month)} رسالة شهريًا`,
-    `${fmtLimit(plan.max_contacts)} جهة اتصال`,
-    `${plan.max_instances ?? 1} ${(plan.max_instances ?? 1) > 1 ? 'أرقام' : 'رقم'} واتساب`,
-    (plan.max_team_members ?? 0) > 1 ? `${plan.max_team_members} أعضاء في الفريق` : null,
-    plan.allow_api_access ? 'الوصول إلى REST API' : null,
-    plan.allow_chatbot ? 'منشئ روبوت المحادثة' : null,
-    plan.allow_automation ? 'مسارات الأتمتة' : null,
-    plan.allow_white_label ? 'العلامة البيضاء والنطاق المخصص' : null,
-    plan.allow_sub_accounts && (plan.max_sub_accounts ?? 0) > 0 ? `${plan.max_sub_accounts} حسابات فرعية` : null,
-    plan.allow_reseller ? 'نظام الموزّعين' : null,
-    ...(plan.features || []),
+    t('featMessages', { n: fmtLimit(plan.max_messages_month, lang) }),
+    t('featContacts', { n: fmtLimit(plan.max_contacts, lang) }),
+    t(numbers > 1 ? 'featNumberMany' : 'featNumberOne', { n: numbers }),
+    (plan.max_team_members ?? 0) > 1 ? t('featTeam', { n: plan.max_team_members as number }) : null,
+    plan.allow_api_access ? t('featApi') : null,
+    plan.allow_chatbot ? t('featChatbot') : null,
+    plan.allow_automation ? t('featAutomation') : null,
+    plan.allow_white_label ? t('featWhiteLabel') : null,
+    plan.allow_sub_accounts && (plan.max_sub_accounts ?? 0) > 0 ? t('featSubAccounts', { n: plan.max_sub_accounts as number }) : null,
+    plan.allow_reseller ? t('featReseller') : null,
+    ...(plan.features || []).map(f => localizePlanText(String(f), lang)),
   ].filter(Boolean) as string[]
 }
 
@@ -63,13 +69,14 @@ export function PlanCard({ plan, cycle, isCurrent, isPopular, hasSub, onChoose, 
   onChoose: (priceId: string) => void
   choosing?: boolean
 }) {
+  const { t, lang, locale } = useT(messages)
   const yearly = cycle === 'yearly' && Number(plan.price_yearly) > 0
   const price = yearly ? Number(plan.price_yearly) : Number(plan.price_monthly)
   const priceId = cycle === 'yearly' && plan.stripe_price_id_yearly ? plan.stripe_price_id_yearly : plan.stripe_price_id_monthly
-  const features = planFeatures(plan)
+  const features = planFeatures(plan, t, lang)
   const saving = yearly ? yearlySaving(plan) : 0
   const currency = (plan.currency || 'USD').toUpperCase()
-  const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: n % 1 ? 2 : 0 }).format(n)
+  const fmt = (n: number) => new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: n % 1 ? 2 : 0 }).format(n)
 
   return (
     <article className={cn(
@@ -79,24 +86,24 @@ export function PlanCard({ plan, cycle, isCurrent, isPopular, hasSub, onChoose, 
       {(isCurrent || isPopular) && (
         <span className="absolute -top-3 start-6">
           {isCurrent
-            ? <Badge tone="brand" className="shadow-card">باقتك الحالية</Badge>
-            : <span className="inline-flex items-center gap-1 rounded-full bg-brand-gradient px-3 py-1 text-xs font-semibold text-[#04282C] shadow-glow"><SparklesIcon className="h-3.5 w-3.5" aria-hidden="true" />الأكثر طلبًا</span>}
+            ? <Badge tone="brand" className="shadow-card">{t('yourPlan')}</Badge>
+            : <span className="inline-flex items-center gap-1 rounded-full bg-brand-gradient px-3 py-1 text-xs font-semibold text-[#04282C] shadow-glow"><SparklesIcon className="h-3.5 w-3.5" aria-hidden="true" />{t('popular')}</span>}
         </span>
       )}
-      <h3 className="text-lg font-bold text-ink">{plan.name}</h3>
-      {plan.description && <p className="mt-1 text-sm text-muted">{plan.description}</p>}
+      <h3 className="text-lg font-bold text-ink">{localizePlanText(plan.name, lang)}</h3>
+      {plan.description && <p className="mt-1 text-sm text-muted">{localizePlanText(plan.description, lang)}</p>}
 
       <div className="mt-5 flex items-end gap-1.5">
         {price === 0 ? (
-          <span className="text-4xl font-bold text-ink">مجانية</span>
+          <span className="text-4xl font-bold text-ink">{t('free')}</span>
         ) : (
           <>
             <span className="text-4xl font-bold text-ink tabular" dir="ltr">{fmt(price)}</span>
-            <span className="mb-1.5 text-sm text-muted">/ {yearly ? 'سنة' : 'شهر'}</span>
+            <span className="mb-1.5 text-sm text-muted">/ {yearly ? t('perYear') : t('perMonth')}</span>
           </>
         )}
       </div>
-      <p className="mt-1 h-5 text-xs text-success">{saving > 0 ? `توفّر ${saving}% مقارنة بالدفع الشهري` : ''}</p>
+      <p className="mt-1 h-5 text-xs text-success">{saving > 0 ? t('saving', { pct: saving }) : ''}</p>
 
       <ul className="mt-5 flex-1 space-y-2.5">
         {features.slice(0, 9).map(f => (
@@ -109,14 +116,14 @@ export function PlanCard({ plan, cycle, isCurrent, isPopular, hasSub, onChoose, 
 
       <div className="mt-6">
         {isCurrent ? (
-          <Button variant="secondary" fullWidth disabled icon={CheckIcon}>باقتك الحالية</Button>
+          <Button variant="secondary" fullWidth disabled icon={CheckIcon}>{t('yourPlan')}</Button>
         ) : price === 0 ? (
-          <Button variant="secondary" fullWidth disabled>الباقة المجانية</Button>
+          <Button variant="secondary" fullWidth disabled>{t('freePlan')}</Button>
         ) : !priceId ? (
-          <Button variant="secondary" fullWidth disabled>قريبًا</Button>
+          <Button variant="secondary" fullWidth disabled>{t('soon')}</Button>
         ) : (
           <Button variant={isPopular ? 'primary' : 'dark'} fullWidth loading={choosing} onClick={() => onChoose(priceId)}>
-            {hasSub ? 'التبديل إلى هذه الباقة' : 'ابدأ الآن'}
+            {hasSub ? t('switchPlan') : t('startNow')}
           </Button>
         )}
       </div>

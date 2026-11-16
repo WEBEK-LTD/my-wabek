@@ -36,9 +36,13 @@ final class Config
         'domain_reminder_days' => '30,7,1',
         'include_credentials'  => '0',
         'consent_mode'         => 'opt_out',   // opt_out | opt_in
-        'consent_field_id'     => '0',         // optional tickbox custom field: ticked = opted out
+        'consent_field_id'     => '0',         // client tickbox custom field mirroring the consent (see ConsentField)
+        'consent_field_meaning' => 'opt_out',  // receive (ticked = receive) | opt_out (ticked = no WhatsApp, 4.0/4.1 fields)
+        'consent_field_auto'   => '1',         // create / keep the native "Receive WhatsApp notifications" field
+        'consent_field_created' => '0',        // id of the field the addon created itself (0 = none)
+        'checkout_consent'     => '0',         // show a WhatsApp consent checkbox at checkout
         'phone_field_id'       => '0',         // optional custom field holding the WhatsApp number
-        'otp_mode'             => 'off',       // off | verify | login
+        'otp_mode'             => 'verify',    // off | verify | optional | login
         'otp_skip_no_phone'    => '1',
         'otp_per_hour'         => '3',
         'otp_resend_seconds'   => '60',

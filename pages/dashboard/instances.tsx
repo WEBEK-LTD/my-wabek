@@ -16,8 +16,12 @@ import { NumberCard, isWebInstance, type Instance } from '@/components/numbers/N
 import { QrDialog } from '@/components/numbers/QrDialog'
 import { ConnectNumberDialog } from '@/components/numbers/ConnectNumberDialog'
 import { CloudApiForm } from '@/components/numbers/CloudApiForm'
+import { rich } from '@/components/settings/Shared'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/instances'
 
 export default function InstancesPage() {
+  const { t } = useT(messages)
   const qc = useQueryClient()
   const router = useRouter()
   const [filter, setFilter] = useState<'all' | 'cloud' | 'web'>('all')
@@ -85,18 +89,18 @@ export default function InstancesPage() {
             redirectUri,
           }).then(r => {
             if (r.data.success) {
-              toast.success('تم ربط واتساب بنجاح')
+              toast.success(t('connectedOk'))
               window.location.reload()
             } else {
-              toast.error(r.data.error || 'تعذّر الربط')
+              toast.error(r.data.error || t('connectError'))
             }
           }).catch(e => {
-            toast.error(e?.response?.data?.error || 'تعذّر الربط')
+            toast.error(apiError(e, t('connectError')))
           }).finally(() => setMetaLoading(false))
         } else {
           setMetaLoading(false)
           if (response?.status !== 'connected') {
-            toast.error('أُلغي تسجيل الدخول إلى Meta أو لم يكتمل')
+            toast.error(t('metaCancelled'))
           }
         }
       }, {
@@ -111,7 +115,8 @@ export default function InstancesPage() {
       })
 
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || e?.message || 'META_APP_ID not configured')
+      const localMsg = e?.message === 'META_APP_ID not configured' ? t('metaNotConfigured') : (e?.message || t('metaNotConfigured'))
+      toast.error(e?.response?.data ? apiError(e, localMsg) : localMsg)
       setMetaLoading(false)
     }
   }
@@ -127,11 +132,13 @@ export default function InstancesPage() {
   useEffect(() => {
     const { success, error } = router.query
     if (success === 'connected') {
-      toast.success('تم ربط واتساب عبر Meta')
+      toast.success(t('connectedViaMeta'))
       qc.invalidateQueries('instances')
       router.replace('/dashboard/instances', undefined, { shallow: true })
     } else if (error) {
-      toast.error(decodeURIComponent(error as string))
+      const errCode = decodeURIComponent(error as string)
+      const known = `oauth_${errCode}` in messages.en
+      toast.error(known ? t(`oauth_${errCode}` as keyof typeof messages.en) : errCode)
       router.replace('/dashboard/instances', undefined, { shallow: true })
     }
   }, [router.query])
@@ -146,7 +153,7 @@ export default function InstancesPage() {
           clearInterval(qrPollRef.current)
           setQrInstance(null)
           qc.invalidateQueries('instances')
-          toast.success(`تم ربط واتساب: ${data.phoneNumber}`)
+          toast.success(t('connectedPhone', { phone: data.phoneNumber }))
         } else if (data.qrCode && data.qrCode !== qrInstance.qr_code) {
           setQrInstance(prev => ({ ...prev, qr_code: data.qrCode, status: data.status }))
         }
@@ -159,9 +166,9 @@ export default function InstancesPage() {
     (body) => axios.post('/api/whatsapp/instances', body),
     { onSuccess: (res) => {
         qc.invalidateQueries('instances'); setShowCloudForm(false)
-        toast.success('تم ربط رقم Cloud API')
+        toast.success(t('cloudConnected'))
         if (res?.data?.webhook_warning) toast(res.data.webhook_warning, { duration: 8000 })
-      }, onError: (e) => toast.error(e?.response?.data?.error || 'تعذّر الربط') }
+      }, onError: (e) => toast.error(apiError(e, t('connectError'))) }
   )
 
   const createWebMut = useMutation(
@@ -173,13 +180,14 @@ export default function InstancesPage() {
         const inst = res.data?.instance
         if (inst) {
           setQrInstance({ ...inst, qr_code: res.data?.qrCode || null })
-          if (!res.data?.qrCode) toast(res.data?.message || 'بانتظار رمز QR…', { duration: 5000 })
+          if (!res.data?.qrCode) toast(res.data?.message || t('waitingQr'), { duration: 5000 })
         }
       },
       onError: (e) => {
-        const msg = e?.response?.data?.message || e?.response?.data?.error || 'تعذّر إنشاء الجلسة'
+        const code = String(e?.response?.data?.code || '').toLowerCase()
+        const msg = code === 'plan_limit' ? apiError(e) : (e?.response?.data?.message || e?.response?.data?.error || t('sessionError'))
         if (e?.response?.data?.configured === false) {
-          toast.error('خادم واتساب ويب غير مُعدّ. أضف WA_WEB_SERVER_URL إلى متغيرات البيئة أولًا.', { duration: 6000 })
+          toast.error(t('webNotConfigured'), { duration: 6000 })
         } else {
           toast.error(msg, { duration: 5000 })
         }
@@ -193,7 +201,7 @@ export default function InstancesPage() {
       onSuccess: (res, instanceId) => {
         const inst = instances.find(i => i.id === instanceId)
         if (inst) setQrInstance({ ...inst, qr_code: res.data?.qrCode || inst.qr_code })
-        toast.success('تم تحديث رمز QR')
+        toast.success(t('qrRefreshed'))
       },
     }
   )
@@ -201,8 +209,8 @@ export default function InstancesPage() {
   const deleteMut = useMutation(
     (id) => axios.delete(`/api/whatsapp/instances/${id}`),
     {
-      onSuccess: () => { qc.invalidateQueries('instances'); setToDelete(null); toast.success('تم حذف الرقم') },
-      onError: (e) => toast.error(apiError(e, 'تعذّر حذف الرقم')),
+      onSuccess: () => { qc.invalidateQueries('instances'); setToDelete(null); toast.success(t('numberDeleted')) },
+      onError: (e) => toast.error(apiError(e, t('deleteError'))),
     }
   )
 
@@ -212,57 +220,57 @@ export default function InstancesPage() {
   const openManual = () => { setShowConnect(false); setShowCloudForm(true) }
 
   return (
-    <DashboardLayout title="WhatsApp Accounts">
+    <DashboardLayout title={t('title')}>
       <div className="space-y-6">
         <PageHeader
-          eyebrow="التكاملات"
-          title="أرقام واتساب"
-          description="اربط أرقامك عبر واجهة Meta الرسمية أو واتساب ويب، وتابع حالة كل رقم من مكان واحد."
+          eyebrow={t('eyebrow')}
+          title={t('title')}
+          description={t('description')}
           actions={
             <>
-              <Button variant="secondary" icon={BookOpenIcon} href="/docs/getting-started/connect-number">دليل الربط</Button>
-              <Button icon={PlusIcon} onClick={() => setShowConnect(true)}>ربط رقم</Button>
+              <Button variant="secondary" icon={BookOpenIcon} href="/docs/getting-started/connect-number">{t('guide')}</Button>
+              <Button icon={PlusIcon} onClick={() => setShowConnect(true)}>{t('connectNumber')}</Button>
             </>
           }
         />
 
         <div className="grid grid-cols-2 gap-3 sm:gap-3.5 lg:grid-cols-4">
-          <StatCard label="جميع الأرقام" value={String(instances.length)} icon={SignalIcon} loading={isLoading} />
-          <StatCard label="متصلة الآن" value={String(connectedCount)} icon={CheckIcon} loading={isLoading}
-            sub={instances.length ? `${instances.length - connectedCount} غير متصلة` : undefined}
+          <StatCard label={t('statAll')} value={String(instances.length)} icon={SignalIcon} loading={isLoading} />
+          <StatCard label={t('statConnected')} value={String(connectedCount)} icon={CheckIcon} loading={isLoading}
+            sub={instances.length ? t('statDisconnected', { n: instances.length - connectedCount }) : undefined}
             subTone={instances.length - connectedCount > 0 ? 'warning' : 'muted'} />
-          <StatCard label="Cloud API" value={String(cloudInstances.length)} icon={CloudIcon} loading={isLoading} sub="الربط الرسمي" />
-          <StatCard label="WhatsApp Web" value={String(webInstances.length)} icon={DevicePhoneMobileIcon} loading={isLoading} sub="الربط برمز QR" />
+          <StatCard label="Cloud API" value={String(cloudInstances.length)} icon={CloudIcon} loading={isLoading} sub={t('statOfficial')} />
+          <StatCard label="WhatsApp Web" value={String(webInstances.length)} icon={DevicePhoneMobileIcon} loading={isLoading} sub={t('statQr')} />
         </div>
 
         {isLoading ? (
           <CardsSkeleton count={2} className="h-64" />
         ) : isError ? (
-          <ErrorState message={apiError(error, 'تعذّر تحميل الأرقام')} onRetry={() => refetch()} />
+          <ErrorState message={apiError(error, t('loadError'))} onRetry={() => refetch()} />
         ) : instances.length === 0 ? (
           <EmptyState
             variant="card"
             icon={SignalIcon}
-            title="لم تربط أي رقم بعد"
-            description="ابدأ بربط رقم واتساب لإرسال الرسائل واستقبالها. ننصح بواجهة Meta الرسمية للأنشطة التجارية."
+            title={t('emptyTitle')}
+            description={t('emptyDesc')}
             action={
               <>
-                <Button icon={CloudIcon} loading={metaLoading} onClick={launchMetaSignup}>الربط عبر Meta</Button>
-                <Button variant="secondary" icon={QrCodeIcon} loading={createWebMut.isLoading} onClick={() => createWebMut.mutate()}>الربط برمز QR</Button>
+                <Button icon={CloudIcon} loading={metaLoading} onClick={launchMetaSignup}>{t('connectMeta')}</Button>
+                <Button variant="secondary" icon={QrCodeIcon} loading={createWebMut.isLoading} onClick={() => createWebMut.mutate()}>{t('connectQr')}</Button>
               </>
             }
           />
         ) : (
-          <section aria-label="الأرقام المرتبطة" className="space-y-4">
+          <section aria-label={t('linkedNumbers')} className="space-y-4">
             <Tabs
               variant="segmented"
               size="sm"
               idPrefix="numbers"
-              aria-label="تصفية الأرقام"
+              aria-label={t('filterLabel')}
               value={filter}
               onChange={v => setFilter(v as typeof filter)}
               tabs={[
-                { id: 'all', label: 'الكل', count: instances.length },
+                { id: 'all', label: t('filterAll'), count: instances.length },
                 { id: 'cloud', label: 'Cloud API', count: cloudInstances.length },
                 { id: 'web', label: 'WhatsApp Web', count: webInstances.length },
               ]}
@@ -272,10 +280,10 @@ export default function InstancesPage() {
                 variant="card"
                 size="sm"
                 icon={filter === 'web' ? DevicePhoneMobileIcon : CloudIcon}
-                title={filter === 'web' ? 'لا توجد أرقام واتساب ويب' : 'لا توجد أرقام Cloud API'}
+                title={filter === 'web' ? t('noWeb') : t('noCloud')}
                 action={filter === 'web'
-                  ? <Button size="sm" icon={QrCodeIcon} loading={createWebMut.isLoading} onClick={() => createWebMut.mutate()}>الربط برمز QR</Button>
-                  : <Button size="sm" icon={CloudIcon} loading={metaLoading} onClick={launchMetaSignup}>الربط عبر Meta</Button>}
+                  ? <Button size="sm" icon={QrCodeIcon} loading={createWebMut.isLoading} onClick={() => createWebMut.mutate()}>{t('connectQr')}</Button>
+                  : <Button size="sm" icon={CloudIcon} loading={metaLoading} onClick={launchMetaSignup}>{t('connectMeta')}</Button>}
               />
             ) : (
               <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr))]">
@@ -295,23 +303,23 @@ export default function InstancesPage() {
 
         {/* Which method fits? */}
         <Card padding="none">
-          <CardHeader title="أي طريقة تناسبك؟" subtitle="مقارنة سريعة بين طريقتَي الربط" divider />
+          <CardHeader title={t('compareTitle')} subtitle={t('compareSubtitle')} divider />
           <div className="grid gap-px bg-line-soft md:grid-cols-2">
             <div className="space-y-2 bg-surface p-5">
-              <p className="flex items-center gap-2 font-semibold text-ink"><CloudIcon className="h-5 w-5 text-brand-ink" aria-hidden="true" />Cloud API — رسمية</p>
+              <p className="flex items-center gap-2 font-semibold text-ink"><CloudIcon className="h-5 w-5 text-brand-ink" aria-hidden="true" />{t('cloudOfficial')}</p>
               <ul className="space-y-1.5 text-sm text-body">
-                <li>منتج رسمي من Meta دون خطر حظر.</li>
-                <li>أول 1,000 محادثة شهريًا مجانية من Meta.</li>
-                <li>يتطلب توثيق حساب Meta Business، وقد تستغرق الموافقة من أسبوع إلى أسبوعين.</li>
-                <li>تحتاج إلى Phone Number ID ورمز وصول من <a className="text-link hover:text-link-hover" href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" dir="ltr">developers.facebook.com</a> عند الإعداد اليدوي.</li>
+                <li>{t('cloud1')}</li>
+                <li>{t('cloud2')}</li>
+                <li>{t('cloud3')}</li>
+                <li>{rich(t('cloud4'), { link: <a className="text-link hover:text-link-hover" href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" dir="ltr">developers.facebook.com</a> })}</li>
               </ul>
             </div>
             <div className="space-y-2 bg-surface p-5">
-              <p className="flex items-center gap-2 font-semibold text-ink"><ExclamationTriangleIcon className="h-5 w-5 text-warning" aria-hidden="true" />WhatsApp Web — غير رسمية</p>
+              <p className="flex items-center gap-2 font-semibold text-ink"><ExclamationTriangleIcon className="h-5 w-5 text-warning" aria-hidden="true" />{t('webUnofficial')}</p>
               <ul className="space-y-1.5 text-sm text-body">
-                <li>دون موافقة من Meta، وتعمل مع أي رقم ودون رسوم لكل رسالة.</li>
-                <li>تخالف شروط استخدام واتساب، وقد يتعرّض الرقم للحظر.</li>
-                <li>تحتاج إلى خادم منفصل للجلسات، ولا تناسب الإرسال بكميات كبيرة.</li>
+                <li>{t('web1')}</li>
+                <li>{t('web2')}</li>
+                <li>{t('web3')}</li>
               </ul>
             </div>
           </div>
@@ -343,15 +351,15 @@ export default function InstancesPage() {
         refreshing={refreshQRMut.isLoading}
       />
 
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         destructive
         open={!!toDelete}
         onClose={() => setToDelete(null)}
         onConfirm={() => toDelete && deleteMut.mutate(toDelete.id)}
         loading={deleteMut.isLoading}
-        title="حذف هذا الرقم؟"
-        description={`سيتوقف إرسال الرسائل واستقبالها عبر ${toDelete?.display_name || toDelete?.phone_number || 'هذا الرقم'}. يمكنك ربطه مجددًا لاحقًا.`}
-        confirmLabel="حذف الرقم"
+        title={t('deleteTitle')}
+        description={t('deleteDesc', { name: toDelete?.display_name || toDelete?.phone_number || t('thisNumber') })}
+        confirmLabel={t('deleteConfirm')}
       />
     </DashboardLayout>
   )

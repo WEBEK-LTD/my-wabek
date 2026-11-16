@@ -11,7 +11,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // The logged-in person (a team member changes THEIR password, not the owner's).
   const selfId = user.actualUserId || user.userId
 
-  const { current_password, new_password } = req.body || {}
+  // Accept both snake_case and camelCase field names (the settings page sends camelCase).
+  const body = req.body || {}
+  const current_password = body.current_password ?? body.currentPassword
+  const new_password = body.new_password ?? body.newPassword
   if (typeof current_password !== 'string' || typeof new_password !== 'string' || !current_password || !new_password) {
     return res.status(400).json({ error: 'Both passwords required' })
   }
@@ -26,7 +29,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!dbUser) return res.status(404).json({ error: 'User not found' })
 
   const valid = await comparePassword(current_password, dbUser.password_hash)
-  if (!valid) return res.status(401).json({ error: 'Current password is incorrect' })
+  // 400, not 401: a wrong password in the form is not an expired session
+  // (the dashboard treats every 401 as "log out").
+  if (!valid) return res.status(400).json({ error: 'Current password is incorrect', code: 'wrong_password' })
 
   const newHash = await hashPassword(new_password)
   const { error } = await db.from('users').update({ password_hash: newHash, updated_at: new Date().toISOString() }).eq('id', selfId)

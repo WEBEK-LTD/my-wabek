@@ -75,6 +75,10 @@ const SUPABASE_KEY        = process.env.SUPABASE_SERVICE_KEY
 
 const logger       = pino({ level: 'silent' })
 const sessions     = new Map()
+// Reconnect attempts per instance. Kept outside the session object because
+// every reconnect replaces that object (createSession), which used to reset
+// the counter and keep the backoff at 5s forever. Reset on 'open'.
+const reconnectAttempts = new Map()
 // Where QR sessions live on disk. Railway's container disk is wiped on every
 // deploy/restart, so a Volume must be attached for sessions to survive:
 // set SESSIONS_DIR, or attach a Railway Volume (RAILWAY_VOLUME_MOUNT_PATH is
@@ -427,7 +431,8 @@ async function createSession(instanceId) {
       // Priority: name → notify → undefined (don't send empty string — let backend keep existing DB value)
       const displayName = sock.user?.name || sock.user?.notify || undefined
       const s = sessions.get(instanceId)
-      if (s) { s.connected = true; s.phoneNumber = phoneNumber; s.qr = null; s._reconnectAttempt = 0 }
+      if (s) { s.connected = true; s.phoneNumber = phoneNumber; s.qr = null }
+      reconnectAttempts.delete(instanceId)
       console.log(`[${instanceId}] ✅ Connected! Phone: ${phoneNumber} Name: ${displayName || '(none yet)'}`)
       scheduleBackup(instanceId, 500)
       await notifyWabek('connected', instanceId, { phoneNumber, ...(displayName ? { displayName } : {}) })
@@ -442,13 +447,17 @@ async function createSession(instanceId) {
       await notifyWabek('disconnected', instanceId, { shouldReconnect, statusCode, loggedOut: !shouldReconnect })
       if (shouldReconnect) {
         // Exponential backoff: 5s, 10s, 20s, 40s, max 60s
-        const s = sessions.get(instanceId)
-        const attempt = (s?._reconnectAttempt || 0) + 1
-        if (s) s._reconnectAttempt = attempt
+        const attempt = (reconnectAttempts.get(instanceId) || 0) + 1
+        reconnectAttempts.set(instanceId, attempt)
         const delay = Math.min(5000 * Math.pow(2, attempt - 1), 60000)
         console.log(`[${instanceId}] Reconnecting in ${delay}ms (attempt ${attempt})`)
-        setTimeout(() => createSession(instanceId).catch(e => console.error(`[${instanceId}] reconnect error:`, e.message)), delay)
+        setTimeout(() => {
+          // Deleted / disconnected meanwhile → don't bring it back.
+          if (!sessions.has(instanceId)) { reconnectAttempts.delete(instanceId); return }
+          createSession(instanceId).catch(e => console.error(`[${instanceId}] reconnect error:`, e.message))
+        }, delay)
       } else {
+        reconnectAttempts.delete(instanceId)
         sessions.delete(instanceId)
         try { fs.rmSync(authDir, { recursive: true, force: true }) } catch {}
         // Also delete from Supabase
@@ -501,9 +510,15 @@ async function createSession(instanceId) {
 
   sock.ev.on('messages.update', async (updates) => {
     for (const u of updates) {
-      if (!u.update?.status) continue
-      const statusMap = { 1: 'sent', 2: 'delivered', 3: 'read', 4: 'played' }
-      await notifyWabek('message_status', instanceId, { messageId: u.key.id, status: statusMap[u.update.status] || 'sent' })
+      // Baileys proto.WebMessageInfo.Status: 0 ERROR, 1 PENDING, 2 SERVER_ACK,
+      // 3 DELIVERY_ACK, 4 READ, 5 PLAYED. messages.status only allows
+      // pending/sent/delivered/read/failed.
+      const code = u.update?.status
+      if (code == null) continue
+      const statusMap = { 0: 'failed', 1: 'sent', 2: 'sent', 3: 'delivered', 4: 'read', 5: 'read' }
+      const status = statusMap[code]
+      if (!status) continue
+      await notifyWabek('message_status', instanceId, { messageId: u.key.id, status })
     }
   })
 
@@ -718,6 +733,7 @@ app.post('/instance/:id/disconnect', auth, async (req, res) => {
   const s = sessions.get(id)
   if (s?.sock) { try { await s.sock.logout() } catch {} try { s.sock.end() } catch {} }
   sessions.delete(id)
+  reconnectAttempts.delete(id)
   try { fs.rmSync(path.join(SESSIONS_DIR, id), { recursive: true, force: true }) } catch {}
   if (SUPABASE_URL && SUPABASE_KEY) {
     fetch(`${SUPABASE_URL}/rest/v1/wa_sessions?instance_id=eq.${encodeURIComponent(id)}`, {
@@ -732,6 +748,7 @@ app.delete('/instance/:id', auth, async (req, res) => {
   const s = sessions.get(id)
   if (s?.sock) { try { await s.sock.logout() } catch {} try { s.sock.end() } catch {} }
   sessions.delete(id)
+  reconnectAttempts.delete(id)
   try { fs.rmSync(path.join(SESSIONS_DIR, id), { recursive: true, force: true }) } catch {}
   if (SUPABASE_URL && SUPABASE_KEY) {
     fetch(`${SUPABASE_URL}/rest/v1/wa_sessions?instance_id=eq.${encodeURIComponent(id)}`, {

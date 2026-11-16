@@ -14,10 +14,18 @@ import { isCronRequest, safeEqual } from '@/lib/security'
 // docs/DEPLOY_CHECKLIST.md) we also accept SERVER_SECRET here — header only,
 // constant-time, and only when it is a strong value (>= 16 chars, not the
 // 'change-this-secret' placeholder). Remove once CRON_SECRET is everywhere.
+// Railway's SERVER_SECRET is stored on Netlify as WA_WEB_SERVER_SECRET (and
+// optionally WABEK_EVENTS_SECRET), so those names are accepted too.
 function isLegacyServerCall(req: NextApiRequest): boolean {
-  const legacy = process.env.SERVER_SECRET
-  if (!legacy || legacy.length < 16 || legacy === 'change-this-secret') return false
-  return safeEqual(req.headers['x-cron-secret'], legacy)
+  const header = req.headers['x-cron-secret']
+  const candidates = [process.env.SERVER_SECRET, process.env.WA_WEB_SERVER_SECRET, process.env.WABEK_EVENTS_SECRET]
+  let ok = false
+  for (const secret of candidates) {
+    if (!secret || secret.length < 16 || secret === 'change-this-secret') continue
+    // No early exit: compare against every configured secret.
+    if (safeEqual(header, secret)) ok = true
+  }
+  return ok
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

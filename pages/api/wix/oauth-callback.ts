@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireEnv, verifyState } from '@/lib/security'
+import { reactivateWixInstallation } from '@/lib/wix-auth'
 import { v4 as uuidv4 } from 'uuid'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://waabek.com'
@@ -79,6 +80,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         access_token: accessToken, refresh_token: refreshToken,
         site_name: siteName, site_url: siteUrl, updated_at: now,
       }).eq('wix_instance_id', wixInstanceId)
+      // Reinstalled after App Removed → notifications on again
+      await reactivateWixInstallation(wixInstanceId)
     } else {
       await db.from('wix_installations').insert({
         id: uuidv4(), wix_instance_id: wixInstanceId,

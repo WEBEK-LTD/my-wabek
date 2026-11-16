@@ -1,4 +1,4 @@
-import React, { useId, useState } from 'react'
+import React, { useEffect, useId, useRef, useState } from 'react'
 import { CheckIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
 import { cn } from '@/components/ui/utils'
 
@@ -69,17 +69,21 @@ export function FaqList({ items, className }: { items: FaqItem[]; className?: st
 }
 
 /** CtaBand — the deep rounded call-to-action panel that closes a page. */
-export function CtaBand({ title, subtitle, actions, className }: { title: React.ReactNode; subtitle?: React.ReactNode; actions: React.ReactNode; className?: string }) {
+export function CtaBand({ eyebrow, title, subtitle, actions, note, className }: { eyebrow?: React.ReactNode; title: React.ReactNode; subtitle?: React.ReactNode; actions: React.ReactNode; note?: React.ReactNode; className?: string }) {
   return (
     <section className={cn('mx-auto w-full max-w-[1280px] px-4 pb-20 pt-6 sm:px-8 sm:pb-24 print:hidden', className)}>
       <div className="relative flex flex-wrap items-center justify-between gap-7 overflow-hidden rounded-[34px] bg-[#04282C] px-6 py-12 text-deep-ink sm:px-14 sm:py-16">
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_120%_at_100%_0%,#0E6C72,rgba(14,108,114,0)_60%)] ltr:bg-[radial-gradient(80%_120%_at_0%_0%,#0E6C72,rgba(14,108,114,0)_60%)]" />
         <div aria-hidden="true" className="pointer-events-none absolute -bottom-24 end-[-60px] h-72 w-72 rounded-full bg-brand-green/10 blur-3xl" />
         <div className="relative flex min-w-0 flex-[1_1_420px] flex-col gap-3">
+          {eyebrow && <span className="text-sm font-semibold text-brand-green">{eyebrow}</span>}
           <h2 className="text-[28px] font-bold leading-[1.3] text-deep-ink sm:text-[40px]">{title}</h2>
           {subtitle && <p className="text-base font-light text-deep-muted sm:text-lg">{subtitle}</p>}
         </div>
-        <div className="relative flex flex-wrap gap-3">{actions}</div>
+        <div className="relative flex flex-col gap-3">
+          <div className="flex flex-wrap gap-3">{actions}</div>
+          {note && <div className="text-[13px] text-deep-muted">{note}</div>}
+        </div>
       </div>
     </section>
   )
@@ -160,5 +164,102 @@ export function FeatureRow({ kicker, title, description, points, visual, panel, 
         <div className="relative w-full flex justify-center">{visual}</div>
       </div>
     </div>
+  )
+}
+
+export interface StatItem {
+  /** Target value (e.g. 10, 99.9). */
+  value: number
+  /** Decimal places shown while counting. */
+  decimals?: number
+  prefix?: string
+  suffix?: string
+  label: React.ReactNode
+  /** Count-up duration in ms. */
+  duration?: number
+}
+
+/** CountUp — animates from 0 to `value` once it scrolls into view (static when reduced motion is on). */
+export function CountUp({ value, decimals = 0, prefix = '', suffix = '', duration = 1800, locale }: Omit<StatItem, 'label'> & { locale: string }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const [shown, setShown] = useState(value)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    setShown(0)
+    let raf = 0, started = false
+    const start = () => {
+      if (started) return
+      started = true
+      io.disconnect()
+      window.removeEventListener('scroll', onScroll)
+      const t0 = performance.now()
+      const step = (now: number) => {
+        const p = Math.min((now - t0) / duration, 1)
+        const ease = p === 1 ? 1 : 1 - Math.pow(2, -10 * p)
+        setShown(value * ease)
+        if (p < 1) raf = requestAnimationFrame(step)
+      }
+      raf = requestAnimationFrame(step)
+    }
+    // Also start when the figure was scrolled past without being observed (fast scroll / jump links).
+    const onScroll = () => { if (el.getBoundingClientRect().top < window.innerHeight) start() }
+    const io = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) start() }, { threshold: 0.2 })
+    io.observe(el)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => { io.disconnect(); window.removeEventListener('scroll', onScroll); cancelAnimationFrame(raf) }
+  }, [value, duration])
+  let text: string
+  try {
+    text = new Intl.NumberFormat(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(decimals ? shown : Math.floor(shown))
+  } catch {
+    text = decimals ? shown.toFixed(decimals) : String(Math.floor(shown))
+  }
+  return <span ref={ref} className="tabular" dir="ltr">{prefix}{text}{suffix}</span>
+}
+
+/** StatsBand — four big figures with a count-up animation. */
+export function StatsBand({ items, locale, label, className }: { items: StatItem[]; locale: string; label?: string; className?: string }) {
+  return (
+    <section aria-label={label} className={cn('mx-auto w-full max-w-[1280px] px-4 pt-14 sm:px-8 sm:pt-16', className)}>
+      <dl className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        {items.map((s, i) => (
+          <div key={i} className="group relative flex flex-col items-center gap-2 overflow-hidden rounded-card border border-line bg-surface px-4 py-7 text-center shadow-card transition-[transform,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-card-hover sm:py-9">
+            <span aria-hidden="true" className="absolute inset-x-0 top-0 h-1 bg-brand-gradient opacity-80" />
+            <dt className="order-2 text-sm text-muted">{s.label}</dt>
+            <dd className="order-1 text-[34px] font-bold leading-none text-ink sm:text-[44px]">
+              <CountUp value={s.value} decimals={s.decimals} prefix={s.prefix} suffix={s.suffix} duration={s.duration} locale={locale} />
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  )
+}
+
+/** LogoStrip — partner / integration names as chips in a slow, pausable marquee. */
+export function LogoStrip({ title, names, className }: { title: React.ReactNode; names: string[]; className?: string }) {
+  const chip = (n: string, i: number, hidden?: boolean) => (
+    <li key={(hidden ? 'b' : 'a') + i} aria-hidden={hidden || undefined} className="shrink-0">
+      <span dir="ltr" className="inline-flex items-center gap-2 rounded-[14px] border border-line bg-surface px-5 py-3 text-[15px] font-medium text-body shadow-card">
+        <span aria-hidden="true" className="flex h-6 w-6 items-center justify-center rounded-lg bg-chip text-[11px] font-bold text-chip-ink">{n.slice(0, 1)}</span>
+        {n}
+      </span>
+    </li>
+  )
+  return (
+    <section className={cn('mx-auto max-w-[1280px] px-4 pb-2 pt-14 sm:px-8 sm:pt-[60px]', className)}>
+      <h2 className="mb-6 text-center text-sm font-medium text-muted">{title}</h2>
+      <div className="group relative overflow-hidden [mask-image:linear-gradient(90deg,transparent,#000_8%,#000_92%,transparent)]" dir="ltr">
+        <ul className="flex w-max gap-3 py-1 motion-safe:animate-[marquee_40s_linear_infinite] group-hover:[animation-play-state:paused] sm:gap-3.5">
+          {names.map((n, i) => chip(n, i))}
+          {names.map((n, i) => chip(n, i, true))}
+        </ul>
+      </div>
+      <style jsx global>{`
+        @keyframes marquee { from { transform: translateX(0) } to { transform: translateX(-50%) } }
+      `}</style>
+    </section>
   )
 }

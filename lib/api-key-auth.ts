@@ -11,6 +11,7 @@ import { NextApiRequest } from 'next'
 import { createHash } from 'crypto'
 import { supabaseAdmin } from './supabase'
 import { safeEqual } from './security'
+import { noteAddonClient } from './addon-usage'
 
 export interface ApiKeyAuth {
   userId: string
@@ -46,8 +47,22 @@ export function apiKeyHasPermission(auth: Pick<ApiKeyAuth, 'permissions'>, neede
 function headerKey(req: NextApiRequest): { key: string | null; bearer: string | null } {
   const x = req.headers['x-api-key']
   const auth = req.headers.authorization
-  const bearer = typeof auth === 'string' && auth.startsWith('Bearer ') ? auth.slice(7).trim() || null : null
+  let bearer = typeof auth === 'string' && auth.startsWith('Bearer ') ? auth.slice(7).trim() || null : null
+  // A dashboard client with no in-memory token may send "Bearer null".
+  if (bearer === 'null' || bearer === 'undefined') bearer = null
   return { key: typeof x === 'string' && x.trim() ? x.trim() : null, bearer }
+}
+
+/**
+ * True when the request comes from a WABEK page on this origin (not a
+ * cross-site form/fetch), so the HttpOnly session cookie may authenticate it.
+ */
+function sameOriginRequest(req: NextApiRequest): boolean {
+  const site = req.headers['sec-fetch-site']
+  if (typeof site === 'string') return site === 'same-origin'
+  const origin = req.headers.origin
+  if (typeof origin !== 'string' || !origin) return true
+  try { return new URL(origin).host === req.headers.host } catch { return false }
 }
 
 function legacyKey(req: NextApiRequest, allowBody: boolean): string | null {
@@ -100,7 +115,8 @@ export async function lookupApiKey(apiKey: string): Promise<ApiKeyAuth | null> {
 
 /**
  * Authenticate an integration request.
- * - allowJwt: a valid WABEK session JWT in `Authorization: Bearer` is accepted (dashboard calls).
+ * - allowJwt: a valid WABEK session JWT in `Authorization: Bearer` is accepted (dashboard calls),
+ *   and, when no key/bearer is sent at all, the same-origin session cookie.
  * - allowBody: also read `api_key` from the body (legacy, gated like the query string).
  */
 export async function authenticateApiKey(
@@ -119,13 +135,27 @@ export async function authenticateApiKey(
   }
 
   const headerCandidate = key || bearer
-  if (headerCandidate) return lookupApiKey(headerCandidate)
+  if (headerCandidate) return withAddonUsage(req, await lookupApiKey(headerCandidate))
 
   const legacy = legacyKey(req, !!opts.allowBody)
-  if (!legacy) return null
+  if (!legacy) {
+    // Dashboard calls after a reload carry only the HttpOnly session cookie.
+    if (opts.allowJwt && req.cookies?.['wabek_token'] && sameOriginRequest(req)) {
+      const { getAuthUser } = await import('./auth')
+      const r = await getAuthUser(req)
+      if (r.ok) return { userId: r.payload.userId, via: 'jwt' }
+    }
+    return null
+  }
   if (!queryApiKeyAllowed()) return null
   console.warn(`[api-key] DEPRECATED: API key sent in the query string/body on ${opts.route || req.url?.split('?')[0]} — send it in the X-API-Key header instead`)
-  return lookupApiKey(legacy)
+  return withAddonUsage(req, await lookupApiKey(legacy))
+}
+
+/** Records X-WABEK-Client (WordPress / WHMCS add-on version) for key-authenticated calls. */
+function withAddonUsage(req: NextApiRequest, auth: ApiKeyAuth | null): ApiKeyAuth | null {
+  if (auth) noteAddonClient(req, auth.userId)
+  return auth
 }
 
 const _apiLogAt = new Map<string, number>()

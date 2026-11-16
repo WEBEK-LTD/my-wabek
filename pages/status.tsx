@@ -11,7 +11,8 @@ import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, Select, Skel
 import type { Tone } from '@/components/ui'
 import { cn } from '@/components/ui/utils'
 import { MarketingPage, PageHero } from '@/components/marketing/MarketingPage'
-import { usePublicLang } from '@/components/marketing/usePublicLang'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/public/status'
 
 // Country codes for phone subscription
 const COUNTRIES = [
@@ -29,70 +30,31 @@ const COUNTRIES = [
   { code: '+49', name: 'Germany' },
 ]
 
-type L = Record<string, string>
+type Key = keyof typeof messages.en
 
-const SERVICES: { key: string; icon: React.ElementType; name: L }[] = [
-  { key: 'api', icon: ServerStackIcon, name: { en: 'API and Core Platform', ar: 'واجهة API والمنصة الأساسية', fr: 'API et plateforme principale', tr: 'API ve Çekirdek Platform' } },
-  { key: 'whatsapp', icon: ChatBubbleLeftRightIcon, name: { en: 'WhatsApp Message Delivery', ar: 'تسليم رسائل واتساب', fr: 'Livraison des messages WhatsApp', tr: 'WhatsApp Mesaj Teslimi' } },
-  { key: 'dashboard', icon: Squares2X2Icon, name: { en: 'Dashboard and Web App', ar: 'لوحة التحكم وتطبيق الويب', fr: 'Tableau de bord et application web', tr: 'Panel ve Web Uygulaması' } },
-  { key: 'campaigns', icon: PaperAirplaneIcon, name: { en: 'Bulk Campaigns', ar: 'الحملات الجماعية', fr: 'Campagnes en masse', tr: 'Toplu Kampanyalar' } },
-  { key: 'chatbot', icon: CpuChipIcon, name: { en: 'Chatbot Engine', ar: 'محرك روبوت المحادثة', fr: 'Moteur de chatbot', tr: 'Sohbet Botu Motoru' } },
-  { key: 'auth', icon: ShieldCheckIcon, name: { en: 'Authentication and OTP', ar: 'المصادقة ورموز التحقق OTP', fr: 'Authentification et OTP', tr: 'Kimlik Doğrulama ve OTP' } },
-  { key: 'webhooks', icon: LinkIcon, name: { en: 'Webhooks and Integrations', ar: 'Webhooks والتكاملات', fr: 'Webhooks et intégrations', tr: "Webhook'lar ve Entegrasyonlar" } },
-  { key: 'storage', icon: CircleStackIcon, name: { en: 'File Storage and Media', ar: 'تخزين الملفات والوسائط', fr: 'Stockage de fichiers et médias', tr: 'Dosya Depolama ve Medya' } },
+const SERVICES: { key: 'api' | 'whatsapp' | 'dashboard' | 'campaigns' | 'chatbot' | 'auth' | 'webhooks' | 'storage'; icon: React.ElementType }[] = [
+  { key: 'api', icon: ServerStackIcon },
+  { key: 'whatsapp', icon: ChatBubbleLeftRightIcon },
+  { key: 'dashboard', icon: Squares2X2Icon },
+  { key: 'campaigns', icon: PaperAirplaneIcon },
+  { key: 'chatbot', icon: CpuChipIcon },
+  { key: 'auth', icon: ShieldCheckIcon },
+  { key: 'webhooks', icon: LinkIcon },
+  { key: 'storage', icon: CircleStackIcon },
 ]
 
-const STATUS_META: Record<string, { tone: Tone; dot: string; label: L }> = {
-  operational: { tone: 'success', dot: 'bg-[#22A06B]', label: { en: 'Operational', ar: 'يعمل', fr: 'Opérationnel', tr: 'Çalışıyor' } },
-  degraded: { tone: 'warning', dot: 'bg-[#E08A3C]', label: { en: 'Degraded', ar: 'أداء منخفض', fr: 'Dégradé', tr: 'Düşük performans' } },
-  outage: { tone: 'danger', dot: 'bg-danger-solid', label: { en: 'Outage', ar: 'متوقف', fr: 'Panne', tr: 'Kesinti' } },
-  maintenance: { tone: 'violet', dot: 'bg-violet', label: { en: 'Maintenance', ar: 'صيانة', fr: 'Maintenance', tr: 'Bakım' } },
+const STATUS_META: Record<string, { tone: Tone; dot: string }> = {
+  operational: { tone: 'success', dot: 'bg-[#22A06B]' },
+  degraded: { tone: 'warning', dot: 'bg-[#E08A3C]' },
+  outage: { tone: 'danger', dot: 'bg-danger-solid' },
+  maintenance: { tone: 'violet', dot: 'bg-violet' },
 }
 
-const INCIDENT_STATUS: Record<string, { tone: Tone; label: L }> = {
-  resolved: { tone: 'success', label: { en: 'Resolved', ar: 'تم الحل', fr: 'Résolu', tr: 'Çözüldü' } },
-  investigating: { tone: 'danger', label: { en: 'Investigating', ar: 'قيد التحقيق', fr: 'Enquête en cours', tr: 'İnceleniyor' } },
-  identified: { tone: 'warning', label: { en: 'Identified', ar: 'تم تحديد السبب', fr: 'Identifié', tr: 'Tespit edildi' } },
-  monitoring: { tone: 'violet', label: { en: 'Monitoring', ar: 'قيد المراقبة', fr: 'Surveillance', tr: 'İzleniyor' } },
-}
-
-const S: Record<string, L> = {
-  title: { en: 'System Status', ar: 'حالة الخدمة', fr: 'État du système', tr: 'Sistem Durumu' },
-  all_ok: { en: 'All systems operational', ar: 'جميع الأنظمة تعمل', fr: 'Tous les systèmes sont opérationnels', tr: 'Tüm sistemler çalışıyor' },
-  some: { en: 'Some systems affected', ar: 'بعض الأنظمة متأثرة', fr: 'Certains systèmes sont affectés', tr: 'Bazı sistemler etkilendi' },
-  disruption: { en: 'Service disruption detected', ar: 'رُصد انقطاع في الخدمة', fr: 'Perturbation du service détectée', tr: 'Hizmet kesintisi tespit edildi' },
-  updated: { en: 'Last updated', ar: 'آخر تحديث', fr: 'Dernière mise à jour', tr: 'Son güncelleme' },
-  refresh: { en: 'Refresh', ar: 'تحديث', fr: 'Actualiser', tr: 'Yenile' },
-  current: { en: 'Current Status', ar: 'الحالة الحالية', fr: 'État actuel', tr: 'Mevcut Durum' },
-  all_operational: { en: 'All operational', ar: 'الكل يعمل', fr: 'Tout est opérationnel', tr: 'Hepsi çalışıyor' },
-  incidents_detected: { en: 'Incidents detected', ar: 'رُصدت أعطال', fr: 'Incidents détectés', tr: 'Olay tespit edildi' },
-  history: { en: 'Last 90 days', ar: 'آخر 90 يومًا', fr: '90 derniers jours', tr: 'Son 90 gün' },
-  history_legend: { en: 'Days with a reported incident', ar: 'أيام شهدت عطلًا مُبلَّغًا عنه', fr: 'Jours avec un incident signalé', tr: 'Olay bildirilen günler' },
-  no_incident_day: { en: 'No incidents reported', ar: 'لم يُبلَّغ عن أعطال', fr: 'Aucun incident signalé', tr: 'Bildirilen olay yok' },
-  past: { en: 'Past Incidents', ar: 'الأعطال السابقة', fr: 'Incidents passés', tr: 'Geçmiş Olaylar' },
-  no_incidents: { en: 'No incidents reported in the last 90 days', ar: 'لم يُبلَّغ عن أي أعطال خلال آخر 90 يومًا', fr: 'Aucun incident signalé au cours des 90 derniers jours', tr: 'Son 90 günde bildirilen olay yok' },
-  load_error: { en: "We couldn't load the live status right now.", ar: 'تعذّر تحميل الحالة المباشرة حاليًا.', fr: "Impossible de charger l'état en direct pour le moment.", tr: 'Canlı durum şu anda yüklenemedi.' },
-  retry: { en: 'Try again', ar: 'إعادة المحاولة', fr: 'Réessayer', tr: 'Tekrar dene' },
-  sub_title: { en: 'Get incident notifications', ar: 'تلقَّ إشعارات الأعطال', fr: 'Recevoir les notifications d’incident', tr: 'Olay bildirimleri alın' },
-  sub_desc: { en: 'Choose how you want to be notified when an incident starts or resolves.', ar: 'اختر طريقة إشعارك عند بدء أي عطل أو حلّه.', fr: 'Choisissez comment être prévenu au début ou à la résolution d’un incident.', tr: 'Bir olay başladığında veya çözüldüğünde nasıl bilgilendirileceğinizi seçin.' },
-  email: { en: 'Email', ar: 'البريد الإلكتروني', fr: 'E-mail', tr: 'E-posta' },
-  phone: { en: 'Phone', ar: 'الهاتف', fr: 'Téléphone', tr: 'Telefon' },
-  country: { en: 'Country code', ar: 'رمز الدولة', fr: 'Indicatif', tr: 'Ülke kodu' },
-  subscribe: { en: 'Subscribe', ar: 'اشترك', fr: "S'abonner", tr: 'Abone ol' },
-  subscribed: { en: 'Subscribed successfully!', ar: 'تم الاشتراك بنجاح.', fr: 'Abonnement réussi !', tr: 'Abonelik başarılı!' },
-  invalid: { en: 'Please enter a valid value', ar: 'يُرجى إدخال قيمة صحيحة', fr: 'Veuillez saisir une valeur valide', tr: 'Lütfen geçerli bir değer girin' },
-  sub_failed: { en: 'Failed to subscribe', ar: 'تعذّر الاشتراك', fr: "Échec de l'abonnement", tr: 'Abonelik başarısız' },
-  contact_title: { en: 'Send Us a Message', ar: 'راسلنا', fr: 'Envoyez-nous un message', tr: 'Bize Mesaj Gönderin' },
-  contact_desc: { en: 'We respond to all messages within 24 hours on business days.', ar: 'نرد على جميع الرسائل خلال 24 ساعة في أيام العمل.', fr: 'Nous répondons à tous les messages sous 24 heures les jours ouvrés.', tr: 'Tüm mesajlara iş günlerinde 24 saat içinde yanıt veriyoruz.' },
-  name: { en: 'Your Name', ar: 'الاسم', fr: 'Votre nom', tr: 'Adınız' },
-  email_addr: { en: 'Email Address', ar: 'البريد الإلكتروني', fr: 'Adresse e-mail', tr: 'E-posta adresi' },
-  subject: { en: 'Subject', ar: 'الموضوع', fr: 'Objet', tr: 'Konu' },
-  message: { en: 'Your message', ar: 'رسالتك', fr: 'Votre message', tr: 'Mesajınız' },
-  send: { en: 'Send Message', ar: 'أرسل الرسالة', fr: 'Envoyer le message', tr: 'Mesajı Gönder' },
-  sending: { en: 'Sending...', ar: 'جارٍ الإرسال…', fr: 'Envoi…', tr: 'Gönderiliyor…' },
-  required: { en: 'All fields required', ar: 'جميع الحقول مطلوبة', fr: 'Tous les champs sont obligatoires', tr: 'Tüm alanlar zorunludur' },
-  send_failed: { en: 'Failed to send', ar: 'تعذّر الإرسال', fr: "Échec de l'envoi", tr: 'Gönderilemedi' },
-  sent: { en: "Message sent! We'll get back to you soon.", ar: 'أُرسلت رسالتك، وسنعود إليك قريبًا.', fr: 'Message envoyé ! Nous revenons vers vous rapidement.', tr: 'Mesaj gönderildi! Yakında size dönüş yapacağız.' },
+const INCIDENT_STATUS: Record<string, { tone: Tone }> = {
+  resolved: { tone: 'success' },
+  investigating: { tone: 'danger' },
+  identified: { tone: 'warning' },
+  monitoring: { tone: 'violet' },
 }
 
 const DAY = 86400000
@@ -101,9 +63,7 @@ const dayKey = (d: Date) => d.toISOString().slice(0, 10)
 export default function StatusPage() {
   const { brandName } = useWhiteLabel()
   const name = brandName || 'WABEK'
-  const { lang, setLang, dir, pick } = usePublicLang()
-  const T = (k: string) => pick(S[k])
-  const locale = lang === 'ar' ? 'ar-EG' : lang
+  const { t: T, lang, dir, fmtDate, fmtDateTime } = useT(messages)
 
   const [svcStatus, setSvcStatus] = useState<Record<string, string>>({})
   const [incidents, setIncidents] = useState<any[]>([])
@@ -205,7 +165,6 @@ export default function StatusPage() {
       active="/status"
       lang={lang}
       dir={dir}
-      onLangChange={setLang}
       hero={
         <PageHero title={T('title')} className="pb-28 sm:pb-32">
           <div className="flex flex-col items-center gap-3" aria-live="polite">
@@ -224,9 +183,12 @@ export default function StatusPage() {
                 {overallText}
               </p>
             )}
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-brand-green">
+              <ShieldCheckIcon className="h-4 w-4" aria-hidden="true" />{T('uptime_badge')}
+            </span>
             {checkedAt && (
               <p className="text-xs text-deep-muted">
-                {T('updated')}: <time dateTime={checkedAt.toISOString()}>{checkedAt.toLocaleString(locale)}</time>
+                {T('updated')}: <time dateTime={checkedAt.toISOString()}>{fmtDateTime(checkedAt)}</time>
               </p>
             )}
           </div>
@@ -247,6 +209,7 @@ export default function StatusPage() {
           />
           {loading ? (
             <ul className="divide-y divide-line-soft" aria-busy="true">
+              <li className="sr-only" role="status">{T('loading')}</li>
               {SERVICES.map(s => (
                 <li key={s.key} className="flex items-center justify-between gap-4 px-5 py-4 sm:px-6">
                   <Skeleton className="h-5 w-48" />
@@ -270,9 +233,9 @@ export default function StatusPage() {
                   <li key={svc.key} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 transition-colors hover:bg-surface-2 sm:px-6">
                     <span className="flex items-center gap-3">
                       <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-chip text-chip-ink" aria-hidden="true"><Icon className="h-[18px] w-[18px]" /></span>
-                      <span className="text-sm font-medium text-ink">{pick(svc.name)}</span>
+                      <span className="text-sm font-medium text-ink">{T(`svc_${svc.key}`)}</span>
                     </span>
-                    <Badge tone={meta.tone} dot>{pick(meta.label)}</Badge>
+                    <Badge tone={meta.tone} dot>{T(`st_${getStatus(svc.key)}` as Key)}</Badge>
                   </li>
                 )
               })}
@@ -281,14 +244,14 @@ export default function StatusPage() {
 
           {/* 90-day incident strip */}
           {!loading && !loadError && (
-            <div className="border-t border-line-soft px-5 py-5 sm:px-6">
+            <div className="overflow-x-clip border-t border-line-soft px-5 py-5 sm:px-6">
               <div className="mb-3 flex items-center justify-between text-xs text-muted">
                 <span>{T('history')}</span>
-                <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#E08A3C]" aria-hidden="true" />{T('history_legend')}</span>
+                <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#E08A3C]" aria-hidden="true" />{T('resolved_incident')} · {T('history_legend')}</span>
               </div>
-              <div dir="ltr" className="flex h-8 gap-[2px]">
+              <div dir="ltr" className="flex h-8 gap-[2px] [&>span]:min-w-0 [&>span]:flex-1">
                 {days.map(d => {
-                  const label = `${d.date.toLocaleDateString(locale)} · ${d.incidents.length ? d.incidents.map(i => i.title).join('، ') : T('no_incident_day')}`
+                  const label = `${fmtDate(d.date)} · ${d.incidents.length ? d.incidents.map(i => i.title).join(T('list_sep')) : T('no_incident_day')}`
                   return (
                     <Tooltip key={dayKey(d.date)} content={label}>
                       <span
@@ -320,11 +283,11 @@ export default function StatusPage() {
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-ink">{inc.title}</p>
                       <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-                        <span className="inline-flex items-center gap-1"><CalendarDaysIcon className="h-3.5 w-3.5" aria-hidden="true" />{new Date(inc.incident_date).toLocaleDateString(locale)}</span>
+                        <span className="inline-flex items-center gap-1"><CalendarDaysIcon className="h-3.5 w-3.5" aria-hidden="true" />{fmtDate(inc.incident_date)}</span>
                         {inc.duration && <span className="inline-flex items-center gap-1"><ClockIcon className="h-3.5 w-3.5" aria-hidden="true" />{inc.duration}</span>}
                       </p>
                     </div>
-                    <Badge tone={ist.tone} className="shrink-0">{pick(ist.label)}</Badge>
+                    <Badge tone={ist.tone} className="shrink-0">{T(`inc_${INCIDENT_STATUS[inc.status] ? inc.status : 'resolved'}` as Key)}</Badge>
                   </li>
                 )
               })}
@@ -398,7 +361,7 @@ export default function StatusPage() {
                 <Field label={T('email_addr')} required><Input type="email" dir="ltr" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} autoComplete="email" /></Field>
               </div>
               <Field label={T('subject')} required><Input value={form.subject} onChange={e => setForm(f => ({ ...f, subject: e.target.value }))} /></Field>
-              <Field label={T('message')} required><Textarea rows={4} value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))} /></Field>
+              <Field label={T('message')} required><Textarea rows={4} placeholder={T('message_ph')} value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))} /></Field>
               {formError && <p role="alert" className="rounded-btn bg-danger-bg px-3.5 py-2.5 text-sm text-danger">{formError}</p>}
               <Button type="submit" size="lg" loading={formLoading} icon={PaperAirplaneIcon} className="rtl:[&_svg]:-scale-x-100">
                 {formLoading ? T('sending') : T('send')}

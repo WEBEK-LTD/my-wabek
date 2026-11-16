@@ -1,22 +1,27 @@
 import React from 'react'
 import { CheckIcon } from '@heroicons/react/20/solid'
 import { Avatar, cn } from '@/components/ui'
+import { localeFor, translate, useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/campaign-components'
+import { currentLang } from './shared'
 
-/** Example values for the preview only (never sent). */
-export function sampleValues(contactName: string): Record<string, string> {
+/** Example values for the preview only (never sent), in the UI language. */
+export function sampleValues(contactName: string, lang: string = currentLang()): Record<string, string> {
+  let date: string
+  try { date = new Date().toLocaleDateString(localeFor(lang)) } catch { date = new Date().toLocaleDateString('en-GB') }
   return {
-    name: contactName || 'سارة',
+    name: contactName || translate(messages, lang, 'sample_name'),
     phone: '+966500000000',
-    company: 'شركتي',
+    company: translate(messages, lang, 'sample_company'),
     amount: '99.00',
-    date: new Date().toLocaleDateString('ar-u-nu-latn'),
+    date,
     link: 'https://example.com',
   }
 }
 
 /** Replace {{name}} / {name} style placeholders with example values. */
-export function fillSample(text: string, contactName: string, extra: Record<string, string> = {}): string {
-  const vals = { ...sampleValues(contactName), ...extra }
+export function fillSample(text: string, contactName: string, extra: Record<string, string> = {}, lang?: string): string {
+  const vals = { ...sampleValues(contactName, lang), ...extra }
   return String(text || '')
     .replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (m, k) => (k.toLowerCase() in vals ? vals[k.toLowerCase()] : m))
     .replace(/\{([\w.-]+)\}/g, (m, k) => (k.toLowerCase() in vals ? vals[k.toLowerCase()] : m))
@@ -37,7 +42,7 @@ function formatLine(line: string, key: number): React.ReactNode {
   )
 }
 
-export function WhatsAppPreview({ message, contactName = 'سارة', header, footer, buttons, className, placeholder = 'ستظهر رسالتك هنا…' }: {
+export function WhatsAppPreview({ message, contactName: contactNameProp, header, footer, buttons, className, placeholder }: {
   message: string
   contactName?: string
   header?: React.ReactNode
@@ -47,14 +52,16 @@ export function WhatsAppPreview({ message, contactName = 'سارة', header, foo
   placeholder?: string
 }) {
   const text = String(message || '').trim()
-  const time = new Date().toLocaleTimeString('ar-u-nu-latn', { hour: '2-digit', minute: '2-digit' })
+  const { t, fmtTime } = useT(messages)
+  const contactName = contactNameProp ?? t('sample_name')
+  const time = fmtTime(new Date())
   return (
-    <figure className={cn('overflow-hidden rounded-panel border border-line bg-surface shadow-card', className)} aria-label="معاينة الرسالة كما تظهر في واتساب">
+    <figure className={cn('overflow-hidden rounded-panel border border-line bg-surface shadow-card', className)} aria-label={t('preview_aria')}>
       <div className="flex items-center gap-3 bg-deep-hero px-4 py-3 text-deep-ink">
-        <Avatar name={contactName || 'س'} size="sm" />
+        <Avatar name={contactName || t('preview_contact')} size="sm" />
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{contactName || 'جهة الاتصال'}</p>
-          <p className="text-[11px] text-deep-muted">متصل الآن</p>
+          <p className="truncate text-sm font-semibold">{contactName || t('preview_contact')}</p>
+          <p className="text-[11px] text-deep-muted">{t('preview_online')}</p>
         </div>
       </div>
       <div
@@ -72,7 +79,7 @@ export function WhatsAppPreview({ message, contactName = 'سارة', header, foo
                   ))}
                 </p>
               ) : (
-                <p className="text-muted">{placeholder}</p>
+                <p className="text-muted">{placeholder ?? t('preview_placeholder')}</p>
               )}
               {footer && <p className="mt-1.5 text-[11.5px] text-muted">{footer}</p>}
               <p className="mt-1 flex items-center justify-end gap-1 text-[10.5px] text-muted">

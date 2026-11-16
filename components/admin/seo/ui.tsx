@@ -2,8 +2,20 @@ import React from 'react'
 import { CheckCircleIcon, XCircleIcon } from '@heroicons/react/20/solid'
 import { Badge, Card, CardHeader, cn } from '@/components/ui'
 import type { Tone } from '@/components/ui'
+import { useT } from '@/lib/i18n-local'
 import { useAdminT } from '../i18n'
 import { scoreTone } from '../shared'
+import messages from '@/locales/admin/seo/ui'
+import pageNames from '@/locales/admin/seo/pages'
+
+/** Localised name of a public site page (falls back to its English label). */
+export function usePageLabel() {
+  const { t } = useT(pageNames)
+  return (p: { path: string; label: string }) => {
+    const name = t(p.path as keyof typeof pageNames.en)
+    return name === p.path ? p.label : name
+  }
+}
 
 export function SeoCard({ title, subtitle, icon, action, children, className, padding, headerClassName }: {
   title: React.ReactNode; subtitle?: React.ReactNode; icon?: React.ElementType; action?: React.ReactNode; children?: React.ReactNode; className?: string; padding?: 'none' | 'sm' | 'md' | 'lg'; headerClassName?: string
@@ -17,17 +29,17 @@ export function SeoCard({ title, subtitle, icon, action, children, className, pa
 }
 
 export function ScoreBadge({ score }: { score: number | null | undefined }) {
-  const { tr } = useAdminT()
-  const t = scoreTone(score)
-  const label = t === 'success' ? tr('جيد', 'Good') : t === 'warning' ? tr('مقبول', 'Fair') : t === 'danger' ? tr('ضعيف', 'Poor') : '—'
-  return <Badge tone={t as Tone} size="sm">{label}</Badge>
+  const { t } = useAdminT(messages)
+  const tone = scoreTone(score)
+  const label = tone === 'success' ? t('good') : tone === 'warning' ? t('fair') : tone === 'danger' ? t('poor') : '—'
+  return <Badge tone={tone as Tone} size="sm">{label}</Badge>
 }
 
 export function PriorityBadge({ p }: { p: string }) {
-  const { tr } = useAdminT()
+  const { t } = useAdminT(messages)
   const up = String(p).toUpperCase()
   const tone: Tone = up === 'HIGH' ? 'danger' : up === 'MEDIUM' ? 'warning' : 'neutral'
-  const label = up === 'HIGH' ? tr('عالية', 'High') : up === 'MEDIUM' ? tr('متوسطة', 'Medium') : tr('منخفضة', 'Low')
+  const label = up === 'HIGH' ? t('high') : up === 'MEDIUM' ? t('medium') : t('low')
   return <Badge tone={tone} size="sm">{label}</Badge>
 }
 
@@ -61,12 +73,12 @@ export function Meter({ label, value, detail }: { label: React.ReactNode; value:
 
 /** Google result preview. Always light, like the real SERP. */
 export function SerpPreview({ title, url, description }: { title?: string; url: string; description?: string }) {
-  const { tr } = useAdminT()
+  const { t } = useAdminT(messages)
   return (
     <div className="rounded-xl border border-line bg-white p-4 text-start" dir="ltr">
       <p className="text-[11px] text-[#1e6b3a]">{url}</p>
-      <p className="truncate text-[15px] font-medium text-[#1a0dab]">{title || tr('(بلا عنوان)', '(no title)')}</p>
-      <p className="mt-0.5 line-clamp-2 text-[12.5px] leading-snug text-[#4d5156]">{description || tr('سيظهر وصف Meta هنا…', 'Your meta description will appear here…')}</p>
+      <p className="truncate text-[15px] font-medium text-[#1a0dab]">{title || t('noTitle')}</p>
+      <p className="mt-0.5 line-clamp-2 text-[12.5px] leading-snug text-[#4d5156]">{description || t('metaDescriptionWillAppear')}</p>
     </div>
   )
 }

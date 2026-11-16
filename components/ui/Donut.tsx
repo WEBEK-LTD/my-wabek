@@ -1,5 +1,7 @@
 import React from 'react'
 import { cn, CHART_COLORS, formatNumber } from './utils'
+import { useT } from '@/lib/i18n-local'
+import uiMessages from '@/locales/ui'
 
 export interface DonutSegment {
   label: string
@@ -34,6 +36,7 @@ const R = 15.9155 // circumference = 100
  *   <Donut legend segments={[{ label: 'المساعد الذكي', value: 64 }, { label: 'الفريق', value: 36 }]} />
  */
 export function Donut({ segments, size = 120, thickness = 6, centerLabel, centerSub, legend, formatValue, ariaLabel, className }: DonutProps) {
+  const { t: tUi } = useT(uiMessages)
   const total = segments.reduce((s, x) => s + Math.max(0, x.value), 0)
   const items = segments.map((s, i) => ({
     ...s,
@@ -41,7 +44,7 @@ export function Donut({ segments, size = 120, thickness = 6, centerLabel, center
     pct: total > 0 ? (Math.max(0, s.value) / total) * 100 : 0,
   }))
   let offset = 0
-  const label = ariaLabel || items.map(s => `${s.label} ${Math.round(s.pct)}%`).join('، ')
+  const label = ariaLabel || items.map(s => tUi('segment_pct', { label: s.label, pct: Math.round(s.pct) })).join(tUi('list_sep'))
   const layout = legend === 'bottom' ? 'flex-col items-center' : 'flex-row items-center flex-wrap'
 
   return (

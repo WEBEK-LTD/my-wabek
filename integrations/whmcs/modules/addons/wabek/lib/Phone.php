@@ -37,7 +37,12 @@ final class Phone
      */
     public static function toE164(string $raw, string $countryIso = '', string $ccHint = ''): ?string
     {
-        $raw = trim($raw);
+        $raw = trim(strtr($raw, [
+            '٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4',
+            '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9',
+            '۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4',
+            '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9',
+        ]));
         if ($raw === '') {
             return null;
         }
@@ -112,18 +117,28 @@ final class Phone
         return (string) preg_replace('/\D/', '', $e164);
     }
 
-    /**
-     * The WhatsApp number of a client: the optional custom field override
-     * first, then the profile phone number + country.
-     */
+    /** The WhatsApp number of a client (E.164) or null. */
     public static function forClient(int $clientId): ?string
     {
+        return self::lookup($clientId)['phone'];
+    }
+
+    /**
+     * The WhatsApp number of a client and where it came from: the optional
+     * phone custom field first, then the admin override (client profile tab),
+     * then the profile phone number + country.
+     *
+     * @return array{phone:?string, source:string} source: field | override | profile | ''
+     */
+    public static function lookup(int $clientId): array
+    {
+        $none = ['phone' => null, 'source' => ''];
         if ($clientId <= 0) {
-            return null;
+            return $none;
         }
         $client = Capsule::table('tblclients')->where('id', $clientId)->first(['phonenumber', 'country']);
         if (!$client) {
-            return null;
+            return $none;
         }
         $country = (string) $client->country;
 
@@ -133,10 +148,85 @@ final class Phone
                 ->where('fieldid', $fieldId)->where('relid', $clientId)->value('value');
             $e = self::toE164($override, $country);
             if ($e !== null) {
-                return $e;
+                return ['phone' => $e, 'source' => 'field'];
             }
         }
-        return self::toE164((string) $client->phonenumber, $country);
+        $e = self::toE164(self::override($clientId), $country);
+        if ($e !== null) {
+            return ['phone' => $e, 'source' => 'override'];
+        }
+        $e = self::toE164((string) $client->phonenumber, $country);
+        return $e !== null ? ['phone' => $e, 'source' => 'profile'] : $none;
+    }
+
+    /** Number set by an admin on the client profile tab ('' when none, or before the 4.2.0 upgrade ran). */
+    public static function override(int $clientId): string
+    {
+        if ($clientId <= 0 || !self::overrideColumn()) {
+            return '';
+        }
+        return (string) Capsule::table(Consent::TABLE)->where('client_id', $clientId)->value('phone_override');
+    }
+
+    /** Store (E.164) or clear ('') the admin override. */
+    public static function setOverride(int $clientId, string $e164): void
+    {
+        if ($clientId <= 0 || !self::overrideColumn()) {
+            return;
+        }
+        Capsule::table(Consent::TABLE)->updateOrInsert(['client_id' => $clientId], [
+            'phone_override' => substr($e164, 0, 20),
+            'updated_at'     => date('Y-m-d H:i:s'),
+        ]);
+    }
+
+    /**
+     * Save the number a client chose (and confirmed with a WhatsApp code) where Phone::lookup() reads it first:
+     * the WhatsApp number custom field when one is configured, otherwise the override column.
+     */
+    public static function setClientNumber(int $clientId, string $e164): void
+    {
+        if ($clientId <= 0) {
+            return;
+        }
+        $fieldId = Config::int('phone_field_id');
+        if ($fieldId > 0) {
+            Capsule::table('tblcustomfieldsvalues')->updateOrInsert(['fieldid' => $fieldId, 'relid' => $clientId], ['value' => $e164]);
+            return;
+        }
+        self::setOverride($clientId, $e164);
+    }
+
+    /** The profile phone number of a client as E.164 (ignores the custom field and the override). */
+    public static function profileNumber(int $clientId): ?string
+    {
+        if ($clientId <= 0) {
+            return null;
+        }
+        $client = Capsule::table('tblclients')->where('id', $clientId)->first(['phonenumber', 'country']);
+        return $client ? self::toE164((string) $client->phonenumber, (string) $client->country) : null;
+    }
+
+    /** ISO country of a client ('' when unknown). */
+    public static function clientCountry(int $clientId): string
+    {
+        if ($clientId <= 0) {
+            return '';
+        }
+        return (string) Capsule::table('tblclients')->where('id', $clientId)->value('country');
+    }
+
+    private static function overrideColumn(): bool
+    {
+        static $has = null;
+        if ($has === null) {
+            try {
+                $has = Capsule::schema()->hasColumn(Consent::TABLE, 'phone_override');
+            } catch (\Throwable $e) {
+                $has = false;
+            }
+        }
+        return $has;
     }
 
     public static function mask(string $e164): string
@@ -146,5 +236,35 @@ final class Phone
             return $e164;
         }
         return substr($e164, 0, 4) . str_repeat('•', $len - 7) . substr($e164, -3);
+    }
+
+    /**
+     * Number from a form field that WHMCS decorates with its own country
+     * picker (intl-tel-input on type="tel" inputs). WHMCS posts the chosen
+     * calling code separately as "country-calling-code-<field>", and the field
+     * itself holds only the national number. A full number typed with "+" or
+     * "00" still wins over the picker.
+     */
+    public static function fromPost(string $field, string $countryIso = ''): ?string
+    {
+        $raw = Security::post($field, 32);
+        if ($raw === '') {
+            return null;
+        }
+        $cc = preg_replace('/\D/', '', Security::post('country-calling-code-' . $field, 6));
+        $trim = ltrim($raw);
+        if ($trim !== '' && ($trim[0] === '+' || strncmp(preg_replace('/\s/', '', $trim), '00', 2) === 0)) {
+            return self::toE164($raw, $countryIso);
+        }
+        if ($cc !== '') {
+            // National number with the picker's code; drop a trunk "0".
+            $national = ltrim((string) preg_replace('/\D/', '', strtr($raw, ['٠'=>'0','١'=>'1','٢'=>'2','٣'=>'3','٤'=>'4','٥'=>'5','٦'=>'6','٧'=>'7','٨'=>'8','٩'=>'9'])), '0');
+            // Typed the code again by habit (e.g. picker +966 and "9665…")?
+            if (strncmp($national, $cc, strlen($cc)) === 0 && strlen($national) >= 11) {
+                $national = substr($national, strlen($cc));
+            }
+            return self::toE164('+' . $cc . $national);
+        }
+        return self::toE164($raw, $countryIso);
     }
 }

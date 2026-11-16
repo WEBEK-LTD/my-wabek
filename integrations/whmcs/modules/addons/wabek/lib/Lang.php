@@ -6,7 +6,7 @@ if (!defined('WHMCS')) {
     die('This file cannot be accessed directly');
 }
 
-/** Module language strings (lang/english.php, lang/arabic.php). */
+/** Module language strings (lang/*.php), always on top of English. */
 final class Lang
 {
     /** @var array<string,string> */
@@ -14,7 +14,8 @@ final class Lang
     /** @var string */
     private static $language = 'english';
 
-    public const SUPPORTED = ['english', 'arabic'];
+    /** Full translations: english, arabic. Client area / checkout only (rest falls back to English): the others. */
+    public const SUPPORTED = ['english', 'arabic', 'french', 'german', 'spanish', 'turkish'];
 
     /** Use the strings WHMCS passed in $vars['_lang'], with English as fallback. */
     public static function init(array $vars = [], string $language = ''): void
@@ -53,6 +54,18 @@ final class Lang
         }
         $s = self::$strings[$key] ?? $key;
         return $replace ? strtr($s, $replace) : $s;
+    }
+
+    /** One string in a given language (English fallback) without changing the active language. */
+    public static function tIn(string $language, string $key): string
+    {
+        static $files = [];
+        $language = strtolower($language);
+        $language = in_array($language, self::SUPPORTED, true) ? $language : 'english';
+        if (!isset($files[$language])) {
+            $files[$language] = $language === 'english' ? self::file('english') : array_merge(self::file('english'), self::file($language));
+        }
+        return (string) ($files[$language][$key] ?? $key);
     }
 
     public static function all(): array

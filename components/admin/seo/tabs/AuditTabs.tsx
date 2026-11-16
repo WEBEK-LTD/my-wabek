@@ -3,20 +3,16 @@ import React from 'react'
 import {
   ArrowPathIcon, ArrowTopRightOnSquareIcon, BoltIcon, BugAntIcon, DocumentMagnifyingGlassIcon, ExclamationTriangleIcon, GlobeAltIcon, LinkIcon, MagnifyingGlassIcon, ShareIcon,
 } from '@heroicons/react/24/outline'
-import { Badge, Button, Card, EmptyState, StatCard, Tooltip, cn, formatNumber } from '@/components/ui'
+import { Badge, Button, Card, EmptyState, StatCard, Tooltip, cn } from '@/components/ui'
 import { useAdminT } from '../../i18n'
 import { Notice, ScoreRing } from '../../shared'
 import { PUBLIC_PAGES, type PublicPage } from '../data'
 import type { SeoState } from '../useSeoAdmin'
-import { Check, ListRow, Meter, ScoreBadge, SeoCard, SerpPreview } from '../ui'
-
-function usePageLabel() {
-  const { lang } = useAdminT()
-  return (p: PublicPage) => (lang === 'ar' ? p.ar : p.label)
-}
+import { Check, ListRow, Meter, ScoreBadge, SeoCard, SerpPreview, usePageLabel } from '../ui'
+import messages from '@/locales/admin/seo/audit'
 
 function PageHead({ page, children, extra }: { page: PublicPage; children?: React.ReactNode; extra?: React.ReactNode }) {
-  const { tr } = useAdminT()
+  const { t } = useAdminT(messages)
   const label = usePageLabel()
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -26,7 +22,7 @@ function PageHead({ page, children, extra }: { page: PublicPage; children?: Reac
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         {children}
-        <Tooltip content={tr('فتح الصفحة', 'Open page')}><Button size="icon-sm" variant="ghost" icon={ArrowTopRightOnSquareIcon} href={page.path} external aria-label={tr(`فتح ${label(page)}`, `Open ${label(page)}`)} /></Tooltip>
+        <Tooltip content={t('openPage')}><Button size="icon-sm" variant="ghost" icon={ArrowTopRightOnSquareIcon} href={page.path} external aria-label={t('openAlt', { page: label(page) })} /></Tooltip>
       </div>
     </div>
   )
@@ -34,40 +30,40 @@ function PageHead({ page, children, extra }: { page: PublicPage; children?: Reac
 
 /* ── Page analyzer ── */
 export function PagesTab({ s }: { s: SeoState }) {
-  const { tr } = useAdminT()
+  const { t, tn } = useAdminT(messages)
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted">{tr('تحليل فعلي للصفحات المنشورة: يجلب HTML ويفحص إشارات SEO.', 'Live analysis of your deployed pages — fetches the HTML and checks SEO signals.')}</p>
-        <Button size="sm" variant="secondary" icon={ArrowPathIcon} loading={s.analyzeAll} onClick={s.runAnalyzeAll}>{tr('تحليل الكل', 'Analyze all')}</Button>
+        <p className="text-sm text-muted">{t('liveAnalysisDeployedPages')}</p>
+        <Button size="sm" variant="secondary" icon={ArrowPathIcon} loading={s.analyzeAll} onClick={s.runAnalyzeAll}>{t('analyzeAll')}</Button>
       </div>
       {PUBLIC_PAGES.map(page => {
         const sc = s.pageScores[page.path]
         const busy = s.analyzing === page.path
         return (
           <Card key={page.path} className="space-y-4">
-            <PageHead page={page} extra={sc && !sc.error ? <><ScoreBadge score={sc.score} /><Badge size="sm" tone={sc.indexed ? 'success' : 'danger'}>{sc.indexed ? tr('مفهرسة', 'Indexed') : tr('غير مفهرسة', 'Not indexed')}</Badge></> : undefined}>
+            <PageHead page={page} extra={sc && !sc.error ? <><ScoreBadge score={sc.score} /><Badge size="sm" tone={sc.indexed ? 'success' : 'danger'}>{sc.indexed ? t('indexed') : t('notIndexed')}</Badge></> : undefined}>
               {sc && !sc.error && <ScoreRing value={sc.score} size={48} />}
-              <Button size="sm" variant="secondary" icon={sc ? ArrowPathIcon : MagnifyingGlassIcon} loading={busy} onClick={() => s.analyzePage(page.path)}>{sc ? tr('إعادة', 'Re-run') : tr('تحليل', 'Analyze')}</Button>
+              <Button size="sm" variant="secondary" icon={sc ? ArrowPathIcon : MagnifyingGlassIcon} loading={busy} onClick={() => s.analyzePage(page.path)}>{sc ? t('reRun') : t('analyze')}</Button>
             </PageHead>
             {sc?.error && <Notice tone="danger" icon={ExclamationTriangleIcon}>{(sc.issues || []).join(' · ')}</Notice>}
             {sc && !sc.error && (
               <>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                  <Meter label={tr('العنوان', 'Title')} value={sc.title} detail={sc.titleLen ? tr(`${sc.titleLen} حرفًا`, `${sc.titleLen} chars`) : undefined} />
-                  <Meter label={tr('الوصف', 'Meta desc')} value={sc.meta} detail={sc.metaLen ? tr(`${sc.metaLen} حرفًا`, `${sc.metaLen} chars`) : undefined} />
-                  <Meter label="H1" value={sc.h1} detail={sc.h1Count !== undefined ? tr(`${sc.h1Count} موجود`, `${sc.h1Count} found`) : undefined} />
-                  <Meter label={tr('السرعة', 'Speed')} value={sc.speed} detail={sc.sizeKB ? `${sc.sizeKB}KB` : undefined} />
-                  <Meter label={tr('الجوال', 'Mobile')} value={sc.mobile} detail="Viewport" />
+                  <Meter label={t('title')} value={sc.title} detail={sc.titleLen ? t('chars', { titleLen: sc.titleLen }) : undefined} />
+                  <Meter label={t('metaDesc')} value={sc.meta} detail={sc.metaLen ? t('chars2', { metaLen: sc.metaLen }) : undefined} />
+                  <Meter label="H1" value={sc.h1} detail={sc.h1Count !== undefined ? t('found', { h1Count: sc.h1Count }) : undefined} />
+                  <Meter label={t('speed')} value={sc.speed} detail={sc.sizeKB ? `${sc.sizeKB}KB` : undefined} />
+                  <Meter label={t('mobile')} value={sc.mobile} detail="Viewport" />
                 </div>
                 <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                  <Check ok={!!sc.hasCanonical} label={tr('رابط canonical', 'Canonical URL')} />
-                  <Check ok={!!sc.hasOgImage} label={tr('صورة OG', 'OG image')} />
-                  <Check ok={!!sc.hasStructuredData} label={tr('بيانات منظمة', 'Structured data')} />
-                  <Check ok={!sc.imgWithoutAlt} label={tr('نص بديل للصور', 'Alt text')} />
+                  <Check ok={!!sc.hasCanonical} label={t('canonicalUrl')} />
+                  <Check ok={!!sc.hasOgImage} label={t('ogImage')} />
+                  <Check ok={!!sc.hasStructuredData} label={t('structuredData')} />
+                  <Check ok={!sc.imgWithoutAlt} label={t('altText')} />
                 </div>
                 {sc.issues?.length > 0 && (
-                  <Notice tone="danger" icon={ExclamationTriangleIcon} title={tr(`${sc.issues.length} مشكلة`, `${sc.issues.length} issue(s) found`)}>
+                  <Notice tone="danger" icon={ExclamationTriangleIcon} title={tn('issuesFound', sc.issues.length, { n: sc.issues.length })}>
                     <ul className="mt-1 list-disc space-y-0.5 ps-4">{sc.issues.map((iss: string, i: number) => <li key={i}>{iss}</li>)}</ul>
                   </Notice>
                 )}
@@ -82,12 +78,12 @@ export function PagesTab({ s }: { s: SeoState }) {
 
 /* ── Content SEO ── */
 export function ContentTab({ s }: { s: SeoState }) {
-  const { tr } = useAdminT()
+  const { t, fmtNumber, tn } = useAdminT(messages)
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted">{tr('يجلب HTML الفعلي ويفحص الكلمات وسهولة القراءة وعدد الكلمات والعناوين.', 'Fetches the real HTML and checks keywords, readability, word count and headings.')}</p>
-        <Button size="sm" variant="secondary" icon={ArrowPathIcon} loading={s.parseAll} onClick={s.runParseAll}>{tr('تحليل كل الصفحات', 'Parse all pages')}</Button>
+        <p className="text-sm text-muted">{t('fetchesRealHtmlChecks')}</p>
+        <Button size="sm" variant="secondary" icon={ArrowPathIcon} loading={s.parseAll} onClick={s.runParseAll}>{t('parseAllPages')}</Button>
       </div>
       {PUBLIC_PAGES.slice(0, 7).map(page => {
         const d = s.parsedPages[page.path]
@@ -97,10 +93,10 @@ export function ContentTab({ s }: { s: SeoState }) {
         return (
           <Card key={page.path} className="space-y-4">
             <PageHead page={page} extra={d && !d.error ? <>
-              <Badge size="sm" tone="neutral" className="tabular">{tr(`${formatNumber(d.wordCount)} كلمة`, `${formatNumber(d.wordCount)} words`)}</Badge>
-              <Badge size="sm" tone={d.readabilityScore > 70 ? 'success' : 'warning'}>{tr('سهولة القراءة', 'Readability')} {d.readabilityScore}/100</Badge>
+              <Badge size="sm" tone="neutral" className="tabular">{tn('wordCount', d.wordCount, { n: fmtNumber(d.wordCount) })}</Badge>
+              <Badge size="sm" tone={d.readabilityScore > 70 ? 'success' : 'warning'}>{t('readability')} {d.readabilityScore}/100</Badge>
             </> : undefined}>
-              <Button size="sm" variant="secondary" icon={d ? ArrowPathIcon : DocumentMagnifyingGlassIcon} loading={busy} onClick={() => s.parsePage(page.path)}>{d ? tr('إعادة', 'Re-run') : tr('تحليل', 'Parse')}</Button>
+              <Button size="sm" variant="secondary" icon={d ? ArrowPathIcon : DocumentMagnifyingGlassIcon} loading={busy} onClick={() => s.parsePage(page.path)}>{d ? t('reRun') : t('parse')}</Button>
             </PageHead>
 
             {d && !d.error && (
@@ -113,16 +109,16 @@ export function ContentTab({ s }: { s: SeoState }) {
                         <span className="tabular text-xs text-muted">({h.items.length})</span>
                       </div>
                       {h.items.slice(0, 2).map((item: string, i: number) => <p key={i} dir="auto" className="truncate text-xs text-body">{item}</p>)}
-                      {!h.items.length && <p className="text-xs text-danger">{tr('لا يوجد', 'None found')}</p>}
+                      {!h.items.length && <p className="text-xs text-danger">{t('noneFound')}</p>}
                     </div>
                   ))}
                 </div>
-                <ListRow end={<span className={cn('text-xs', noAlt ? 'text-danger' : 'text-success')}>{noAlt ? tr(`${noAlt} صورة بلا نص بديل`, `${noAlt} images missing alt text`) : tr('كل الصور لها نص بديل', 'All images have alt text')}</span>}>
-                  <span className="text-xs text-muted">{tr('الصور:', 'Images:')} <span className="tabular font-medium text-ink">{(d.images || []).length}</span></span>
+                <ListRow end={<span className={cn('text-xs', noAlt ? 'text-danger' : 'text-success')}>{noAlt ? tn('imagesNoAlt', noAlt, { n: noAlt }) : t('allImagesHaveAlt')}</span>}>
+                  <span className="text-xs text-muted">{t('images')} <span className="tabular font-medium text-ink">{(d.images || []).length}</span></span>
                 </ListRow>
                 {topKws.length > 0 && (
                   <div>
-                    <p className="mb-2 text-xs text-muted">{tr('أبرز الكلمات في الصفحة:', 'Top keywords on the page:')}</p>
+                    <p className="mb-2 text-xs text-muted">{t('topKeywordsPage')}</p>
                     <div className="flex flex-wrap gap-1.5">{topKws.map(([kw, density]: [string, any]) => <Badge key={kw} size="sm" tone="neutral"><span dir="auto">{kw}</span> <span className="tabular opacity-70">{density}%</span></Badge>)}</div>
                   </div>
                 )}
@@ -130,26 +126,26 @@ export function ContentTab({ s }: { s: SeoState }) {
                   <div className="space-y-1.5">
                     <SerpPreview title={d.title} url={`waabek.com${page.path}`} description={d.metaDescription} />
                     <div className="flex gap-3 text-2xs">
-                      <span className={d.titleLen >= 30 && d.titleLen <= 60 ? 'text-success' : 'text-danger'}>{tr('العنوان:', 'Title:')} {d.titleLen}</span>
-                      <span className={d.metaLen >= 120 && d.metaLen <= 160 ? 'text-success' : 'text-danger'}>{tr('الوصف:', 'Meta:')} {d.metaLen}</span>
+                      <span className={d.titleLen >= 30 && d.titleLen <= 60 ? 'text-success' : 'text-danger'}>{t('title2')} {d.titleLen}</span>
+                      <span className={d.metaLen >= 120 && d.metaLen <= 160 ? 'text-success' : 'text-danger'}>{t('meta')} {d.metaLen}</span>
                     </div>
                   </div>
                 )}
                 <ul className="space-y-1 text-xs">
-                  {(d.h1 || []).length === 0 && <li className="text-danger">{tr('لا يوجد وسم H1 — أضف واحدًا بالكلمة الأساسية', 'No H1 tag — add one with your primary keyword')}</li>}
-                  {(d.h1 || []).length > 1 && <li className="text-warning">{tr(`عدة وسوم H1 (${d.h1.length}) — استخدم واحدًا فقط`, `Multiple H1 tags (${d.h1.length}) — use only one`)}</li>}
-                  {d.wordCount < 300 && <li className="text-warning">{tr(`عدد كلمات قليل (${d.wordCount}) — استهدف 500+`, `Low word count (${d.wordCount}) — aim for 500+`)}</li>}
-                  {d.wordCount > 300 && (d.h2 || []).length === 0 && <li className="text-warning">{tr('لا عناوين H2 — نظّم المحتوى بها', 'No H2 subheadings — add structure with H2 tags')}</li>}
-                  {d.titleLen > 60 && <li className="text-warning">{tr(`العنوان طويل (${d.titleLen}) — يقطعه Google عند 60`, `Title too long (${d.titleLen}) — Google truncates at 60`)}</li>}
-                  {d.titleLen < 30 && d.titleLen > 0 && <li className="text-warning">{tr(`العنوان قصير (${d.titleLen}) — استهدف 50-60`, `Title too short (${d.titleLen}) — aim for 50-60`)}</li>}
-                  {d.metaLen < 100 && <li className="text-warning">{tr(`الوصف قصير (${d.metaLen}) — استهدف 150-160`, `Meta description too short (${d.metaLen}) — aim for 150-160`)}</li>}
-                  {d.readabilityScore < 50 && <li className="text-warning">{tr(`سهولة قراءة منخفضة (${d.readabilityScore}/100) — جمل أقصر`, `Low readability (${d.readabilityScore}/100) — use shorter sentences`)}</li>}
-                  {(d.h1 || []).length === 1 && d.wordCount >= 300 && d.titleLen >= 30 && d.titleLen <= 60 && <li className="text-success">{tr('بنية الصفحة جيدة', 'Page structure looks good')}</li>}
+                  {(d.h1 || []).length === 0 && <li className="text-danger">{t('noH1TagAdd')}</li>}
+                  {(d.h1 || []).length > 1 && <li className="text-warning">{t('multipleH1TagsUse', { h1Count: d.h1.length })}</li>}
+                  {d.wordCount < 300 && <li className="text-warning">{t('lowWordCountAim', { wordCount: d.wordCount })}</li>}
+                  {d.wordCount > 300 && (d.h2 || []).length === 0 && <li className="text-warning">{t('noH2SubheadingsAdd')}</li>}
+                  {d.titleLen > 60 && <li className="text-warning">{t('titleTooLongGoogle', { titleLen: d.titleLen })}</li>}
+                  {d.titleLen < 30 && d.titleLen > 0 && <li className="text-warning">{t('titleTooShortAim', { titleLen: d.titleLen })}</li>}
+                  {d.metaLen < 100 && <li className="text-warning">{t('metaDescriptionTooShort', { metaLen: d.metaLen })}</li>}
+                  {d.readabilityScore < 50 && <li className="text-warning">{t('lowReadability100Use', { readabilityScore: d.readabilityScore })}</li>}
+                  {(d.h1 || []).length === 1 && d.wordCount >= 300 && d.titleLen >= 30 && d.titleLen <= 60 && <li className="text-success">{t('pageStructureLooksGood')}</li>}
                 </ul>
               </>
             )}
-            {d?.error && <Notice tone="danger" icon={ExclamationTriangleIcon}>{tr('تعذّر تحليل الصفحة:', 'Could not parse page:')} {d.error}</Notice>}
-            {!d && !busy && <p className="text-xs text-muted">{tr('اضغط «تحليل» لفحص هذه الصفحة', 'Click Parse to analyze this page')}</p>}
+            {d?.error && <Notice tone="danger" icon={ExclamationTriangleIcon}>{t('couldNotParsePage')} {d.error}</Notice>}
+            {!d && !busy && <p className="text-xs text-muted">{t('clickParseAnalyzePage')}</p>}
           </Card>
         )
       })}
@@ -159,21 +155,22 @@ export function ContentTab({ s }: { s: SeoState }) {
 
 /* ── Crawl monitor ── */
 export function CrawlTab({ s }: { s: SeoState }) {
-  const { tr } = useAdminT()
+  const { t, fmtNumber, tn } = useAdminT(messages)
+  const pageLabel = usePageLabel()
   const rows = Array.isArray(s.crawlResults) ? s.crawlResults.filter(Boolean) : []
   return (
     <div className="space-y-5">
       {rows.length > 0 && (
         <div className="grid grid-cols-3 gap-3.5">
-          <StatCard label={tr('صفحات سليمة', 'Pages OK')} value={formatNumber(rows.filter(r => r.status === 200).length)} subTone="success" />
-          <StatCard label={tr('أخطاء', 'Errors')} value={formatNumber(rows.filter(r => r.status !== 200).length)} subTone="danger" />
-          <StatCard label={tr('إجمالي المشكلات', 'Total issues')} value={formatNumber(rows.reduce((a, r) => a + (r?.issues || 0), 0))} />
+          <StatCard label={t('pagesOk')} value={fmtNumber(rows.filter(r => r.status === 200).length)} subTone="success" />
+          <StatCard label={t('errors')} value={fmtNumber(rows.filter(r => r.status !== 200).length)} subTone="danger" />
+          <StatCard label={t('totalIssues')} value={fmtNumber(rows.reduce((a, r) => a + (r?.issues || 0), 0))} />
         </div>
       )}
-      <SeoCard icon={BugAntIcon} title={tr('مراقبة فحص الموقع', 'Site crawl monitor')} subtitle={tr('يفحص الصفحات العامة ويكشف 404 والوسوم الناقصة والمشكلات التقنية.', 'Crawls public pages and detects 404s, missing tags and technical issues.')}
-        action={<Button size="sm" icon={BugAntIcon} loading={s.crawling} onClick={s.runCrawl}>{tr('فحص كامل', 'Run full crawl')}</Button>}>
+      <SeoCard icon={BugAntIcon} title={t('siteCrawlMonitor')} subtitle={t('crawlsPublicPagesDetects')}
+        action={<Button size="sm" icon={BugAntIcon} loading={s.crawling} onClick={s.runCrawl}>{t('runFullCrawl')}</Button>}>
         {rows.length === 0 ? (
-          <EmptyState size="sm" icon={BugAntIcon} title={tr('لا توجد نتائج فحص بعد', 'No crawl results yet')} description={tr('شغّل الفحص لتحليل كل الصفحات العامة.', 'Run a crawl to analyze all public pages.')} />
+          <EmptyState size="sm" icon={BugAntIcon} title={t('noCrawlResultsYet')} description={t('runCrawlAnalyzeAll')} />
         ) : (
           <ul className="space-y-2">
             {rows.map((r: any, i: number) => {
@@ -181,13 +178,13 @@ export function CrawlTab({ s }: { s: SeoState }) {
               return (
                 <li key={i} className={cn('flex flex-wrap items-center gap-3 rounded-xl px-3 py-2.5', bad ? 'border border-danger/25 bg-danger-bg' : 'bg-surface-2')}>
                   <Badge size="sm" tone={r.status === 200 ? 'success' : r.status === 404 ? 'danger' : 'neutral'}><span dir="ltr">{r.status}</span></Badge>
-                  <div className="min-w-0 flex-1"><p className="truncate text-sm text-ink">{r.label}</p><p dir="ltr" className="text-start font-mono text-2xs text-muted">{r.path}</p></div>
+                  <div className="min-w-0 flex-1"><p className="truncate text-sm text-ink">{pageLabel(r)}</p><p dir="ltr" className="text-start font-mono text-2xs text-muted">{r.path}</p></div>
                   <div className="flex flex-wrap gap-1.5 text-2xs">
                     {r.score > 0 && !isNaN(r.score) && <Badge size="sm" tone={r.score >= 80 ? 'success' : r.score >= 60 ? 'warning' : 'danger'}>SEO {Math.round(r.score)}</Badge>}
-                    {r.issues > 0 && <Badge size="sm" tone="warning">{tr(`${r.issues} مشكلة`, `${r.issues} issues`)}</Badge>}
+                    {r.issues > 0 && <Badge size="sm" tone="warning">{tn('issueCount', r.issues, { n: r.issues })}</Badge>}
                     {!!r.size && <Badge size="sm" tone="neutral">{r.size}KB</Badge>}
-                    {r.hasCanonical === false && <Badge size="sm" tone="warning">{tr('بلا canonical', 'No canonical')}</Badge>}
-                    {r.hasStructuredData === false && <Badge size="sm" tone="violet">{tr('بلا مخطط', 'No schema')}</Badge>}
+                    {r.hasCanonical === false && <Badge size="sm" tone="warning">{t('noCanonical')}</Badge>}
+                    {r.hasStructuredData === false && <Badge size="sm" tone="violet">{t('noSchema')}</Badge>}
                   </div>
                 </li>
               )
@@ -201,33 +198,33 @@ export function CrawlTab({ s }: { s: SeoState }) {
 
 /* ── Core Web Vitals ── */
 export function SpeedTab({ s }: { s: SeoState }) {
-  const { tr } = useAdminT()
+  const { t } = useAdminT(messages)
   const guide = [
-    { check: tr('استخدم next/image لتحويل WebP والتحميل الكسول تلقائيًا', 'Use next/image for automatic WebP + lazy loading'), impact: 'HIGH', effort: 'LOW' },
-    { check: tr('فعّل تحسين أصول Netlify (تصغير CSS/JS)', 'Enable Netlify asset optimization (minify CSS/JS)'), impact: 'HIGH', effort: 'LOW' },
-    { check: tr('حمّل الخطوط الأساسية مسبقًا', 'Preload critical fonts to eliminate render-blocking'), impact: 'MEDIUM', effort: 'LOW' },
-    { check: tr('استيراد ديناميكي لمكوّنات اللوحة الكبيرة', 'Use dynamic imports for large dashboard components'), impact: 'HIGH', effort: 'MEDIUM' },
-    { check: tr('أزل CSS غير المستخدم من Tailwind', 'Remove unused CSS from Tailwind build'), impact: 'MEDIUM', effort: 'LOW' },
-    { check: tr('أضف تلميحات الموارد (dns-prefetch, preconnect)', 'Add resource hints (dns-prefetch, preconnect)'), impact: 'MEDIUM', effort: 'LOW' },
-    { check: tr('خزّن ردود API مؤقتًا (SWR)', 'Implement SWR caching for API responses'), impact: 'HIGH', effort: 'MEDIUM' },
-    { check: tr('حدّد أبعاد الصور لتجنّب CLS', 'Set explicit width/height on all images to prevent CLS'), impact: 'MEDIUM', effort: 'LOW' },
+    { check: t('useNextImageAutomatic'), impact: 'HIGH', effort: 'LOW' },
+    { check: t('enableNetlifyAssetOptimization'), impact: 'HIGH', effort: 'LOW' },
+    { check: t('preloadCriticalFontsEliminate'), impact: 'MEDIUM', effort: 'LOW' },
+    { check: t('useDynamicImportsLarge'), impact: 'HIGH', effort: 'MEDIUM' },
+    { check: t('removeUnusedCssTailwind'), impact: 'MEDIUM', effort: 'LOW' },
+    { check: t('addResourceHintsDns'), impact: 'MEDIUM', effort: 'LOW' },
+    { check: t('implementSwrCachingApi'), impact: 'HIGH', effort: 'MEDIUM' },
+    { check: t('setExplicitWidthHeight'), impact: 'MEDIUM', effort: 'LOW' },
   ]
   return (
     <div className="space-y-5">
-      <SeoCard icon={BoltIcon} title={tr('مؤشرات أداء الويب الأساسية', 'Core Web Vitals')} subtitle={tr('درجات فعلية من Google PageSpeed (جوال). حلّل كل صفحة على حدة.', 'Real scores from Google PageSpeed (mobile). Analyze each page.')}>
+      <SeoCard icon={BoltIcon} title={t('coreWebVitals')} subtitle={t('realScoresGooglePagespeed')}>
         <div className="space-y-3">
           {PUBLIC_PAGES.slice(0, 7).map(page => {
             const d = s.speedData[page.path]
             return (
               <div key={page.path} className="space-y-3 rounded-xl border border-line-soft p-4">
                 <PageHead page={page}>
-                  <Button size="sm" variant="secondary" icon={d ? ArrowPathIcon : BoltIcon} loading={s.speedLoading === page.path} onClick={() => s.checkSpeed(page.path)}>{d ? tr('إعادة الفحص', 'Re-check') : tr('تحليل', 'Analyze')}</Button>
+                  <Button size="sm" variant="secondary" icon={d ? ArrowPathIcon : BoltIcon} loading={s.speedLoading === page.path} onClick={() => s.checkSpeed(page.path)}>{d ? t('reCheck') : t('analyze')}</Button>
                 </PageHead>
-                {d?.error && <Notice tone="danger" icon={ExclamationTriangleIcon}>{tr('تعذّر الحصول على نتيجة PageSpeed لهذه الصفحة.', 'Could not get a PageSpeed result for this page.')}{d.status ? ` (HTTP ${d.status})` : ''}</Notice>}
+                {d?.error && <Notice tone="danger" icon={ExclamationTriangleIcon}>{t('couldNotGetPagespeed')}{d.status ? ` (HTTP ${d.status})` : ''}</Notice>}
                 {d && !d.error && (
                   <>
                     <div className="grid grid-cols-4 gap-2">
-                      {[{ l: tr('الأداء', 'Performance'), v: d.performance }, { l: 'SEO', v: d.seo }, { l: tr('الإتاحة', 'Accessibility'), v: d.accessibility }, { l: tr('أفضل الممارسات', 'Best practices'), v: d.bestPractices }].map(m => (
+                      {[{ l: t('performance'), v: d.performance }, { l: 'SEO', v: d.seo }, { l: t('accessibility'), v: d.accessibility }, { l: t('bestPractices'), v: d.bestPractices }].map(m => (
                         <div key={m.l} className="flex flex-col items-center gap-1 rounded-xl bg-surface-2 p-2.5 text-center">
                           <ScoreRing value={m.v} size={48} good={90} fair={50} label={m.l} />
                           <span className="text-2xs text-muted">{m.l}</span>
@@ -235,7 +232,7 @@ export function SpeedTab({ s }: { s: SeoState }) {
                       ))}
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                      {[{ l: 'LCP', v: d.lcp, tip: tr('يجب أن يكون أقل من 2.5 ث', 'Should be < 2.5s') }, { l: 'CLS', v: d.cls, tip: tr('يجب أن يكون أقل من 0.1', 'Should be < 0.1') }, { l: 'TTI', v: d.fid, tip: tr('يجب أن يكون أقل من 3.8 ث', 'Should be < 3.8s') }].map(v => (
+                      {[{ l: 'LCP', v: d.lcp, tip: t('should25s') }, { l: 'CLS', v: d.cls, tip: t('should01') }, { l: 'TTI', v: d.fid, tip: t('should38s') }].map(v => (
                         <div key={v.l} className="rounded-xl bg-surface-2 p-2.5 text-center">
                           <p dir="ltr" className="tabular text-sm font-bold text-ink">{v.v}</p>
                           <p className="text-2xs text-muted">{v.l} · {v.tip}</p>
@@ -249,10 +246,10 @@ export function SpeedTab({ s }: { s: SeoState }) {
           })}
         </div>
       </SeoCard>
-      <SeoCard title={tr('دليل تحسين الأداء', 'Performance optimization guide')}>
+      <SeoCard title={t('performanceOptimizationGuide')}>
         <div className="space-y-2">
           {guide.map((g, i) => (
-            <ListRow key={i} end={<div className="flex gap-1"><Badge size="sm" tone={g.impact === 'HIGH' ? 'success' : 'warning'}>{tr('الأثر', 'Impact')}: {g.impact === 'HIGH' ? tr('عالٍ', 'High') : tr('متوسط', 'Medium')}</Badge><Badge size="sm" tone={g.effort === 'LOW' ? 'brand' : 'warning'}>{tr('الجهد', 'Effort')}: {g.effort === 'LOW' ? tr('قليل', 'Low') : tr('متوسط', 'Medium')}</Badge></div>}>
+            <ListRow key={i} end={<div className="flex gap-1"><Badge size="sm" tone={g.impact === 'HIGH' ? 'success' : 'warning'}>{t('impact')}: {g.impact === 'HIGH' ? t('high') : t('medium')}</Badge><Badge size="sm" tone={g.effort === 'LOW' ? 'brand' : 'warning'}>{t('effort')}: {g.effort === 'LOW' ? t('low') : t('medium')}</Badge></div>}>
               <p className="text-sm text-ink">{g.check}</p>
             </ListRow>
           ))}
@@ -264,7 +261,7 @@ export function SpeedTab({ s }: { s: SeoState }) {
 
 /* ── Internal links ── */
 export function LinksTab({ s }: { s: SeoState }) {
-  const { tr } = useAdminT()
+  const { t } = useAdminT(messages)
   const label = usePageLabel()
   const pages = PUBLIC_PAGES.slice(0, 7)
   const parsed = s.parsedPages
@@ -288,22 +285,22 @@ export function LinksTab({ s }: { s: SeoState }) {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted">{tr('اكتشاف فعلي للروابط من HTML الصفحات: الداخلية والخارجية والصفحات اليتيمة.', 'Real link detection from page HTML: internal, external and orphan pages.')}</p>
-        <Button size="sm" variant="secondary" icon={ArrowPathIcon} loading={s.parseAll} onClick={s.runParseAll}>{tr('فحص كل الصفحات', 'Crawl all pages')}</Button>
+        <p className="text-sm text-muted">{t('realLinkDetectionPage')}</p>
+        <Button size="sm" variant="secondary" icon={ArrowPathIcon} loading={s.parseAll} onClick={s.runParseAll}>{t('crawlAllPages')}</Button>
       </div>
       {!has ? (
-        <EmptyState variant="card" icon={ShareIcon} title={tr('لا توجد بيانات روابط بعد', 'No link data yet')} description={tr('افحص الصفحات لاكتشاف الروابط الفعلية.', 'Crawl the pages to detect real links.')}
-          action={<Button size="sm" loading={s.parseAll} onClick={s.runParseAll}>{tr('بدء الفحص', 'Start crawl')}</Button>} />
+        <EmptyState variant="card" icon={ShareIcon} title={t('noLinkDataYet')} description={t('crawlPagesDetectReal')}
+          action={<Button size="sm" loading={s.parseAll} onClick={s.runParseAll}>{t('startCrawl')}</Button>} />
       ) : (
         <>
-          <SeoCard icon={ShareIcon} title={tr('خريطة الروابط', 'Page link map')}>
+          <SeoCard icon={ShareIcon} title={t('pageLinkMap')}>
             <ul className="space-y-2">
               {pages.map(page => {
                 const d = parsed[page.path]
                 if (!d || d.error) return (
                   <li key={page.path} className="flex items-center gap-3 rounded-xl bg-surface-2 px-3 py-2.5 opacity-70">
-                    <p className="min-w-0 flex-1 text-sm text-muted">{label(page)} — {tr('لم يُحلَّل بعد', 'not parsed yet')}</p>
-                    <Button size="xs" variant="secondary" loading={s.parsing === page.path} onClick={() => s.parsePage(page.path)}>{tr('تحليل', 'Parse')}</Button>
+                    <p className="min-w-0 flex-1 text-sm text-muted">{label(page)} — {t('notParsedYet')}</p>
+                    <Button size="xs" variant="secondary" loading={s.parsing === page.path} onClick={() => s.parsePage(page.path)}>{t('parse')}</Button>
                   </li>
                 )
                 const internal = (d.links || []).filter((l: any) => l.isInternal)
@@ -315,18 +312,18 @@ export function LinksTab({ s }: { s: SeoState }) {
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          {orphan && <Badge size="sm" tone="danger">{tr('يتيمة', 'Orphan')}</Badge>}
+                          {orphan && <Badge size="sm" tone="danger">{t('orphan')}</Badge>}
                           <p className="text-sm font-medium text-ink">{label(page)}</p>
                           <p dir="ltr" className="font-mono text-2xs text-muted">{page.path}</p>
                         </div>
                         <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted">
-                          <span>{tr(`${internal.length} داخلية صادرة`, `${internal.length} internal out`)}</span>
-                          <span>{tr(`${external.length} خارجية صادرة`, `${external.length} external out`)}</span>
-                          <span className={orphan ? 'text-danger' : 'text-success'}>{tr(`${inbound.length} واردة`, `${inbound.length} inbound`)}</span>
+                          <span>{t('internalOut', { internalCount: internal.length })}</span>
+                          <span>{t('externalOut', { externalCount: external.length })}</span>
+                          <span className={orphan ? 'text-danger' : 'text-success'}>{t('inbound', { inboundCount: inbound.length })}</span>
                         </div>
-                        {orphan && <p className="mt-1 text-xs text-danger">{tr('لا تربط أي صفحة أخرى بهذه الصفحة — قد لا يكتشفها Google', 'No other page links here — Google may not discover it')}</p>}
+                        {orphan && <p className="mt-1 text-xs text-danger">{t('noOtherPageLinks')}</p>}
                       </div>
-                      <Button size="icon-sm" variant="ghost" icon={ArrowPathIcon} aria-label={tr('إعادة التحليل', 'Re-parse')} loading={s.parsing === page.path} onClick={() => s.parsePage(page.path)} />
+                      <Button size="icon-sm" variant="ghost" icon={ArrowPathIcon} aria-label={t('reParse')} loading={s.parsing === page.path} onClick={() => s.parsePage(page.path)} />
                     </div>
                     {internal.length > 0 && (
                       <div className="flex flex-wrap gap-1" dir="ltr">
@@ -340,20 +337,20 @@ export function LinksTab({ s }: { s: SeoState }) {
             </ul>
           </SeoCard>
           <div className="grid gap-5 lg:grid-cols-2">
-            <SeoCard icon={LinkIcon} title={tr('فرص ربط داخلي', 'Internal link opportunities')}>
-              {opportunities.length === 0 ? <p className="text-sm text-success">{tr('لا توجد فرص واضحة ناقصة — الصفحات المرتبطة موصولة.', 'No obvious opportunities missing — related pages seem linked.')}</p> : (
+            <SeoCard icon={LinkIcon} title={t('internalLinkOpportunities')}>
+              {opportunities.length === 0 ? <p className="text-sm text-success">{t('noObviousOpportunitiesMissing')}</p> : (
                 <ul className="space-y-2">
                   {opportunities.slice(0, 8).map((o, i) => (
                     <ListRow key={i}>
                       <p dir="ltr" className="text-start font-mono text-xs"><span className="text-link">{o.from}</span> → <span className="text-success">{o.to}</span></p>
-                      <p className="text-2xs text-muted">{tr('المواضيع متقاربة — أضف رابطًا سياقيًا', 'Content topics overlap — add a contextual link')}</p>
+                      <p className="text-2xs text-muted">{t('contentTopicsOverlapAdd')}</p>
                     </ListRow>
                   ))}
                 </ul>
               )}
             </SeoCard>
-            <SeoCard icon={GlobeAltIcon} title={tr('روابط خارجية', 'External links found')}>
-              {externals.length === 0 ? <p className="text-sm text-muted">{tr('لم تُكتشف روابط خارجية بعد', 'No external links detected yet')}</p> : (
+            <SeoCard icon={GlobeAltIcon} title={t('externalLinksFound')}>
+              {externals.length === 0 ? <p className="text-sm text-muted">{t('noExternalLinksDetected')}</p> : (
                 <ul className="space-y-1.5">
                   {externals.map(({ path, l }, i) => (
                     <li key={path + i} dir="ltr" className="flex items-center gap-2 rounded-lg bg-surface-2 px-2.5 py-1.5 text-xs">

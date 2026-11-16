@@ -3,6 +3,8 @@ import {
   CloudIcon, QrCodeIcon, CheckIcon, ExclamationTriangleIcon, WrenchScrewdriverIcon, PlusIcon,
 } from '@heroicons/react/24/outline'
 import { Badge, Button, Modal, cn } from '@/components/ui'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/instances'
 
 function Point({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   const Icon = ok ? CheckIcon : ExclamationTriangleIcon
@@ -27,8 +29,9 @@ export function ConnectNumberDialog({ open, onClose, onMeta, metaLoading, onManu
   onWeb: () => void
   webLoading?: boolean
 }) {
+  const { t } = useT(messages)
   return (
-    <Modal open={open} onClose={onClose} size="xl" icon={PlusIcon} title="ربط رقم واتساب" description="اختر طريقة الربط المناسبة لنشاطك. يمكنك ربط أكثر من رقم بطرق مختلفة.">
+    <Modal open={open} onClose={onClose} size="xl" icon={PlusIcon} title={t('connectTitle')} description={t('connectDesc')}>
       <div className="grid gap-4 md:grid-cols-2">
         {/* Path 1 — Official Cloud API */}
         <section className="relative flex flex-col overflow-hidden rounded-panel border-2 border-brand-teal/40 bg-surface p-5 shadow-card">
@@ -38,22 +41,22 @@ export function ConnectNumberDialog({ open, onClose, onMeta, metaLoading, onManu
               <CloudIcon className="h-6 w-6" aria-hidden="true" />
             </span>
             <div className="min-w-0">
-              <h3 className="font-semibold text-ink">واجهة Meta الرسمية (Cloud API)</h3>
-              <Badge tone="success" size="sm" className="mt-1">موصى بها</Badge>
+              <h3 className="font-semibold text-ink">{t('cloudTitle')}</h3>
+              <Badge tone="success" size="sm" className="mt-1">{t('recommended')}</Badge>
             </div>
           </div>
           <ul className="relative mt-4 flex-1 space-y-2">
-            <Point ok>منتج رسمي من Meta دون خطر حظر الرقم</Point>
-            <Point ok>استقرار عالٍ ومناسب للإرسال بكميات كبيرة</Point>
-            <Point ok>يدعم القوالب المعتمدة خارج نافذة الـ 24 ساعة</Point>
-            <Point ok={false}>يتطلب حساب Meta Business وقد يحتاج إلى توثيق النشاط</Point>
+            <Point ok>{t('cloudPoint1')}</Point>
+            <Point ok>{t('cloudPoint2')}</Point>
+            <Point ok>{t('cloudPoint3')}</Point>
+            <Point ok={false}>{t('cloudPoint4')}</Point>
           </ul>
           <div className="relative mt-5 flex flex-col gap-2">
             <Button icon={CloudIcon} loading={metaLoading} onClick={onMeta} fullWidth>
-              {metaLoading ? 'جارٍ الاتصال بـ Meta…' : 'الربط عبر Meta'}
+              {metaLoading ? t('connectingMeta') : t('connectMeta')}
             </Button>
             <Button variant="ghost" size="sm" icon={WrenchScrewdriverIcon} onClick={onManual} fullWidth>
-              إعداد يدوي (Phone Number ID ورمز الوصول)
+              {t('manualSetup')}
             </Button>
           </div>
         </section>
@@ -65,19 +68,19 @@ export function ConnectNumberDialog({ open, onClose, onMeta, metaLoading, onManu
               <QrCodeIcon className="h-6 w-6" aria-hidden="true" />
             </span>
             <div className="min-w-0">
-              <h3 className="font-semibold text-ink">واتساب ويب (رمز QR)</h3>
-              <Badge tone="warning" size="sm" className="mt-1">طريقة غير رسمية</Badge>
+              <h3 className="font-semibold text-ink">{t('webTitle')}</h3>
+              <Badge tone="warning" size="sm" className="mt-1">{t('unofficial')}</Badge>
             </div>
           </div>
           <ul className="mt-4 flex-1 space-y-2">
-            <Point ok>دون موافقة من Meta ويعمل مع أي رقم</Point>
-            <Point ok>دون رسوم على كل رسالة، مع الوسائط والتفاعلات</Point>
-            <Point ok={false}>مخالف لشروط واتساب وقد يتعرّض الرقم للحظر</Point>
-            <Point ok={false}>غير مناسب للإرسال بكميات كبيرة ويحتاج خادم جلسات</Point>
+            <Point ok>{t('webPoint1')}</Point>
+            <Point ok>{t('webPoint2')}</Point>
+            <Point ok={false}>{t('webPoint3')}</Point>
+            <Point ok={false}>{t('webPoint4')}</Point>
           </ul>
           <div className="mt-5">
             <Button variant="dark" icon={QrCodeIcon} loading={webLoading} onClick={onWeb} fullWidth>
-              {webLoading ? 'جارٍ إنشاء الرمز…' : 'الربط برمز QR'}
+              {webLoading ? t('creatingCode') : t('connectQr')}
             </Button>
           </div>
         </section>

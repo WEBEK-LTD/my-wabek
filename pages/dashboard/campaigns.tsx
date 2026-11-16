@@ -9,22 +9,29 @@ import {
   MagnifyingGlassIcon, ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline'
 import { Button, ConfirmDialog, EmptyState, PageHeader, SearchInput, Skeleton, StatCard, Tabs } from '@/components/ui'
-import { ErrorState, Notice } from '@/components/settings/Shared'
+import { Notice } from '@/components/settings/Shared'
+import { LoadError } from '@/components/analytics/LoadError'
 import { CampaignWizard } from '@/components/campaigns/CampaignWizard'
 import { CampaignRow, CampaignRowData } from '@/components/campaigns/CampaignRow'
-import { fmtNum, friendlyError, isMemberForbidden, pct, startResultMessage, useTeamRole, MEMBER_FORBIDDEN_MSG } from '@/components/campaigns/shared'
+import { friendlyError, isMemberForbidden, pct, startResultMessage, useTeamRole } from '@/components/campaigns/shared'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/campaigns'
+import common from '@/locales/dashboard/common-a'
 
 const FILTERS = [
-  { id: 'all', label: 'الكل' },
-  { id: 'running', label: 'قيد الإرسال' },
-  { id: 'scheduled', label: 'مجدولة' },
-  { id: 'draft', label: 'مسودات' },
-  { id: 'paused', label: 'متوقفة' },
-  { id: 'completed', label: 'مكتملة' },
-  { id: 'failed', label: 'فشلت' },
-]
+  { id: 'all', key: 'f_all' },
+  { id: 'running', key: 'f_running' },
+  { id: 'scheduled', key: 'f_scheduled' },
+  { id: 'draft', key: 'f_draft' },
+  { id: 'paused', key: 'f_paused' },
+  { id: 'completed', key: 'f_completed' },
+  { id: 'failed', key: 'f_failed' },
+] as const
 
 export default function CampaignsPage() {
+  const { t, fmtNumber } = useT(messages)
+  const { t: tc } = useT(common)
+  const fmtNum = (n: number | null | undefined) => fmtNumber(Number(n) || 0)
   const qc = useQueryClient()
   const router = useRouter()
   const [view, setView] = useState<'list' | 'builder'>('list')
@@ -56,19 +63,19 @@ export default function CampaignsPage() {
       onMutate: ({ action }) => { if (action === 'start') setTimeout(() => qc.invalidateQueries('campaigns'), 1500) },
       onSuccess: (r: any, { action }) => {
         qc.invalidateQueries('campaigns')
-        if (action === 'pause') { toast.success('أُوقفت الحملة مؤقتًا'); return }
+        if (action === 'pause') { toast.success(t('paused_toast')); return }
         const m = startResultMessage(r?.data)
         ;(m.ok ? toast.success : toast.error)(m.text)
       },
-      onError: (e: any) => { qc.invalidateQueries('campaigns'); toast.error(friendlyError(e, 'تعذّر تنفيذ الإجراء')) },
+      onError: (e: any) => { qc.invalidateQueries('campaigns'); toast.error(friendlyError(e, t('action_failed'))) },
     }
   )
 
   const deleteMut = useMutation(
     (id: string) => axios.delete(`/api/campaigns/${id}`),
     {
-      onSuccess: () => { qc.invalidateQueries('campaigns'); setToDelete(null); toast.success('حُذفت الحملة') },
-      onError: (e: any) => { toast.error(friendlyError(e, 'تعذّر حذف الحملة')) },
+      onSuccess: () => { qc.invalidateQueries('campaigns'); setToDelete(null); toast.success(t('deleted_toast')) },
+      onError: (e: any) => { toast.error(friendlyError(e, t('delete_failed'))) },
     }
   )
 
@@ -90,7 +97,7 @@ export default function CampaignsPage() {
     (!search || c.name.toLowerCase().includes(search.trim().toLowerCase())))
 
   if (view === 'builder') return (
-    <DashboardLayout title="Campaign Builder">
+    <DashboardLayout title={t('builder_title')}>
       <CampaignWizard onClose={() => {
         setView('list')
         if (router.query.new) router.replace('/dashboard/campaigns', undefined, { shallow: true })
@@ -101,18 +108,18 @@ export default function CampaignsPage() {
   const openBuilder = () => setView('builder')
 
   return (
-    <DashboardLayout title="Campaigns">
+    <DashboardLayout title={t('page_title')}>
       <div className="space-y-6">
         <PageHeader
-          eyebrow="الحملات"
-          title="الحملات"
-          description="أرسل رسالة واحدة إلى جمهور كامل أو شريحة محددة، وتابع وصولها وقراءتها لحظة بلحظة."
-          actions={canManage ? <Button variant="dark" icon={PlusIcon} onClick={openBuilder}>حملة جديدة</Button> : undefined}
+          eyebrow={t('eyebrow')}
+          title={t('title')}
+          description={t('description')}
+          actions={canManage ? <Button variant="dark" icon={PlusIcon} onClick={openBuilder}>{t('new_campaign')}</Button> : undefined}
         />
 
         {!canManage && (
-          <Notice tone="info" icon={LockClosedIcon} title={`صلاحيتك في الفريق: ${roleLabel}`}>
-            يمكنك متابعة الحملات وتقاريرها، أما إنشاؤها وبدؤها وإيقافها فيقتصر على مالك الحساب ومسؤولي الفريق.
+          <Notice tone="info" icon={LockClosedIcon} title={t('role_title', { role: roleLabel })}>
+            {t('role_body')}
           </Notice>
         )}
 
@@ -121,57 +128,57 @@ export default function CampaignsPage() {
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-3.5">
               {[0, 1, 2, 3].map(i => <StatCard key={i} label="" value="" loading />)}
             </div>
-            <div className="space-y-3" aria-busy="true" aria-label="جارٍ تحميل الحملات">
+            <div className="space-y-3" aria-busy="true" aria-label={t('loading')}>
               {[0, 1, 2].map(i => <Skeleton key={i} className="h-24 w-full rounded-panel" />)}
             </div>
           </>
         ) : isError ? (
-          <ErrorState
-            title={isMemberForbidden(error) ? 'لا يمكنك عرض الحملات' : 'تعذّر تحميل الحملات'}
-            message={isMemberForbidden(error) ? MEMBER_FORBIDDEN_MSG : friendlyError(error)}
+          <LoadError
+            title={isMemberForbidden(error) ? t('forbidden_title') : t('load_failed')}
+            description={isMemberForbidden(error) ? tc('err_member_forbidden') : friendlyError(error)}
             onRetry={() => refetch()}
           />
         ) : campaigns.length === 0 ? (
           <EmptyState
             variant="card"
             icon={MegaphoneIcon}
-            title="لا توجد حملات بعد"
-            description="أنشئ حملتك الأولى في أربع خطوات: اختر الجمهور، واكتب الرسالة أو اختر قالبًا معتمدًا، وحدّد الموعد، ثم راجع وأرسل."
-            action={canManage ? <Button icon={PlusIcon} onClick={openBuilder}>إنشاء أول حملة</Button> : undefined}
+            title={t('empty_title')}
+            description={t('empty_desc')}
+            action={canManage ? <Button icon={PlusIcon} onClick={openBuilder}>{t('empty_action')}</Button> : undefined}
           />
         ) : (
           <>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-3.5">
-              <StatCard label="الحملات" value={fmtNum(campaigns.length)} icon={MegaphoneIcon}
-                sub={counts.running ? `${fmtNum(counts.running)} قيد الإرسال الآن` : counts.scheduled ? `${fmtNum(counts.scheduled)} مجدولة` : 'لا يوجد إرسال جارٍ'}
+              <StatCard label={t('stat_campaigns')} value={fmtNum(campaigns.length)} icon={MegaphoneIcon}
+                sub={counts.running ? t('stat_running_now', { n: fmtNum(counts.running) }) : counts.scheduled ? t('stat_scheduled', { n: fmtNum(counts.scheduled) }) : t('stat_idle')}
                 subTone={counts.running ? 'brand' : counts.scheduled ? 'warning' : 'muted'} />
-              <StatCard label="الرسائل المرسلة" value={fmtNum(totals.sent)} icon={PaperAirplaneIcon}
-                sub={totals.failed ? `${fmtNum(totals.failed)} فشلت` : 'بلا إخفاقات'} subTone={totals.failed ? 'danger' : 'success'} />
-              <StatCard label="نسبة الوصول" value={`${pct(totals.delivered, totals.sent)}%`} icon={CheckCircleIcon}
-                progress={pct(totals.delivered, totals.sent)} sub={`${fmtNum(totals.delivered)} رسالة وصلت`} />
-              <StatCard label="نسبة القراءة" value={`${pct(totals.read, totals.sent)}%`} icon={EyeIcon}
-                progress={pct(totals.read, totals.sent)} sub={`${fmtNum(totals.read)} رسالة قُرئت`} />
+              <StatCard label={t('stat_sent')} value={fmtNum(totals.sent)} icon={PaperAirplaneIcon}
+                sub={totals.failed ? t('stat_failed', { n: fmtNum(totals.failed) }) : t('stat_no_failures')} subTone={totals.failed ? 'danger' : 'success'} />
+              <StatCard label={t('stat_delivery')} value={`${pct(totals.delivered, totals.sent)}%`} icon={CheckCircleIcon}
+                progress={pct(totals.delivered, totals.sent)} sub={t('stat_delivered', { n: fmtNum(totals.delivered) })} />
+              <StatCard label={t('stat_read_rate')} value={`${pct(totals.read, totals.sent)}%`} icon={EyeIcon}
+                progress={pct(totals.read, totals.sent)} sub={t('stat_read', { n: fmtNum(totals.read) })} />
             </div>
 
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="-mx-1 overflow-x-auto px-1 scrollbar-none">
-                <Tabs variant="pills" size="sm" value={filter} onChange={setFilter} aria-label="تصفية حسب الحالة"
-                  tabs={FILTERS.filter(f => f.id === 'all' || counts[f.id]).map(f => ({ ...f, count: counts[f.id] || 0 }))} />
+                <Tabs variant="pills" size="sm" value={filter} onChange={setFilter} aria-label={t('filter_aria')}
+                  tabs={FILTERS.filter(f => f.id === 'all' || counts[f.id]).map(f => ({ id: f.id, label: t(f.key), count: counts[f.id] || 0 }))} />
               </div>
-              <SearchInput size="sm" value={search} onChange={setSearch} placeholder="ابحث باسم الحملة" className="lg:w-72" />
+              <SearchInput size="sm" value={search} onChange={setSearch} placeholder={t('search_ph')} className="lg:w-72" />
             </div>
 
             {counts.failed > 0 && filter === 'all' && (
               <Notice tone="danger" icon={ExclamationTriangleIcon}
-                action={<Button size="sm" variant="secondary" onClick={() => setFilter('failed')}>عرضها</Button>}>
-                {fmtNum(counts.failed)} حملة توقفت بسبب خطأ. افتح تقريرها لمعرفة أسباب الفشل.
+                action={<Button size="sm" variant="secondary" onClick={() => setFilter('failed')}>{t('show_them')}</Button>}>
+                {counts.failed === 1 ? t('failed_notice_one') : t('failed_notice', { n: fmtNum(counts.failed) })}
               </Notice>
             )}
 
             {shown.length === 0 ? (
-              <EmptyState size="sm" variant="card" icon={MagnifyingGlassIcon} title="لا توجد حملات مطابقة"
-                description="غيّر عامل التصفية أو كلمة البحث."
-                action={<Button size="sm" variant="secondary" onClick={() => { setFilter('all'); setSearch('') }}>عرض الكل</Button>} />
+              <EmptyState size="sm" variant="card" icon={MagnifyingGlassIcon} title={t('no_match_title')}
+                description={t('no_match_desc')}
+                action={<Button size="sm" variant="secondary" onClick={() => { setFilter('all'); setSearch('') }}>{t('show_all')}</Button>} />
             ) : (
               <div className="space-y-3">
                 {shown.map(c => (
@@ -190,7 +197,7 @@ export default function CampaignsPage() {
             {counts.running > 0 && (
               <p className="flex items-center gap-1.5 text-xs text-muted">
                 <BoltIcon className="h-4 w-4 text-brand-ink" aria-hidden="true" />
-                تتحدّث الأرقام تلقائيًا كل 3 ثوانٍ أثناء الإرسال.
+                {t('auto_refresh')}
               </p>
             )}
           </>
@@ -203,9 +210,10 @@ export default function CampaignsPage() {
         onClose={() => setToDelete(null)}
         onConfirm={() => { if (toDelete) deleteMut.mutate(toDelete.id) }}
         loading={deleteMut.isLoading}
-        title="حذف الحملة؟"
-        description={toDelete ? `ستُحذف حملة «${toDelete.name}» وتقريرها نهائيًا. لا يمكن التراجع عن هذا الإجراء.` : undefined}
-        confirmLabel="حذف"
+        title={t('delete_title')}
+        description={toDelete ? t('delete_desc', { name: toDelete.name }) : undefined}
+        confirmLabel={tc('delete')}
+        cancelLabel={tc('cancel')}
       />
     </DashboardLayout>
   )

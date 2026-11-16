@@ -2,12 +2,13 @@ import React, { useEffect, useRef, useState } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
 import { CalendarDaysIcon, ChevronDownIcon, DocumentTextIcon, PrinterIcon, ScaleIcon } from '@heroicons/react/24/outline'
-import { t as translate } from '@/lib/i18n'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/public/marketing'
 import { Button } from '@/components/ui'
 import { cn } from '@/components/ui/utils'
 import { MarketingPage } from './MarketingPage'
 
-export const LEGAL_DOCS: { href: string; key: string }[] = [
+export const LEGAL_DOCS: { href: string; key: 'mk_legal_privacy' | 'mk_legal_terms' | 'mk_legal_refund' | 'mk_legal_license' | 'mk_legal_accessibility' }[] = [
   { href: '/legal/privacy', key: 'mk_legal_privacy' },
   { href: '/legal/terms', key: 'mk_legal_terms' },
   { href: '/legal/refund', key: 'mk_legal_refund' },
@@ -31,6 +32,8 @@ export interface LegalLayoutProps {
   meta?: React.ReactNode
   /** Direction of the document text when it differs from the UI (English-only documents). */
   docDir?: 'rtl' | 'ltr'
+  /** Labels for the section navigation, in heading order (the original "Table of contents" items). */
+  toc?: string[]
   children: React.ReactNode
 }
 
@@ -41,8 +44,8 @@ interface NavItem { id: string; text: string }
  * switcher, sticky section navigation (built from the document's <h2>s),
  * print button and print-friendly styles.
  */
-export function LegalLayout({ lang, dir, onLangChange, active, headTitle, eyebrow, title, description, updated, meta, docDir, children }: LegalLayoutProps) {
-  const t = (k: string) => translate(lang, k)
+export function LegalLayout({ lang, dir, onLangChange, active, headTitle, eyebrow, title, description, updated, meta, docDir, toc, children }: LegalLayoutProps) {
+  const { t } = useT(messages)
   const bodyRef = useRef<HTMLDivElement>(null)
   const [nav, setNav] = useState<NavItem[]>([])
   const [current, setCurrent] = useState('')
@@ -54,7 +57,7 @@ export function LegalLayout({ lang, dir, onLangChange, active, headTitle, eyebro
     const heads = Array.from(root.querySelectorAll<HTMLElement>('h2'))
     const items = heads.map((h, i) => {
       if (!h.id) h.id = `section-${i + 1}`
-      return { id: h.id, text: (h.textContent || '').trim() }
+      return { id: h.id, text: (toc && toc[i]) || (h.textContent || '').trim() }
     })
     setNav(items)
     if (!items.length || typeof IntersectionObserver === 'undefined') return
@@ -67,7 +70,7 @@ export function LegalLayout({ lang, dir, onLangChange, active, headTitle, eyebro
     )
     heads.forEach(h => io.observe(h))
     return () => io.disconnect()
-  }, [lang, children])
+  }, [lang, children, toc])
 
   const navList = (onPick?: () => void) => (
     <ol className="flex flex-col gap-0.5">
@@ -102,7 +105,7 @@ export function LegalLayout({ lang, dir, onLangChange, active, headTitle, eyebro
             <nav aria-label={t('mk_legal_all')} className="mb-8 flex gap-2 overflow-x-auto pb-1 scrollbar-none print:hidden">
               <Link href="/legal" className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-line px-3.5 text-[13px] font-medium text-muted transition-colors hover:border-line-strong hover:text-ink">
                 <ScaleIcon className="h-4 w-4" aria-hidden="true" />
-                {translate(lang, 'pub_legal')}
+                {t('pub_legal')}
               </Link>
               {LEGAL_DOCS.map(d => (
                 <Link
@@ -149,13 +152,13 @@ export function LegalLayout({ lang, dir, onLangChange, active, headTitle, eyebro
             <aside className="print:hidden">
               <details className="group rounded-card border border-line bg-surface lg:hidden">
                 <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-ink">
-                  {t('mk_toc')}
+                  {toc ? t('toc_label') : t('mk_toc')}
                   <ChevronDownIcon className="h-4 w-4 text-muted transition-transform group-open:rotate-180" aria-hidden="true" />
                 </summary>
                 <div className="border-t border-line-soft p-2">{navList()}</div>
               </details>
-              <nav aria-label={t('mk_toc')} className="sticky top-24 hidden max-h-[calc(100vh-7rem)] overflow-y-auto lg:block">
-                <p className="mb-3 px-3 text-xs font-semibold text-muted">{t('mk_toc')}</p>
+              <nav aria-label={toc ? t('toc_label') : t('mk_toc')} className="sticky top-24 hidden max-h-[calc(100vh-7rem)] overflow-y-auto lg:block">
+                <p className="mb-3 px-3 text-xs font-semibold text-muted">{toc ? t('toc_label') : t('mk_toc')}</p>
                 {navList()}
               </nav>
             </aside>

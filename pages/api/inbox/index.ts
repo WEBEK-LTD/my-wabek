@@ -58,7 +58,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (assigned_to) query = query.eq('assigned_to', assigned_to)
     if (contactFilter) query = query.eq('contact_id', contactFilter)
     if (search) {
-      query = query.or(`contacts.name.ilike.%${search}%,contacts.phone.ilike.%${search}%`)
+      // An `or` on the embedded contacts table is not a valid top-level
+      // filter; find the matching contacts first, then filter by contact_id.
+      const { data: matches, error: searchErr } = await db.from('contacts')
+        .select('id')
+        .eq('user_id', ownerId)
+        .or(`name.ilike.%${search}%,phone.ilike.%${search}%`)
+        .limit(300) // keeps the contact_id=in.(…) URL short
+      if (searchErr) {
+        console.error('[inbox] search error:', searchErr.message)
+        return res.status(500).json({ error: 'Failed to load conversations' })
+      }
+      const ids = (matches || []).map(c => c.id as string)
+      // No match → a filter nothing satisfies, so the response shape stays the same.
+      query = query.in('contact_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
     }
 
     const { data, error, count } = await query

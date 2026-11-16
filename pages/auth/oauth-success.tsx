@@ -2,13 +2,14 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/router'
 import { useAuthStore } from '@/lib/store'
 import { AuthStatusScreen } from '@/components/auth/AuthParts'
-import { useAuthCopy } from '@/components/auth/copy'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/auth'
 
 // The OAuth callback sets the httpOnly `wabek_token` cookie; this page never
 // accepts a token from the URL. It loads the session via the cookie only.
 export default function OAuthSuccessPage() {
   const router = useRouter()
-  const { c } = useAuthCopy()
+  const { t } = useT(messages)
 
   useEffect(() => {
     try { localStorage.removeItem('wabek_token') } catch {}
@@ -27,5 +28,5 @@ export default function OAuthSuccessPage() {
       .catch(() => router.replace('/auth/login?error=oauth_failed'))
   }, [])
 
-  return <AuthStatusScreen title={c('st_signing_in')} subtitle={c('st_wait')} />
+  return <AuthStatusScreen title={t('st_signing_in')} subtitle={t('st_wait')} />
 }

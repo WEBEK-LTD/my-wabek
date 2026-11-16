@@ -4,13 +4,13 @@ import type { SearchEntry } from './types'
 export function normalize(input: string): string {
   return input
     .toLowerCase()
-    .replace(/[ً-ٰٟـ]/g, '') // harakat, superscript alef, tatweel
-    .replace(/[أإآٱ]/g, 'ا')
-    .replace(/ى/g, 'ي')
-    .replace(/ة/g, 'ه')
-    .replace(/ؤ/g, 'و')
-    .replace(/ئ/g, 'ي')
-    .replace(/[‌-‏]/g, '')
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, '') // harakat, superscript alef, tatweel
+    .replace(/[\u0623\u0625\u0622\u0671]/g, '\u0627')
+    .replace(/\u0649/g, '\u064A')
+    .replace(/\u0629/g, '\u0647')
+    .replace(/\u0624/g, '\u0648')
+    .replace(/\u0626/g, '\u064A')
+    .replace(/[\u200C-\u200F]/g, '')
     .replace(/[^\p{L}\p{N}#/@._-]+/gu, ' ')
     .trim()
 }
@@ -22,8 +22,8 @@ function tokens(q: string): string[] {
 /** Each token may match with or without the Arabic article "ال". */
 function variants(token: string): string[] {
   const v = [token]
-  if (token.length > 4 && token.startsWith('ال')) v.push(token.slice(2))
-  if (token.length > 5 && (token.startsWith('وال') || token.startsWith('بال'))) v.push(token.slice(3))
+  if (token.length > 4 && token.startsWith('\u0627\u0644')) v.push(token.slice(2))
+  if (token.length > 5 && (token.startsWith('\u0648\u0627\u0644') || token.startsWith('\u0628\u0627\u0644'))) v.push(token.slice(3))
   return v
 }
 
@@ -123,7 +123,7 @@ export function highlightParts(text: string, query: string): { text: string; mat
   for (let i = 0; i <= chars.length; i++) {
     if (i === chars.length || /\s/.test(chars[i])) {
       const word = chars.slice(ws, i)
-      if (word.some(c => /[؀-ۿ]/.test(c)) && flags.slice(ws, i).some(Boolean)) {
+      if (word.some(c => /[\u0600-\u06FF]/.test(c)) && flags.slice(ws, i).some(Boolean)) {
         for (let k = ws; k < i; k++) flags[k] = true
       }
       ws = i + 1

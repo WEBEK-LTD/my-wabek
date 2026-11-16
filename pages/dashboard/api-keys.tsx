@@ -12,7 +12,8 @@ import {
 } from '@/components/ui'
 import { CopyField, ErrorState, Notice, PlanGate, apiError, apiStatus } from '@/components/settings/Shared'
 import { ApiQuickStart } from '@/components/settings/ApiQuickStart'
-import { fmtDate, fmtRelative } from '@/components/settings/format'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/api-keys'
 
 interface ApiKeyRow {
   id: string
@@ -24,13 +25,14 @@ interface ApiKeyRow {
   created_at: string
 }
 
-const PERMISSION_LABELS: Record<string, string> = { send: 'الإرسال', contacts: 'جهات الاتصال', otp: 'رموز التحقق' }
+const PERMISSION_LABELS: Record<string, keyof typeof messages.en> = { send: 'perm_send', contacts: 'perm_contacts', otp: 'perm_otp' }
 
 export default function ApiKeysPage() {
   return <PlanGate feature="allow_api_access"><ApiKeysContent /></PlanGate>
 }
 
 function ApiKeysContent() {
+  const { t, fmtDate, fmtRelative } = useT(messages)
   const qc = useQueryClient()
   const [showNew, setShowNew] = useState(false)
   const [newKeyName, setNewKeyName] = useState('')
@@ -56,38 +58,38 @@ function ApiKeysContent() {
         setNewKey(data.key)
         setNewKeyName('')
         setShowNew(false)
-        toast.success('تم إنشاء المفتاح')
+        toast.success(t('keyCreated'))
       },
-      onError: (e) => void toast.error(apiError(e, 'تعذّر إنشاء المفتاح')),
+      onError: (e) => void toast.error(apiError(e, t('createError'))),
     }
   )
 
   const deleteMut = useMutation(
     (id: string) => axios.delete(`/api/settings/api-keys/${id}`),
     {
-      onSuccess: () => { qc.invalidateQueries('api-keys'); setToRevoke(null); toast.success('تم إلغاء المفتاح') },
-      onError: (e) => void toast.error(apiError(e, 'تعذّر إلغاء المفتاح')),
+      onSuccess: () => { qc.invalidateQueries('api-keys'); setToRevoke(null); toast.success(t('keyRevoked')) },
+      onError: (e) => void toast.error(apiError(e, t('revokeError'))),
     }
   )
 
   return (
-    <DashboardLayout title="API Keys">
+    <DashboardLayout title={t('pageTitle')}>
       <div className="space-y-6">
         <PageHeader
-          eyebrow="التكاملات"
-          title="مفاتيح API"
-          description="أنشئ مفتاحًا مستقلًا لكل تكامل (WHMCS أو ووردبريس أو تطبيقك)، وألغِه فورًا عند الحاجة دون التأثير على البقية."
+          eyebrow={t('eyebrow')}
+          title={t('title')}
+          description={t('description')}
           actions={
             <>
-              <Button variant="secondary" icon={BookOpenIcon} href="/docs/api/authentication">توثيق المصادقة</Button>
-              {!ownerOnly && <Button icon={PlusIcon} onClick={() => setShowNew(true)}>مفتاح جديد</Button>}
+              <Button variant="secondary" icon={BookOpenIcon} href="/docs/api/authentication">{t('authDocs')}</Button>
+              {!ownerOnly && <Button icon={PlusIcon} onClick={() => setShowNew(true)}>{t('newKey')}</Button>}
             </>
           }
         />
 
         {ownerOnly && (
-          <Notice tone="info" icon={LockClosedIcon} title="إدارة المفاتيح متاحة لمالك الحساب فقط">
-            يمكنك استخدام التكاملات التي أعدّها المالك، لكن إنشاء المفاتيح وعرضها وإلغاءها يقتصر عليه. تواصل معه إذا احتجت إلى مفتاح.
+          <Notice tone="info" icon={LockClosedIcon} title={t('ownerOnlyTitle')}>
+            {t('ownerOnlyBody')}
           </Notice>
         )}
 
@@ -96,35 +98,35 @@ function ApiKeysContent() {
           <Card padding="none" className="order-2 lg:order-1">
             <CardHeader
               icon={KeyIcon}
-              title="المفاتيح المسمّاة"
-              subtitle={keys.length ? `${activeCount} نشط من ${keys.length}` : 'مفتاح لكل تكامل'}
-              action={!ownerOnly && keys.length > 0 ? <Button size="sm" variant="secondary" icon={PlusIcon} onClick={() => setShowNew(true)}>مفتاح جديد</Button> : undefined}
+              title={t('namedKeys')}
+              subtitle={keys.length ? t('activeOf', { active: activeCount, total: keys.length }) : t('keyPerIntegration')}
+              action={!ownerOnly && keys.length > 0 ? <Button size="sm" variant="secondary" icon={PlusIcon} onClick={() => setShowNew(true)}>{t('newKey')}</Button> : undefined}
               divider
             />
             {keysQ.isLoading ? (
               <div className="space-y-3 p-5">{[0, 1, 2].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
             ) : ownerOnly ? (
-              <EmptyState size="sm" icon={LockClosedIcon} title="لا يمكنك عرض المفاتيح" description="تظهر المفاتيح لمالك الحساب فقط." />
+              <EmptyState size="sm" icon={LockClosedIcon} title={t('cannotView')} description={t('cannotViewDesc')} />
             ) : keysQ.isError ? (
               <ErrorState className="m-5" message={apiError(keysQ.error)} onRetry={() => keysQ.refetch()} />
             ) : keys.length === 0 ? (
               <EmptyState
                 size="sm"
                 icon={KeyIcon}
-                title="لا توجد مفاتيح مسمّاة بعد"
-                description="أنشئ مفتاحًا لكل تكامل لتعرف مصدر كل طلب وتلغيه منفردًا."
-                action={<Button size="sm" icon={PlusIcon} onClick={() => setShowNew(true)}>إنشاء أول مفتاح</Button>}
+                title={t('emptyTitle')}
+                description={t('emptyDesc')}
+                action={<Button size="sm" icon={PlusIcon} onClick={() => setShowNew(true)}>{t('createFirst')}</Button>}
               />
             ) : (
-              <Table minWidth={720} caption="المفاتيح المسمّاة">
+              <Table minWidth={720} caption={t('namedKeys')}>
                 <THead>
                   <TR>
-                    <TH>الاسم</TH>
-                    <TH>البادئة</TH>
-                    <TH>الصلاحيات</TH>
-                    <TH>آخر استخدام</TH>
-                    <TH>تاريخ الإنشاء</TH>
-                    <TH align="end"><span className="sr-only">إجراءات</span></TH>
+                    <TH>{t('th_name')}</TH>
+                    <TH>{t('th_prefix')}</TH>
+                    <TH>{t('th_permissions')}</TH>
+                    <TH>{t('th_lastUsed')}</TH>
+                    <TH>{t('th_created')}</TH>
+                    <TH align="end"><span className="sr-only">{t('th_actions')}</span></TH>
                   </TR>
                 </THead>
                 <TBody>
@@ -133,7 +135,7 @@ function ApiKeysContent() {
                       <TD>
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-ink">{k.name}</span>
-                          {!k.is_active && <Badge tone="danger" size="sm">ملغى</Badge>}
+                          {!k.is_active && <Badge tone="danger" size="sm">{t('revoked')}</Badge>}
                         </div>
                       </TD>
                       <TD><code dir="ltr" className="font-mono text-[13px] text-muted">{k.key_prefix}••••</code></TD>
@@ -141,15 +143,15 @@ function ApiKeysContent() {
                         <div className="flex flex-wrap gap-1">
                           {(k.permissions || []).length === 0
                             ? <span className="text-xs text-muted">—</span>
-                            : (k.permissions || []).map(p => <Badge key={p} tone="neutral" size="sm">{PERMISSION_LABELS[p] || p}</Badge>)}
+                            : (k.permissions || []).map(p => <Badge key={p} tone="neutral" size="sm">{PERMISSION_LABELS[p] ? t(PERMISSION_LABELS[p]) : p}</Badge>)}
                         </div>
                       </TD>
-                      <TD className="whitespace-nowrap text-sm text-muted">{k.last_used_at ? fmtRelative(k.last_used_at) : 'لم يُستخدم'}</TD>
+                      <TD className="whitespace-nowrap text-sm text-muted">{k.last_used_at ? fmtRelative(k.last_used_at) : t('neverUsed')}</TD>
                       <TD className="whitespace-nowrap text-sm text-muted">{fmtDate(k.created_at)}</TD>
                       <TD align="end">
                         {k.is_active && (
-                          <Tooltip content="إلغاء المفتاح">
-                            <Button size="icon-sm" variant="ghost" icon={TrashIcon} aria-label={`إلغاء المفتاح ${k.name}`} className="text-muted hover:text-danger" onClick={() => setToRevoke(k)} />
+                          <Tooltip content={t('revokeKey')}>
+                            <Button size="icon-sm" variant="ghost" icon={TrashIcon} aria-label={t('revokeKeyNamed', { name: k.name })} className="text-muted hover:text-danger" onClick={() => setToRevoke(k)} />
                           </Tooltip>
                         )}
                       </TD>
@@ -169,20 +171,20 @@ function ApiKeysContent() {
                   <ShieldCheckIcon className="h-6 w-6" aria-hidden="true" />
                 </span>
                 <div>
-                  <h2 className="font-semibold text-deep-ink">المفتاح الافتراضي</h2>
-                  <p className="text-xs text-deep-muted">أُنشئ تلقائيًا لحسابك</p>
+                  <h2 className="font-semibold text-deep-ink">{t('defaultKey')}</h2>
+                  <p className="text-xs text-deep-muted">{t('defaultKeySub')}</p>
                 </div>
               </div>
               {defaultQ.isLoading ? (
                 <Skeleton className="h-11 w-full bg-white/10" />
               ) : apiStatus(defaultQ.error) === 403 ? (
-                <p className="rounded-field bg-white/[0.06] px-3 py-2.5 text-sm text-deep-muted">يستطيع مالك الحساب وحده عرض هذا المفتاح.</p>
+                <p className="rounded-field bg-white/[0.06] px-3 py-2.5 text-sm text-deep-muted">{t('defaultOwnerOnly')}</p>
               ) : defaultApiKey ? (
                 <CopyField value={defaultApiKey} secret className="border-white/10 bg-white/[0.06] [&_code]:text-deep-ink [&_button]:text-deep-muted" />
               ) : (
-                <p className="rounded-field bg-white/[0.06] px-3 py-2.5 text-sm text-deep-muted">لا يوجد مفتاح افتراضي لهذا الحساب.</p>
+                <p className="rounded-field bg-white/[0.06] px-3 py-2.5 text-sm text-deep-muted">{t('noDefault')}</p>
               )}
-              <p className="text-xs leading-relaxed text-deep-muted">احفظه في مكان آمن ولا تضعه في رابط أو في كود يعمل داخل المتصفح.</p>
+              <p className="text-xs leading-relaxed text-deep-muted">{t('defaultHint')}</p>
             </div>
           </Card>
         </div>
@@ -196,20 +198,20 @@ function ApiKeysContent() {
         onClose={() => setShowNew(false)}
         size="sm"
         icon={KeyIcon}
-        title="مفتاح API جديد"
-        description="سمِّ المفتاح باسم التكامل الذي سيستخدمه."
+        title={t('newKeyTitle')}
+        description={t('newKeyDesc')}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setShowNew(false)}>إلغاء</Button>
-            <Button loading={createMut.isLoading} disabled={!newKeyName.trim()} onClick={() => createMut.mutate()}>إنشاء المفتاح</Button>
+            <Button variant="secondary" onClick={() => setShowNew(false)}>{t('cancel')}</Button>
+            <Button loading={createMut.isLoading} disabled={!newKeyName.trim()} onClick={() => createMut.mutate()}>{t('createKey')}</Button>
           </>
         }
       >
-        <Field label="اسم المفتاح" required>
+        <Field label={t('keyName')} required>
           <Input
             value={newKeyName}
             onChange={e => setNewKeyName(e.target.value)}
-            placeholder="مثل: WHMCS Production"
+            placeholder={t('keyNamePlaceholder')}
             maxLength={100}
             autoFocus
             onKeyDown={e => { if (e.key === 'Enter' && newKeyName.trim()) createMut.mutate() }}
@@ -222,27 +224,27 @@ function ApiKeysContent() {
         open={!!newKey}
         onClose={() => setNewKey(null)}
         icon={ShieldCheckIcon}
-        title="انسخ المفتاح الآن"
-        description="هذه هي المرة الوحيدة التي يظهر فيها المفتاح كاملًا."
-        footer={<Button onClick={() => setNewKey(null)}>نسخته واحتفظت به</Button>}
+        title={t('copyNowTitle')}
+        description={t('copyNowDesc')}
+        footer={<Button onClick={() => setNewKey(null)}>{t('copiedIt')}</Button>}
       >
         <div className="space-y-4">
           <CopyField value={newKey || ''} className="py-2.5" />
-          <Notice tone="warning" icon={ExclamationTriangleIcon} title="لن نتمكن من عرضه مرة أخرى">
-            نحتفظ ببصمة المفتاح فقط. إن فقدته فأنشئ مفتاحًا جديدًا وألغِ القديم.
+          <Notice tone="warning" icon={ExclamationTriangleIcon} title={t('cantShowAgain')}>
+            {t('cantShowAgainBody')}
           </Notice>
         </div>
       </Modal>
 
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         destructive
         open={!!toRevoke}
         onClose={() => setToRevoke(null)}
         onConfirm={() => { if (toRevoke) deleteMut.mutate(toRevoke.id) }}
         loading={deleteMut.isLoading}
-        title={`إلغاء المفتاح «${toRevoke?.name || ''}»؟`}
-        description="ستُرفض فورًا كل الطلبات التي تستخدم هذا المفتاح. لا يمكن التراجع عن الإلغاء."
-        confirmLabel="إلغاء المفتاح"
+        title={t('revokeTitle', { name: toRevoke?.name || '' })}
+        description={t('revokeDesc')}
+        confirmLabel={t('revokeKey')}
       />
     </DashboardLayout>
   )

@@ -1,5 +1,65 @@
 # Changelog — WABEK WhatsApp for WHMCS
 
+## 4.3.0 — 2026-11-16
+
+WhatsApp verification codes (OTP) are now visible and usable by clients out of the box, in every theme (six, twenty-one, Nexus, Lagom 1, Lagom 2), LTR and RTL.
+
+### Added
+- **"Your WhatsApp number" card** on the client's WhatsApp page (`index.php?m=wabek`): the number that notices and one-time codes go to, *Verified* / *Not verified* badge with the verification date, *Verify number*, and where the number comes from (profile phone or a number chosen for WhatsApp).
+- **Change the WhatsApp number with a code:** the client types a new number, a code is sent to that number, and it replaces the current one only after the code is confirmed (saved to the WhatsApp number custom field when one is configured, otherwise as the WhatsApp number of the client; the profile phone is never changed). *Cancel and keep my current number* on the code page; *Use my profile number instead* when a different number is in use. Logged to the activity log.
+- **New OTP mode "optional":** each client can turn a WhatsApp code at sign-in on or off from the same page (needs a verified number). In "require" mode the page shows that the code is required by the administrator.
+- Homepage panel: *Not verified* badge and a *Verify number* link; admin client summary: sign-in code state.
+- Column `mod_wabek_consent.login_otp` (added on upgrade).
+
+### Changed
+- **Default OTP mode is now "verify"** (was "off", which hid everything about codes from clients). Installs upgrading from an earlier 4.x that still had "off" switch to "verify" once; choose *Off* again in Settings → WhatsApp verification to hide it.
+
+## 4.2.1 — 2026-11-16
+
+### Fixed
+- **Phone fields in the admin area (Send test, Send message, client profile override)** now work with WHMCS's own country picker: the chosen calling code (`country-calling-code-<field>`) is combined with the national number, a trunk "0" or a re-typed country code is removed, and a full number starting with `+` or `00` still wins. Previously a number typed after the picker's default `+1` was rejected with "No valid WhatsApp number".
+- Arabic-Indic and Persian digits are accepted in phone numbers.
+- Clearer error message when a number is invalid.
+
+## 4.2.0 — 2026-11-16
+
+The per-client "receive WhatsApp notifications" choice is now visible and editable natively in the admin area and on the client's own pages, in every theme (six, twenty-one, Nexus, Lagom 1, Lagom 2), without theme edits.
+
+### Added
+- **Native client custom field "Receive WhatsApp notifications"** (tickbox; name from the lang files, e.g. `استقبال إشعارات واتساب / Receive WhatsApp notifications`, plus per-language translations for WHMCS *Enable Translations*). Created once on activate / upgrade / settings save (setting *Show a native "Receive WhatsApp notifications" field to clients*, default on), shown on the registration form, the checkout of new accounts, *Account details* and the admin client profile — themes print client custom fields themselves. Kept in **two-way sync** with `mod_wabek_consent`:
+  - field → consent: `ClientAdd` and `ClientEdit` read the submitted value (or the stored one, e.g. API `UpdateClient`) and record a changed choice through the same path as the preferences page (queue clean-up + `contacts-opt-out` sync);
+  - consent → field: every change elsewhere (preferences page, homepage panel, admin toggle, profile tab, consent tab, checkout box) writes the field.
+  - Values are backfilled when the field is created and rewritten when the consent mode changes. In opt-out mode the box starts ticked on the registration / checkout forms (WHMCS tickboxes have no default), never on a re-displayed form.
+  - An opt-out field configured in 4.0 / 4.1 (*ticked = no WhatsApp*) is reused with that meaning — no second field is created. New setting *A ticked box means* (receive / opt-out).
+- **Admin client summary:** the `AdminAreaClientSummaryPage` box is now a compact Bootstrap 3 admin panel with the WhatsApp number (and where it comes from), on/off with the recorded state, the verified badge, the last message (time, status / delivery status, event) and buttons *Turn off / Turn on WhatsApp notifications* (POST + CSRF token to the addon, back to `clientssummary.php?userid=…` with a confirmation), *Send message* and *Log*.
+- **Admin action links** (`AdminAreaClientSummaryActionLinks`): *Send WhatsApp message*, *WhatsApp log*.
+- **Admin profile tab** (`AdminClientProfileTabFields` / `…Save`): *Receive WhatsApp notifications* (Yes/No select when no consent custom field is active; otherwise the status and a pointer to the native field, so two controls never overwrite each other) and an optional *WhatsApp number* override (stored in `mod_wabek_consent.phone_override`, used before the profile phone; not shown when a phone custom field is configured).
+- **Client-area homepage panel** (`ClientAreaHomepagePanels`, menu API): on/off state, the number messages go to, a one-click on/off button (POST + token) and *Manage preferences*; markup per theme family, RTL-aware.
+- **Account sidebar:** *WhatsApp notifications* with an On/Off badge in the *My Account* panel of the account pages.
+- `tests/consent-sync.php` (SQLite through illuminate/database) and homepage-panel / admin-summary checks and screenshots in `tests/render-check.php`.
+
+### Changed
+- Preferences page copy: "WhatsApp notifications are on / off for your account — messages are sent to +…" with a single toggle button.
+- The checkout consent box is not printed for new accounts when the native field is already on the order form.
+- Arabic: "Off" is now «موقوفة».
+
+### Fixed
+- The client summary box could disappear silently: any failure returned an empty string. Each part is now guarded and logged (`WABEK: client summary box (…) failed`) and the box always renders (with a minimal fallback).
+
+## 4.1.0 — 2026-11-16
+
+### Added
+- **Theme-native client area.** The active client-area theme is detected (template variable, WHMCS `Theme::factory()`, `?systpl=` session, `Template` setting; child themes followed through the `parent:` key of `theme.yaml`; unknown themes sniffed for their Bootstrap version) and the pages are rendered from `templates/bs3/` (six, Lagom 1.x, other Bootstrap 3 themes), `templates/bs4/` (twenty-one, Nexus, other Bootstrap 4/5 themes, and the default) or `templates/lagom2/` (Lagom 2.x and its child themes). Each set uses the theme's own panels / cards / Lagom sections, buttons, alerts, labels / badges and form controls, so it takes the theme's colours, light/dark style and RTL.
+- **WhatsApp consent checkbox at checkout** (optional, setting *Show a WhatsApp consent checkbox at checkout*). Printed through `ShoppingCartCheckoutOutput`, so it works in every order form (standard_cart, premium/pure/supreme comparison, universal/cloud slider, boxes, Lagom, Lagom One Step, Nexus) without template edits. A changed choice is recorded with source `checkout` (new clients before the welcome message is queued).
+- Sidebar panel on the module pages and a theme-aware WhatsApp icon on the Account menu item (FA4 / v4-shims class on Bootstrap 3 themes, FA5/6 brands elsewhere), both through the WHMCS menu API.
+- French, German, Spanish and Turkish texts for the client area and checkout (other strings fall back to English).
+- `tests/`: template / theme-detection checks and a Playwright screenshot harness (Bootstrap 3.4.1 and 4.6.2, simulated six, Lagom 1, twenty-one and Lagom 2 light/dark, LTR and RTL, 390px and 1280px).
+
+### Changed
+- The client pages no longer carry their own branded header and inline `<style>`; the small stylesheet `assets/client.css` is scoped to `.wabek-ca` / `.wabek-co`, loaded only on `index.php?m=wabek` (and the checkout step when the checkbox is on) and uses Lagom / Bootstrap colour variables.
+- `templates/preferences.tpl` and `templates/verify.tpl` (still the `templatefile` WHMCS loads) are now thin shims that include the variant set from the absolute path in `$wabekTplDir`, falling back to `templates/bs4/`.
+- The WhatsApp-code-after-login redirect never touches the theme's login, logout or password-reset pages.
+
 ## 4.0.0 — 2026-11-16
 
 Complete rewrite of the addon (no code from 3.x).

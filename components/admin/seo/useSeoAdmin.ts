@@ -2,10 +2,11 @@
 import { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { useAdminT } from '../i18n'
+import { useAdminT, useApiError } from '../i18n'
 import {
   DEFAULT_COMPETITORS, DEFAULT_FORM, DEFAULT_REDIRECTS, DEFAULT_TRACKING, PUBLIC_PAGES, SCHEMA_TEMPLATES,
 } from './data'
+import messages from '@/locales/admin/seo/actions'
 
 export type SeoForm = typeof DEFAULT_FORM & Record<string, any>
 export interface Redirect { from: string; to: string; type: string; active?: boolean }
@@ -19,7 +20,8 @@ const origin = () => (typeof window !== 'undefined' ? window.location.origin : '
  * pages/admin/seo.tsx). Tabs receive the returned object.
  */
 export function useSeoAdmin() {
-  const { tr } = useAdminT()
+  const { t, tn } = useAdminT(messages)
+  const apiError = useApiError()
   const [tab, setTab] = useState('overview')
   const [pageScores, setPageScores] = useState<Record<string, any>>({})
   const [analyzing, setAnalyzing] = useState<string | null>(null)
@@ -60,8 +62,8 @@ export function useSeoAdmin() {
     try {
       const { data } = await axios.post('/api/admin/gsc-oauth', { action: 'connect' })
       if (data.url) window.location.href = data.url
-      else toast.error(data.error || tr('فشل الاتصال', 'Connection failed'))
-    } catch (e: any) { toast.error(e.response?.data?.error || tr('تعذّر بدء الربط', 'Failed to start OAuth')) }
+      else toast.error(apiError.text(data.error) || t('connectionFailed'))
+    } catch (e: any) { toast.error(apiError(e, t('failedStartOauth'))) }
     setGscConnecting(false)
   }
   const disconnectGsc = async () => {
@@ -69,7 +71,7 @@ export function useSeoAdmin() {
     setGscStatus({ connected: false })
     setGscData(null)
     setGscSummary(null)
-    toast.success(tr('فُصل Google Search Console', 'Disconnected from Google Search Console'))
+    toast.success(t('disconnectedGoogleSearchConsole'))
   }
   const loadGscData = async () => {
     setGscLoading(true)
@@ -86,7 +88,7 @@ export function useSeoAdmin() {
       setGscSummary(summaryRes.data)
       setGscData(queriesRes.data.rows || [])
       setGscPages(pagesRes.data.rows || [])
-    } catch (e: any) { toast.error(e.response?.data?.error || tr('تعذّر تحميل بيانات GSC', 'Failed to load GSC data')) }
+    } catch (e: any) { toast.error(apiError(e, t('failedLoadGscData'))) }
     setGscLoading(false)
   }
   const loadGscSites = async () => {
@@ -98,14 +100,14 @@ export function useSeoAdmin() {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     if (params.get('gsc_success')) {
-      toast.success(tr('تم الربط مع Google Search Console', 'Connected to Google Search Console'))
+      toast.success(t('connectedGoogleSearchConsole'))
       window.history.replaceState({}, '', window.location.pathname)
       loadGscStatus()
       setTab('gsc')
       setTimeout(() => loadGscData(), 1000)
     }
     if (params.get('gsc_error')) {
-      toast.error(tr('فشل ربط GSC: ', 'GSC connection failed: ') + params.get('gsc_error'))
+      toast.error(t('gscConnectionFailed', { error: apiError.text(params.get('gsc_error')) }))
       window.history.replaceState({}, '', window.location.pathname)
     }
     loadGscStatus()
@@ -131,7 +133,7 @@ export function useSeoAdmin() {
       await new Promise(r => setTimeout(r, 200))
     }
     setParseAll(false)
-    toast.success(tr('حُلّلت كل الصفحات', 'All pages parsed'))
+    toast.success(t('allPagesParsed'))
   }
 
   /* ── AI assistant ── */
@@ -180,7 +182,7 @@ export function useSeoAdmin() {
     }
     setCrawlResults(results)
     setCrawling(false)
-    toast.success(tr('اكتمل الفحص', 'Crawl complete'))
+    toast.success(t('crawlComplete'))
   }
 
   /* ── PageSpeed ── */
@@ -257,7 +259,7 @@ export function useSeoAdmin() {
       // Keep the failure visible instead of inventing scores.
       setPageScores(prev => ({ ...prev, [path]: {
         error: true, score: null, indexed: false,
-        issues: [tr('تعذّر جلب الصفحة — تأكّد أن الموقع منشور', 'Could not fetch page — check the site is deployed')],
+        issues: [t('couldNotFetchPage')],
       } }))
     }
     setAnalyzing(null)
@@ -269,7 +271,7 @@ export function useSeoAdmin() {
       await new Promise(r => setTimeout(r, 150))
     }
     setAnalyzeAll(false)
-    toast.success(tr(`حُلّلت ${PUBLIC_PAGES.length} صفحة`, `Analyzed ${PUBLIC_PAGES.length} pages`))
+    toast.success(t('analyzedPages', { PUBLIC_PAGESCount: PUBLIC_PAGES.length }))
   }
 
   /** Saves the whole seo_settings object; pass `next` when the state update hasn't landed yet. */
@@ -277,8 +279,8 @@ export function useSeoAdmin() {
     setSaving(true)
     try {
       await axios.put('/api/admin/seo', { seo: next || form })
-      toast.success(tr('حُفظت إعدادات SEO', 'SEO settings saved'))
-    } catch { toast.error(tr('فشل الحفظ', 'Save failed')) }
+      toast.success(t('seoSettingsSaved'))
+    } catch { toast.error(t('saveFailed')) }
     finally { setSaving(false) }
   }
   const applyAndSave = (patch: Partial<SeoForm>) => { const next = { ...form, ...patch } as SeoForm; setForm(next); return save(next) }
@@ -290,8 +292,8 @@ export function useSeoAdmin() {
       const next = { ...form, ['schema_' + type.toLowerCase()]: code } as SeoForm
       await axios.put('/api/admin/seo', { seo: next })
       setForm(next)
-      toast.success(tr(`حُفظ مخطط ${type} وسيُحقن في الصفحات`, `${type} schema saved & will be injected into pages`))
-    } catch { toast.error(tr('JSON غير صالح — صحّح الأخطاء أولًا', 'Invalid JSON — please fix errors first')) }
+      toast.success(t('schemaSavedWillInjected', { type }))
+    } catch { toast.error(t('invalidJsonPleaseFix')) }
   }
 
   /* ── AI helpers ── */
@@ -303,7 +305,7 @@ export function useSeoAdmin() {
   }
 
   const generateMeta = async () => {
-    if (!metaInput.trim()) return void toast.error(tr('أدخل محتوى الصفحة أو وصفها', 'Please provide page content or URL'))
+    if (!metaInput.trim()) return void toast.error(t('pleaseProvidePageContent'))
     setAiLoading('meta')
     try {
       const prompt = `You are an SEO expert. Based on the following page content or description, generate:
@@ -319,13 +321,13 @@ Respond ONLY with valid JSON in this exact format (no markdown, no explanation):
 `
       const raw = await callClaude(prompt, 400)
       setMetaResult(JSON.parse(raw.replace(/```json|```/g, '').trim()))
-      toast.success(tr('أُنشئت الوسوم', 'Meta tags generated'))
-    } catch { toast.error(tr('فشل الإنشاء — حاول مجددًا', 'Generation failed — try again')) }
+      toast.success(t('metaTagsGenerated'))
+    } catch { toast.error(t('generationFailedTryAgain')) }
     setAiLoading(null)
   }
 
   const optimizeContent = async () => {
-    if (!contentInput.trim() || !contentKw.trim()) return void toast.error(tr('أدخل المحتوى والكلمة المستهدفة', 'Please provide content and target keyword'))
+    if (!contentInput.trim() || !contentKw.trim()) return void toast.error(t('pleaseProvideContentTarget'))
     setAiLoading('content')
     try {
       const prompt = `You are an SEO content expert. Optimize the following text for the keyword "${contentKw}".
@@ -343,13 +345,13 @@ ${contentInput.slice(0, 2000)}
 
 Respond with the optimized content ONLY, no explanation:`
       setContentResult(await callClaude(prompt, 1200))
-      toast.success(tr('حُسّن المحتوى', 'Content optimized'))
-    } catch { toast.error(tr('فشل التحسين — حاول مجددًا', 'Optimization failed — try again')) }
+      toast.success(t('contentOptimized'))
+    } catch { toast.error(t('optimizationFailedTryAgain')) }
     setAiLoading(null)
   }
 
   const generateSchema = async () => {
-    if (!schemaDesc.trim()) return void toast.error(tr('صف الصفحة أولًا', 'Please describe your page'))
+    if (!schemaDesc.trim()) return void toast.error(t('pleaseDescribePage'))
     setAiLoading('schema')
     try {
       const schemaExamples: Record<string, string> = {
@@ -376,8 +378,8 @@ Rules:
       const clean = (await callClaude(prompt, 600)).replace(/```json|```/g, '').trim()
       JSON.parse(clean)
       setSchemaResult(clean)
-      toast.success(tr('أُنشئ المخطط', 'Schema generated'))
-    } catch { toast.error(tr('فشل إنشاء المخطط — حاول مجددًا', 'Schema generation failed — try again')) }
+      toast.success(t('schemaGenerated'))
+    } catch { toast.error(t('schemaGenerationFailedTry')) }
     setAiLoading(null)
   }
 
@@ -404,13 +406,13 @@ Rules:
       const result = JSON.parse((await callClaude(prompt, 1000)).replace(/```json|```/g, '').trim())
       result.analysis = analysis
       setAuditResult(result)
-      toast.success(tr('اكتمل التدقيق', 'AI audit complete'))
-    } catch { toast.error(tr('فشل التدقيق — تأكّد أن الموقع منشور', 'Audit failed — make sure the site is deployed')) }
+      toast.success(t('aiAuditComplete'))
+    } catch { toast.error(t('auditFailedMakeSure')) }
     setAiLoading(null)
   }
 
   const researchKeywords = async () => {
-    if (!kwBusiness.trim()) return void toast.error(tr('صف نشاطك التجاري أولًا', 'Please describe your business'))
+    if (!kwBusiness.trim()) return void toast.error(t('pleaseDescribeBusiness'))
     setAiLoading('keywords')
     try {
       const prompt = `You are an SEO keyword research expert. Generate a comprehensive keyword strategy for this business:
@@ -431,8 +433,8 @@ Respond ONLY with valid JSON array (no markdown):
 Generate at least 20 keywords.`
       const result = JSON.parse((await callClaude(prompt, 1500)).replace(/```json|```/g, '').trim())
       setKwResult(result)
-      toast.success(tr(`أُنشئت ${result.length} كلمة مفتاحية`, `${result.length} keywords generated`))
-    } catch { toast.error(tr('فشل البحث — حاول مجددًا', 'Keyword research failed — try again')) }
+      toast.success(tn('keywordsGenerated', result.length, { n: result.length }))
+    } catch { toast.error(t('keywordResearchFailedTry')) }
     setAiLoading(null)
   }
 
@@ -452,15 +454,15 @@ Generate at least 20 keywords.`
     return row ? Math.round(row.position) : null
   }
   const saveRankSnapshot = () => {
-    if (!gscData) { toast.error(tr('حمّل بيانات Search Console أولًا', 'Load Search Console data first')); return }
+    if (!gscData) { toast.error(t('loadSearchConsoleData')); return }
     const date = new Date().toISOString().split('T')[0]
     const snapshot: Record<string, number> = {}
     trackingKws.forEach(k => { const r = gscRank(k.kw); if (r) snapshot[k.kw] = r })
-    if (!Object.keys(snapshot).length) { toast.error(tr('لا توجد مراكز معروفة للكلمات المتتبَّعة', 'No known positions for the tracked keywords')); return }
+    if (!Object.keys(snapshot).length) { toast.error(t('noKnownPositionsTracked')); return }
     const updated = { ...rankHistory, [date]: snapshot }
     setRankHistory(updated)
     saveSeoData('ranks', updated)
-    toast.success(tr('حُفظت لقطة اليوم', 'Snapshot saved'))
+    toast.success(t('snapshotSaved'))
   }
 
   return {

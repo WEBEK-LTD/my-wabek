@@ -30,8 +30,14 @@ import {
 
 export interface DashboardLayoutProps {
   children: React.ReactNode
-  /** Page title: browser tab + breadcrumb in the top bar. */
+  /**
+   * Page title for nested pages (e.g. a contact or campaign name): browser tab
+   * + last breadcrumb. Must already be in the UI language (data or a
+   * translated string); top-level pages always show their translated nav label.
+   */
   title?: string
+  /** lib/i18n.ts key for a nested page title (preferred over a literal title). */
+  titleKey?: string
   /** Full-bleed content area (no max width) for full-height tools like the inbox. */
   bleed?: boolean
   /** Hide the section tab bar (e.g. focused editors). */
@@ -69,10 +75,11 @@ interface NotificationRow {
   created_at: string
 }
 
-export default function DashboardLayout({ children, title: titleProp, bleed, hideSubnav }: DashboardLayoutProps) {
+export default function DashboardLayout({ children, title: rawTitle, titleKey, bleed, hideSubnav }: DashboardLayoutProps) {
   const { user, logout, setUser } = useAuthStore()
   const router = useRouter()
   const { t, lang, dir } = useTranslation()
+  const titleProp = titleKey ? t(titleKey) : rawTitle
   const [searchOpen, setSearchOpen] = useState(false)
   // Waits for the cookie session check before rendering or redirecting.
   const { ready } = useAuth({ required: true })

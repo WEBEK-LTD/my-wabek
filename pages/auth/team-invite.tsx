@@ -8,8 +8,9 @@ import { Avatar, Button, Field, Skeleton, Badge } from '@/components/ui'
 import { useAuthStore } from '@/lib/store'
 import { AuthLayout, AuthHeading } from '@/components/auth/AuthLayout'
 import { AuthAlert, PasswordInput, PasswordStrength } from '@/components/auth/AuthParts'
-import { useAuthCopy } from '@/components/auth/copy'
-import type { AuthCopyKey } from '@/components/auth/copy'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/auth'
+import type { MessageKey as AuthCopyKey } from '@/locales/auth'
 
 interface Invite { name?: string; email?: string; role?: string; owner_name?: string }
 
@@ -30,7 +31,7 @@ function describeAcceptError(e: any): { key: AuthCopyKey; raw?: string } {
 export default function TeamInvitePage() {
   const router = useRouter()
   const { token } = router.query
-  const { c } = useAuthCopy()
+  const { t, lang } = useT(messages)
   const { user: me, setUser, setToken, fetchMe } = useAuthStore()
   const [step, setStep] = useState<'loading' | 'info' | 'invalid'>('loading')
   const [invite, setInvite] = useState<Invite | null>(null)
@@ -69,13 +70,13 @@ export default function TeamInvitePage() {
       setUser(data.user)
       // In-memory only; the HttpOnly cookie is the session.
       if (data.token) setToken(data.token)
-      toast.success(c('ti_welcome'))
+      toast.success(t('ti_welcome'))
       router.push('/dashboard')
       useAuthStore.getState().fetchMe().catch(() => {})
     } catch (e: any) {
       if (e?.response?.status === 409 && e?.response?.data?.requiresLogin) {
         // The email already has an account: log in as it, then come back here.
-        toast.error(c('ti_requires_login'), { duration: 6000 })
+        toast.error(t('ti_requires_login'), { duration: 6000 })
         router.push(`/auth/login?redirect=${encodeURIComponent(router.asPath)}`)
         return
       }
@@ -83,12 +84,12 @@ export default function TeamInvitePage() {
     } finally { setLoading(false) }
   }
 
-  const roleLabel = invite?.role ? (ROLE_KEYS[invite.role] ? c(ROLE_KEYS[invite.role]) : invite.role) : ''
+  const roleLabel = invite?.role ? (ROLE_KEYS[invite.role] ? t(ROLE_KEYS[invite.role]) : invite.role) : ''
 
   return (
-    <AuthLayout title={c('ti_title')}>
+    <AuthLayout title={t('ti_title')}>
       {step === 'loading' && (
-        <div className="flex flex-col gap-4" aria-busy="true" aria-label={c('ti_loading')}>
+        <div className="flex flex-col gap-4" aria-busy="true" aria-label={t('ti_loading')}>
           <Skeleton className="h-12 w-12 rounded-2xl" />
           <Skeleton className="h-8 w-3/4" />
           <Skeleton className="h-24 w-full rounded-2xl" />
@@ -102,26 +103,26 @@ export default function TeamInvitePage() {
           <span className="mb-5 flex h-16 w-16 items-center justify-center rounded-[22px] bg-danger-bg text-danger">
             <LinkSlashIcon className="h-8 w-8" aria-hidden="true" />
           </span>
-          <h1 className="text-[24px] font-bold text-ink">{c('ti_invalid_t')}</h1>
-          <p className="mt-3 text-[15px] text-muted">{c('ti_invalid_d')}</p>
-          <Button variant="secondary" href="/auth/login" className="mt-6">{c('back_to_login')}</Button>
+          <h1 className="text-[24px] font-bold text-ink">{t('ti_invalid_t')}</h1>
+          <p className="mt-3 text-[15px] text-muted">{t('ti_invalid_d')}</p>
+          <Button variant="secondary" href="/auth/login" className="mt-6">{t('back_to_login')}</Button>
         </div>
       )}
 
       {step === 'info' && invite && (
         <>
-          <AuthHeading icon={UserGroupIcon} title={c('ti_title')} />
+          <AuthHeading icon={UserGroupIcon} title={t('ti_title')} />
 
           <div className="mb-6 overflow-hidden rounded-panel border border-line bg-surface shadow-card">
             <div className="bg-deep-hero px-5 py-4">
-              <p className="text-xs text-deep-muted">{c('ti_invited_to')}</p>
+              <p className="text-xs text-deep-muted">{t('ti_invited_to')}</p>
               <p className="mt-0.5 text-lg font-bold text-deep-ink">{invite.owner_name || 'WABEK'}</p>
-              {roleLabel && <Badge tone="brand" size="sm" className="mt-2">{c('ti_as_role', { role: roleLabel })}</Badge>}
+              {roleLabel && <Badge tone="brand" size="sm" className="mt-2">{t('ti_as_role', { role: roleLabel })}</Badge>}
             </div>
             <div className="flex items-center gap-3 px-5 py-4">
               <Avatar name={invite.name || invite.email} />
               <div className="min-w-0">
-                <p className="text-xs text-muted">{c('ti_joining_as')}</p>
+                <p className="text-xs text-muted">{t('ti_joining_as')}</p>
                 <p className="truncate font-semibold text-ink">{invite.name}</p>
                 <p className="truncate text-sm text-muted" dir="ltr">{invite.email}</p>
               </div>
@@ -129,40 +130,40 @@ export default function TeamInvitePage() {
           </div>
 
           {loggedInAsInvitee && (
-            <AuthAlert tone="success" className="mb-5">{c('ti_logged_in')}</AuthAlert>
+            <AuthAlert tone="success" className="mb-5">{t('ti_logged_in')}</AuthAlert>
           )}
           {loggedInAsOther && (
-            <AuthAlert tone="info" className="mb-5">{c('ti_other_account', { email: '⁨' + me!.email + '⁩', invite: '⁨' + (invite.email || '') + '⁩' })}</AuthAlert>
+            <AuthAlert tone="info" className="mb-5">{t('ti_other_account', { email: '⁨' + me!.email + '⁩', invite: '⁨' + (invite.email || '') + '⁩' })}</AuthAlert>
           )}
 
           <form onSubmit={e => { e.preventDefault(); accept() }} noValidate className="flex flex-col gap-4">
             {!loggedInAsInvitee && (
               <>
                 <div>
-                  <Field label={c('ti_set_password')} hint={form.password ? undefined : c('ti_password_rule')} error={errors.password ? c(errors.password) : undefined}>
-                    <PasswordInput autoComplete="new-password" placeholder={c('new_password_ph')} value={form.password}
+                  <Field label={t('ti_set_password')} hint={form.password ? undefined : t('ti_password_rule')} error={errors.password ? t(errors.password) : undefined}>
+                    <PasswordInput autoComplete="new-password" placeholder={t('new_password_ph')} value={form.password}
                       onChange={e => { setForm(f => ({ ...f, password: e.target.value })); setErrors(x => ({ ...x, password: undefined })) }} />
                   </Field>
                   <PasswordStrength password={form.password} />
                 </div>
-                <Field label={c('confirm_password')} error={errors.confirm ? c(errors.confirm) : (form.confirm && form.password !== form.confirm ? c('mismatch') : undefined)}>
-                  <PasswordInput autoComplete="new-password" placeholder={c('confirm_ph')} value={form.confirm}
+                <Field label={t('confirm_password')} error={errors.confirm ? t(errors.confirm) : (form.confirm && form.password !== form.confirm ? t('mismatch') : undefined)}>
+                  <PasswordInput autoComplete="new-password" placeholder={t('confirm_ph')} value={form.confirm}
                     onChange={e => { setForm(f => ({ ...f, confirm: e.target.value })); setErrors(x => ({ ...x, confirm: undefined })) }} />
                 </Field>
               </>
             )}
 
-            {acceptError && <AuthAlert tone="danger">{acceptError.raw || c(acceptError.key)}</AuthAlert>}
+            {acceptError && <AuthAlert tone="danger">{(lang === 'en' && acceptError.raw) || t(acceptError.key)}</AuthAlert>}
 
             <Button type="submit" size="lg" fullWidth loading={loading} icon={CheckBadgeIcon} disabled={!loggedInAsInvitee && !form.password}>
-              {loading ? c('ti_joining') : c('ti_accept')}
+              {loading ? t('ti_joining') : t('ti_accept')}
             </Button>
           </form>
 
           {!loggedInAsInvitee && (
             <p className="mt-6 text-center text-sm text-muted">
-              {c('ti_has_account')}{' '}
-              <Link href={`/auth/login?redirect=${encodeURIComponent(router.asPath)}`} className="font-semibold text-link hover:text-link-hover">{c('ti_login_first')}</Link>
+              {t('ti_has_account')}{' '}
+              <Link href={`/auth/login?redirect=${encodeURIComponent(router.asPath)}`} className="font-semibold text-link hover:text-link-hover">{t('ti_login_first')}</Link>
             </p>
           )}
         </>

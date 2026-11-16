@@ -1,5 +1,7 @@
 import React, { useId, useMemo, useRef, useState } from 'react'
 import { cn, CHART_COLORS, formatNumber } from './utils'
+import { useT } from '@/lib/i18n-local'
+import uiMessages from '@/locales/ui'
 
 /* ── Geometry helpers ─────────────────────────────────────── */
 
@@ -155,6 +157,7 @@ export function AreaChart({
   ariaLabel,
   className,
 }: AreaChartProps) {
+  const { t: tUi } = useT(uiMessages)
   const uid = safeId(`area${useId()}`)
   const boxRef = useRef<HTMLDivElement>(null)
   const [hover, setHover] = useState<number | null>(null)
@@ -181,7 +184,7 @@ export function AreaChart({
   }
 
   const hoverX = hover !== null && n > 1 ? (hover / (n - 1)) * 100 : 50
-  const summary = ariaLabel || series.map(s => s.name).join('، ')
+  const summary = ariaLabel || series.map(s => s.name).join(tUi('list_sep'))
 
   return (
     <div className={cn('w-full', className)} dir="ltr">

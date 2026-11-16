@@ -136,7 +136,13 @@ final class ApiClient
             'Accept: application/json',
             'X-API-Key: ' . $this->apiKey,
             'User-Agent: WABEK-WHMCS/' . (defined('WABEK_MODULE_VERSION') ? WABEK_MODULE_VERSION : '4'),
+            // Identifies the addon and its version to the platform (usage stats).
+            'X-WABEK-Client: whmcs/' . (defined('WABEK_MODULE_VERSION') ? WABEK_MODULE_VERSION : '4'),
         ];
+        $site = self::siteHost();
+        if ($site !== '') {
+            $headers[] = 'X-WABEK-Site: ' . $site;
+        }
         foreach ($extraHeaders as $h) {
             $headers[] = $h;
         }
@@ -228,6 +234,24 @@ final class ApiClient
             ], $replace);
         } catch (\Throwable $e) {
             // logging must never break a send
+        }
+    }
+
+    /** Host of this WHMCS install (for the platform's add-on usage list). */
+    private static function siteHost(): string
+    {
+        try {
+            $url = '';
+            if (class_exists('\\WHMCS\\Config\\Setting')) {
+                $url = (string) \WHMCS\Config\Setting::getValue('SystemURL');
+            }
+            if ($url === '' && isset($GLOBALS['CONFIG']['SystemURL'])) {
+                $url = (string) $GLOBALS['CONFIG']['SystemURL'];
+            }
+            $host = (string) parse_url($url, PHP_URL_HOST);
+            return preg_match('/^[A-Za-z0-9.-]{1,253}$/', $host) ? strtolower($host) : '';
+        } catch (\Throwable $e) {
+            return '';
         }
     }
 }
