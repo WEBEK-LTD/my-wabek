@@ -9,7 +9,7 @@
  * All sends go through lib/wa-smart-send (plan limit, opt-out, SSRF check).
  */
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { smartSend, smartSendWAWeb, smartSendMedia, resolveProvider, isInWindow } from '@/lib/wa-smart-send'
 import { sanitizeDisplayFilename } from '@/lib/media-storage'
@@ -25,7 +25,7 @@ const OUTSIDE_WINDOW = {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).end()
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'inbox')
   if (!user) return
 
   const { to, text, instance_id, contact_id, media_url, media_type, media_mime_type, media_filename } = req.body || {}

@@ -1,11 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { v4 as uuidv4 } from 'uuid'
 import { checkPlanFeature, getUserPlan } from '@/lib/middleware'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'chatbot')
   if (!user) return
   const db = supabaseAdmin()
 

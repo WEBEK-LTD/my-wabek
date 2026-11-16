@@ -254,6 +254,58 @@ export async function requireOwnerOrRole(
   return user
 }
 
+// ── Team member permissions (server-side) ────────────────────────────────────
+// Account owners and team `admin`s can do everything (unchanged). For the
+// other team roles:
+//   viewer → read-only: GET/HEAD only on tenant data.
+//   agent  → read everything; write only in the inbox (chat, assignments,
+//            notes, sending replies), contacts and quick replies.
+// Endpoints that only ever touch the caller's own profile / password /
+// devices / notifications keep using requireAuth.
+export type MemberArea =
+  | 'inbox' | 'contacts' | 'quick_replies'           // agent may write
+  | 'campaigns' | 'automation' | 'chatbot' | 'ai' | 'segments' | 'links'
+  | 'instances' | 'settings' | 'integrations' | 'team' | 'billing'
+
+const AGENT_WRITE_AREAS: ReadonlySet<MemberArea> = new Set<MemberArea>(['inbox', 'contacts', 'quick_replies'])
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+/** Whether a (team) caller may perform `method` in `area`. Owners/admins always may. */
+export function memberCan(user: Pick<JWTPayload, 'actualUserId' | 'memberRole'>, area: MemberArea, method: string): boolean {
+  if (!user.actualUserId) return true
+  const role = user.memberRole || 'viewer'
+  if (role === 'admin') return true
+  if (READ_METHODS.has(String(method || 'GET').toUpperCase())) return true
+  if (role === 'agent') return AGENT_WRITE_AREAS.has(area)
+  return false
+}
+
+/**
+ * requireAuth + team-role check for `area`. Writes (POST/PUT/PATCH/DELETE)
+ * by a viewer, or by an agent outside inbox/contacts/quick replies, get 403
+ * `{ code: 'member_forbidden' }`. Pass `opts.write` to treat a POST as a
+ * write/read explicitly (e.g. a POST that only previews data → write:false).
+ */
+export async function requireMemberAccess(
+  req: NextApiRequest,
+  res: NextApiResponse,
+  area: MemberArea,
+  opts: { write?: boolean } = {}
+): Promise<JWTPayload | null> {
+  const user = await requireAuth(req, res)
+  if (!user) return null
+  const method = opts.write === undefined ? String(req.method || 'GET') : (opts.write ? 'POST' : 'GET')
+  if (!memberCan(user, area, method)) {
+    res.status(403).json({
+      error: 'Your team role does not allow this action',
+      code: 'member_forbidden',
+      role: user.memberRole || 'viewer',
+    })
+    return null
+  }
+  return user
+}
+
 export async function requireAdmin(
   req: NextApiRequest,
   res: NextApiResponse

@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireAuth, requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { escapeFilterValue } from '@/lib/security'
 import { getAllowedInstances, canUseInstance, ownsContact, isValidAssignee, saveConversationAssignment } from '@/lib/inbox-access'
@@ -9,7 +9,7 @@ const STATUSES = ['open', 'pending', 'resolved', 'spam']
 const PRIORITIES = ['low', 'normal', 'high', 'urgent']
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'inbox')
   if (!user) return
   const db = supabaseAdmin()
 

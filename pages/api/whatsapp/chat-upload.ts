@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import {
   uploadMediaBuffer, isAllowedMime, contentMatchesMime, maxBytesForMime, baseMime,
   sanitizeDisplayFilename, MAX_DOCUMENT_BYTES,
@@ -14,7 +14,7 @@ class UploadError extends Error {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'inbox')
   if (!user) return
 
   try {

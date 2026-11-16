@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { checkPlanFeature } from '@/lib/middleware'
 import { consumeAiQuota, AI_MAX_TOKENS_CAP } from '@/lib/ai-engine'
 
@@ -7,7 +7,7 @@ const TONES = ['friendly', 'professional', 'urgent', 'casual', 'formal', 'playfu
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'campaigns')
   if (!user) return
 
   const { prompt } = req.body || {}

@@ -1,9 +1,9 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'quick_replies')
   if (!user) return
   const db = supabaseAdmin()
   const { id } = req.query

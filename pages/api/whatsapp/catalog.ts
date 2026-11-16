@@ -1,11 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { GRAPH_BASE_URL } from '@/lib/whatsapp'
 import { checkSendAllowed } from '@/lib/wa-smart-send'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'inbox')
   if (!user) return
   const db = supabaseAdmin()
 
