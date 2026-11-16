@@ -132,7 +132,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           // contains a numeric code, send it through the OTP template
           // automatically instead of rejecting or sending an unrelated
           // broadcast template.
-          const codeMatch = message.match(/\b(\d{4,8})\b/)
+          // Legacy heuristic, kept ONLY for old integrations that send codes as
+          // plain text without `type`. Any caller that declares a `type` (e.g.
+          // "notification") or names a `template` never goes down this path —
+          // otherwise order numbers/totals would be sent as fake OTP codes.
+          const legacyUntyped = !body.type && !body.template
+          const codeMatch = legacyUntyped && message.length <= 300 && /code|otp|verif|رمز|كود|تحقق/i.test(message)
+            ? message.match(/\b(\d{4,8})\b/)
+            : null
           if (codeMatch) {
             const { sendOtpTemplate } = await import('@/lib/otp-template')
             const { getSetting } = await import('@/lib/settings')
@@ -177,9 +184,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             // use a NAMED parameter (e.g. {{customer_name}}) or a POSITIONAL one
             // ({{1}}). Also try "en" and "en_US" since approved language can vary.
             let variantList: { label: string; components: any[] }[]
-            if (explicitTemplate && body.template_params) {
-              const params = Object.entries(body.template_params).map(([k, v]) => ({
-                type: 'text', parameter_name: k, text: String(v),
+            if (explicitTemplate && Array.isArray(body.template_params)) {
+              // Positional parameters: ["Ahmed", "#4821"] → {{1}}, {{2}}
+              const params = (body.template_params as unknown[]).slice(0, 20).map(v => ({ type: 'text', text: String(v).slice(0, 1024) }))
+              variantList = [
+                { label: 'positional params (explicit)', components: [{ type: 'body', parameters: params }] },
+              ]
+            } else if (explicitTemplate && body.template_params && typeof body.template_params === 'object') {
+              const params = Object.entries(body.template_params).slice(0, 20).map(([k, v]) => ({
+                type: 'text', parameter_name: k, text: String(v).slice(0, 1024),
               }))
               variantList = [
                 { label: 'named params (explicit)', components: [{ type: 'body', parameters: params }] },
@@ -195,7 +208,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               ]
             }
 
-            const tmplLanguages = ['en', 'en_US']
+            // Caller may name the template's approved language (e.g. "ar");
+            // otherwise try the common defaults.
+            const requestedLang = typeof body.template_language === 'string' && /^[a-z]{2,3}(_[A-Z]{2})?$/.test(body.template_language)
+              ? body.template_language
+              : null
+            const tmplLanguages = requestedLang ? [requestedLang] : ['en', 'en_US', 'ar']
             const tmplAttempts: { language: string; components: string; ok: boolean; status?: number; error?: string }[] = []
             let sent = false
 
@@ -267,13 +285,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ contact: data })
   }
 
-  // POST /api/v1/otp - Send OTP
+  // GET /api/v1/instances - List this account's WhatsApp numbers (safe fields only)
+  if (req.method === 'GET' && action === 'instances') {
+    const { data, error } = await db.from('whatsapp_instances')
+      .select('id, display_name, phone_number, status, instance_type, is_default, created_at')
+      .eq('user_id', auth.userId)
+      .order('created_at', { ascending: true })
+    if (error) return res.status(500).json({ error: 'Failed to load instances' })
+    return res.status(200).json({ instances: data || [] })
+  }
+
+  // POST /api/v1/otp - Send OTP from the account's own number
   if (req.method === 'POST' && action === 'otp') {
-    const { phone, purpose } = req.body
-    if (!phone) return res.status(400).json({ error: 'phone required' })
-    const { sendOTP } = await import('@/lib/otp')
-    const result = await sendOTP({ userId: auth.userId, phone, purpose: purpose || 'verification' })
-    return res.status(200).json(result)
+    const { phone, purpose, instance_id, brand_name } = req.body
+    if (!phone || typeof phone !== 'string') return res.status(400).json({ error: 'phone required' })
+    const allowedPurposes = ['verification', 'login', 'transaction'] as const
+    const safePurpose = (allowedPurposes as readonly string[]).includes(purpose) ? purpose : 'verification'
+    const { sendOTP, OtpSendError } = await import('@/lib/otp')
+    try {
+      const result = await sendOTP({
+        userId: auth.userId,
+        phone,
+        purpose: safePurpose as typeof allowedPurposes[number],
+        instanceId: typeof instance_id === 'string' ? instance_id : undefined,
+        brandName: typeof brand_name === 'string' ? brand_name : undefined,
+      })
+      return res.status(200).json(result)
+    } catch (e: unknown) {
+      if (e instanceof OtpSendError) {
+        const status = e.code === 'no_instance' ? 409 : e.code === 'internal' ? 500 : 502
+        console.error('[v1/otp]', e.code, e.message)
+        return res.status(status).json({ success: false, error: 'Failed to send verification code', code: e.code })
+      }
+      console.error('[v1/otp] unexpected:', (e as Error)?.message)
+      return res.status(500).json({ success: false, error: 'Failed to send verification code', code: 'internal' })
+    }
   }
 
   // POST /api/v1/otp/verify - Verify OTP

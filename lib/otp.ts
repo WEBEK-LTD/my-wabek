@@ -10,6 +10,14 @@ function sha256(v: string): string {
   return createHash('sha256').update(v).digest('hex')
 }
 
+/** A send failure the API can report to the caller (no internals leaked). */
+export class OtpSendError extends Error {
+  constructor(message: string, public code: 'no_instance' | 'template_failed' | 'outside_window' | 'send_failed' | 'internal') {
+    super(message)
+    this.name = 'OtpSendError'
+  }
+}
+
 const OTP_EXPIRY = parseInt(process.env.OTP_EXPIRY_MINUTES || '10') * 60 * 1000
 
 export async function sendOTP(params: {
@@ -17,6 +25,8 @@ export async function sendOTP(params: {
   phone: string
   purpose: 'verification' | 'login' | 'transaction'
   instanceId?: string
+  /** Shown in the WhatsApp Web text message, e.g. the tenant's store name. */
+  brandName?: string
 }): Promise<{ success: boolean; otpId: string }> {
   const db = supabaseAdmin()
 
@@ -35,40 +45,39 @@ export async function sendOTP(params: {
 
   if (error) {
     console.error('[otp] insert failed:', error.message)
-    throw new Error('Failed to create OTP')
+    throw new OtpSendError('Failed to create OTP', 'internal')
   }
 
-  // Get WhatsApp instance for OTP:
-  // 1. Check if admin configured a global OTP instance (WABEK's own number)
-  // 2. Fallback to user's own connected instance
-  const { getSetting: getGlobalSetting } = await import('./settings')
-  const globalOtpInstanceId = await getGlobalSetting('global_otp_instance_id', '') as string
-
+  // This is the tenant-facing OTP API (used by the tenant's own store/app), so
+  // the code is always sent from the tenant's OWN number — never from the
+  // platform's number. A specific instance can be requested; it must belong
+  // to the tenant.
   let instance = null
-
-  if (globalOtpInstanceId) {
-    // Use WABEK's global OTP sender (admin configured)
-    const { data: globalInstance } = await db
+  if (params.instanceId) {
+    const { data: chosen } = await db
       .from('whatsapp_instances')
       .select('*')
-      .eq('id', globalOtpInstanceId)
+      .eq('id', params.instanceId)
+      .eq('user_id', params.userId)
       .eq('status', 'connected')
-      .single()
-    instance = globalInstance
+      .maybeSingle()
+    instance = chosen
   }
-
   if (!instance) {
-    // Fallback: user's own instance — prefer WA Web
     const { data: allInstances } = await db
       .from('whatsapp_instances')
       .select('*')
       .eq('user_id', params.userId)
       .eq('status', 'connected')
-    instance = allInstances?.find(i => i.instance_type === 'wa_web') || allInstances?.[0]
+    instance = allInstances?.find(i => i.is_default) || allInstances?.find(i => i.instance_type === 'wa_web') || allInstances?.[0]
   }
-  if (!instance) throw new Error('No connected WhatsApp instance found')
+  if (!instance) throw new OtpSendError('No connected WhatsApp number found for this account', 'no_instance')
 
-  const message = `🔐 *WABEK Verification Code*\n\nYour code: *${otp}*\n\nValid for ${process.env.OTP_EXPIRY_MINUTES || 10} minutes.\n\nDo not share this code.`
+  const brand = (params.brandName || '').replace(/[*_~`\r\n]/g, '').trim().slice(0, 60)
+  const minutes = process.env.OTP_EXPIRY_MINUTES || 10
+  const message = brand
+    ? `*${brand}*\n\nرمز التحقق: *${otp}*\nYour verification code: *${otp}*\n\nصالح لمدة ${minutes} دقائق. لا تشاركه مع أحد.`
+    : `رمز التحقق: *${otp}*\nYour verification code: *${otp}*\n\nصالح لمدة ${minutes} دقائق. لا تشاركه مع أحد.`
 
   // Prefer WA Web for OTP (no template restrictions)
   // Fall back to Cloud API with template if only cloud_api available
@@ -77,7 +86,7 @@ export async function sendOTP(params: {
   if (isWAWeb) {
     // OTP is a system message (bypassLimits) and is never stored in the inbox.
     const r = await smartSendWAWeb({ userId: instance.user_id || params.userId, instanceId: instance.id, to: params.phone, text: message, source: 'notification', bypassLimits: true, persist: false })
-    if (r.error && !r.messageId) throw new Error('Failed to send OTP via WhatsApp')
+    if (r.error && !r.messageId) throw new OtpSendError('Failed to send OTP via WhatsApp', 'send_failed')
   } else {
     // Cloud API — try template first, then text
     const { getSetting } = await import('./settings')
@@ -100,17 +109,17 @@ export async function sendOTP(params: {
         const errMsg = lastAttempt?.error || 'Unknown error'
         const triedNames = Array.from(new Set(result.attempts.map(a => a.templateName)))
         console.error('[otp] all template attempts failed:', JSON.stringify(result.attempts))
-        throw new Error(`Failed to send OTP. Tried templates: ${triedNames.join(', ')}. Last error: ${errMsg}. Go to Settings → Security & OTP and set "OTP Template Name" to an Approved Authentication template that exists in your Meta Business Manager.`)
+        throw new OtpSendError(`Failed to send OTP. Tried templates: ${triedNames.join(', ')}. Last error: ${errMsg}. Go to Settings → Security & OTP and set "OTP Template Name" to an Approved Authentication template that exists in your Meta Business Manager.`, 'template_failed')
       }
     } else {
       // No OTP template configured — only safe to send if within the 24h window
       // (otherwise smartSend would pick an unrelated broadcast template).
       const inWindow = await isInWindow((instance as any)?.user_id || (instance as any)?.userId || '', params.phone, (instance as any)?.id || '')
       if (!inWindow) {
-        throw new Error('No OTP Template Name configured (Settings → Security & OTP) and the recipient is outside the 24h messaging window. Configure an Authentication template (e.g. "digits") to send OTP codes reliably.')
+        throw new OtpSendError('No OTP Template Name configured (Settings → Security & OTP) and the recipient is outside the 24h messaging window. Configure an Authentication template (e.g. "digits") to send OTP codes reliably.', 'outside_window')
       }
       const r = await smartSend({ userId: (instance as any)?.user_id || (instance as any)?.userId || '', instanceId: (instance as any)?.id || '', phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: params.phone, text: message, source: 'notification', forceTemplate: false, bypassLimits: true })
-      if (r.error && !r.messageId) throw new Error('Failed to send OTP via WhatsApp')
+      if (r.error && !r.messageId) throw new OtpSendError('Failed to send OTP via WhatsApp', 'send_failed')
     }
   }
 
