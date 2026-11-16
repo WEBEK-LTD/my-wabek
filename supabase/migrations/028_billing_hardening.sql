@@ -10,8 +10,8 @@
 
 -- ── Stripe webhook idempotency ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS processed_stripe_events (
-  id text primary key,
-  created_at timestamptz default now()
+  id         TEXT PRIMARY KEY,
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 -- Only the service role (which bypasses RLS) should touch this table.
 ALTER TABLE processed_stripe_events ENABLE ROW LEVEL SECURITY;
@@ -69,6 +69,10 @@ EXCEPTION WHEN unique_violation THEN
 END $$;
 
 -- Atomically credit a reseller (and the referral's running total).
+-- An earlier draft of 027 created a (uuid, uuid, numeric) overload; drop it so
+-- PostgREST never has two candidates for rpc('reseller_add_earning').
+DROP FUNCTION IF EXISTS reseller_add_earning(uuid, uuid, numeric);
+
 CREATE OR REPLACE FUNCTION reseller_add_earning(p_user uuid, p_amount numeric, p_referred uuid DEFAULT NULL)
 RETURNS boolean
 LANGUAGE plpgsql
@@ -78,8 +82,8 @@ BEGIN
     RETURN false;
   END IF;
   UPDATE reseller_profiles
-     SET balance_pending = balance_pending + p_amount,
-         balance_total   = balance_total   + p_amount,
+     SET balance_pending = COALESCE(balance_pending, 0) + p_amount,
+         balance_total   = COALESCE(balance_total, 0)   + p_amount,
          updated_at      = now()
    WHERE user_id = p_user;
   IF NOT FOUND THEN
@@ -87,7 +91,7 @@ BEGIN
   END IF;
   IF p_referred IS NOT NULL THEN
     UPDATE reseller_referrals
-       SET total_earned = total_earned + p_amount
+       SET total_earned = COALESCE(total_earned, 0) + p_amount
      WHERE reseller_id = p_user AND referred_user_id = p_referred;
   END IF;
   RETURN true;
