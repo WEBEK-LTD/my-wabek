@@ -1,4 +1,16 @@
 import { supabaseAdmin } from './supabase'
+import { escapeHtml } from './security'
+
+// Only accept plain hex colors in inline styles (prevents CSS/HTML injection).
+function safeColor(c: unknown, fallback = '#00D46A'): string {
+  return typeof c === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(c) ? c : fallback
+}
+
+// Only http(s) links in href attributes, HTML-escaped.
+function safeUrl(u: unknown): string {
+  const s = String(u ?? '')
+  return /^https?:\/\//i.test(s) ? escapeHtml(s) : '#'
+}
 
 interface EmailOptions {
   to: string
@@ -93,7 +105,10 @@ export async function sendEmail(opts: EmailOptions): Promise<boolean> {
 }
 
 // Email templates
-export function emailTemplate(content: string, brandName = 'WABEK', brandColor = '#00D46A'): string {
+// `content` is trusted HTML built by the helpers below (which escape their inputs).
+export function emailTemplate(content: string, rawBrandName = 'WABEK', rawBrandColor = '#00D46A'): string {
+  const brandName = escapeHtml(rawBrandName)
+  const brandColor = safeColor(rawBrandColor)
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -120,7 +135,8 @@ export function emailTemplate(content: string, brandName = 'WABEK', brandColor =
 </html>`
 }
 
-export function passwordResetEmail(name: string, resetUrl: string, brandName = 'WABEK', brandColor = '#00D46A'): string {
+export function passwordResetEmail(rawName: string, rawResetUrl: string, brandName = 'WABEK', rawBrandColor = '#00D46A'): string {
+  const name = escapeHtml(rawName), resetUrl = safeUrl(rawResetUrl), brandColor = safeColor(rawBrandColor)
   return emailTemplate(`
     <h2 style="margin:0 0 16px;color:#0f172a;font-size:22px">Reset your password</h2>
     <p style="margin:0 0 12px;color:#475569">Hi ${name},</p>
@@ -130,7 +146,8 @@ export function passwordResetEmail(name: string, resetUrl: string, brandName = '
   `, brandName, brandColor)
 }
 
-export function otpEmail(name: string, code: string, brandName = 'WABEK', brandColor = '#00D46A'): string {
+export function otpEmail(rawName: string, rawCode: string, brandName = 'WABEK', brandColor = '#00D46A'): string {
+  const name = escapeHtml(rawName), code = escapeHtml(rawCode)
   return emailTemplate(`
     <h2 style="margin:0 0 16px;color:#0f172a;font-size:22px">Your verification code</h2>
     <p style="margin:0 0 20px;color:#475569">Hi ${name}, use the code below to verify your identity:</p>
@@ -141,21 +158,25 @@ export function otpEmail(name: string, code: string, brandName = 'WABEK', brandC
   `, brandName, brandColor)
 }
 
-export function teamInviteEmail(inviterName: string, teamName: string, inviteUrl: string, brandName = 'WABEK', brandColor = '#00D46A'): string {
+export function teamInviteEmail(rawInviterName: string, rawTeamName: string, rawInviteUrl: string, rawBrandName = 'WABEK', rawBrandColor = '#00D46A'): string {
+  const inviterName = escapeHtml(rawInviterName), teamName = escapeHtml(rawTeamName), inviteUrl = safeUrl(rawInviteUrl)
+  const brandName = escapeHtml(rawBrandName), brandColor = safeColor(rawBrandColor)
   return emailTemplate(`
     <h2 style="margin:0 0 16px;color:#0f172a;font-size:22px">You've been invited!</h2>
     <p style="margin:0 0 12px;color:#475569"><strong>${inviterName}</strong> has invited you to join <strong>${teamName}</strong> on ${brandName}.</p>
     <p style="margin:0 0 24px;color:#475569">Click the button below to accept the invitation and create your account.</p>
     <a href="${inviteUrl}" style="display:inline-block;background:${brandColor};color:#000;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px">Accept Invitation</a>
     <p style="margin:24px 0 0;color:#9ca3af;font-size:13px">This invitation expires in 7 days.</p>
-  `, brandName, brandColor)
+  `, rawBrandName, brandColor)
 }
 
-export function welcomeEmail(name: string, loginUrl: string, brandName = 'WABEK', brandColor = '#00D46A'): string {
+export function welcomeEmail(rawName: string, rawLoginUrl: string, rawBrandName = 'WABEK', rawBrandColor = '#00D46A'): string {
+  const name = escapeHtml(rawName), loginUrl = safeUrl(rawLoginUrl)
+  const brandName = escapeHtml(rawBrandName), brandColor = safeColor(rawBrandColor)
   return emailTemplate(`
     <h2 style="margin:0 0 16px;color:#0f172a;font-size:22px">Welcome to ${brandName}! 🎉</h2>
     <p style="margin:0 0 12px;color:#475569">Hi ${name}, your account is ready.</p>
     <p style="margin:0 0 24px;color:#475569">Start sending WhatsApp campaigns, building chatbots, and automating your customer communication.</p>
     <a href="${loginUrl}" style="display:inline-block;background:${brandColor};color:#000;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px">Go to Dashboard</a>
-  `, brandName, brandColor)
+  `, rawBrandName, brandColor)
 }

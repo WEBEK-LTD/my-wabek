@@ -2,25 +2,109 @@ import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from './supabase'
 
 // ── Rate Limiter ──────────────────────────────────────────────────────────────
+// Serverless-safe: Upstash Redis REST (if configured) → Supabase
+// `rate_limit_hit()` (migration 027) → per-instance in-memory map as a last
+// resort (also used if the shared stores are unreachable).
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>()
 
 interface RateLimitConfig { maxRequests: number; windowMs: number }
 
-export function rateLimit(config: RateLimitConfig) {
-  return (req: NextApiRequest, res: NextApiResponse): boolean => {
-    const ip = req.headers['x-forwarded-for']?.toString().split(',')[0] || req.socket.remoteAddress || 'unknown'
-    const key = `${ip}:${req.url}`
-    const now = Date.now()
-    const existing = rateLimitStore.get(key)
-    if (!existing || existing.resetAt < now) {
-      rateLimitStore.set(key, { count: 1, resetAt: now + config.windowMs })
-      return true
+function memoryHit(key: string, max: number, windowMs: number): boolean {
+  const now = Date.now()
+  const existing = rateLimitStore.get(key)
+  if (!existing || existing.resetAt < now) {
+    rateLimitStore.set(key, { count: 1, resetAt: now + windowMs })
+    if (rateLimitStore.size > 10000) {
+      rateLimitStore.forEach((v, k) => { if (v.resetAt < now) rateLimitStore.delete(k) })
     }
-    if (existing.count >= config.maxRequests) {
-      res.status(429).json({ error: 'Too many requests', retryAfter: Math.ceil((existing.resetAt - now) / 1000) })
+    return true
+  }
+  existing.count++
+  return existing.count <= max
+}
+
+async function upstashHit(key: string, max: number, windowSec: number): Promise<boolean | null> {
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  if (!url || !token) return null
+  try {
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), 2000)
+    const r = await fetch(`${url.replace(/\/$/, '')}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([
+        ['INCR', key],
+        ['EXPIRE', key, String(windowSec), 'NX'],
+      ]),
+      signal: ctrl.signal,
+    }).finally(() => clearTimeout(t))
+    if (!r.ok) return null
+    const out = await r.json() as { result?: unknown; error?: string }[]
+    const count = Number(out?.[0]?.result)
+    if (!Number.isFinite(count)) return null
+    return count <= max
+  } catch {
+    return null
+  }
+}
+
+async function supabaseHit(key: string, max: number, windowSec: number): Promise<boolean | null> {
+  try {
+    const { data, error } = await supabaseAdmin().rpc('rate_limit_hit', {
+      p_key: key, p_max: max, p_window_seconds: windowSec,
+    })
+    if (error || typeof data !== 'boolean') return null
+    return data
+  } catch {
+    return null
+  }
+}
+
+/** Count one hit against `key`. Returns true while the caller is within the limit. */
+export async function hitRateLimit(key: string, max: number, windowSeconds: number): Promise<boolean> {
+  const k = `rl:${key}`.slice(0, 512)
+  const win = Math.max(1, Math.round(windowSeconds))
+  const viaUpstash = await upstashHit(k, max, win)
+  if (viaUpstash !== null) return viaUpstash
+  const viaDb = await supabaseHit(k, max, win)
+  if (viaDb !== null) return viaDb
+  return memoryHit(k, max, win * 1000)
+}
+
+function routeKey(req: NextApiRequest): string {
+  return (req.url || '').split('?')[0].split('#')[0]
+}
+
+/** Async, shared-store rate limiter keyed by client IP + route path (no query string). */
+export function rateLimitAsync(config: RateLimitConfig) {
+  return async (req: NextApiRequest, res: NextApiResponse): Promise<boolean> => {
+    const windowSec = Math.ceil(config.windowMs / 1000)
+    const ok = await hitRateLimit(`${getClientIp(req)}:${routeKey(req)}`, config.maxRequests, windowSec)
+    if (!ok) {
+      res.setHeader('Retry-After', String(windowSec))
+      res.status(429).json({ error: 'Too many requests', retryAfter: windowSec })
       return false
     }
-    existing.count++
+    return true
+  }
+}
+
+export const authRateLimitAsync = rateLimitAsync({ maxRequests: 10, windowMs: 60 * 1000 })
+export const apiRateLimitAsync  = rateLimitAsync({ maxRequests: 100, windowMs: 60 * 1000 })
+
+/**
+ * Legacy synchronous limiter (in-memory, per serverless instance). Kept for
+ * call sites that have not moved to `rateLimitAsync` yet.
+ */
+export function rateLimit(config: RateLimitConfig) {
+  return (req: NextApiRequest, res: NextApiResponse): boolean => {
+    const key = `${getClientIp(req)}:${routeKey(req)}`
+    if (!memoryHit(key, config.maxRequests, config.windowMs)) {
+      const existing = rateLimitStore.get(key)
+      res.status(429).json({ error: 'Too many requests', retryAfter: Math.ceil(((existing?.resetAt || Date.now()) - Date.now()) / 1000) })
+      return false
+    }
     return true
   }
 }
@@ -46,8 +130,13 @@ export async function logAction(params: {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+// Netlify sets x-nf-client-connection-ip itself (not client-controllable);
+// otherwise use the first x-forwarded-for entry, then the socket address.
 export function getClientIp(req: NextApiRequest): string {
-  return req.headers['x-forwarded-for']?.toString().split(',')[0] || req.socket.remoteAddress || 'unknown'
+  const nf = req.headers['x-nf-client-connection-ip']
+  if (typeof nf === 'string' && nf.trim()) return nf.trim()
+  const xff = req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim()
+  return xff || req.socket?.remoteAddress || 'unknown'
 }
 
 export function corsHeaders() {
@@ -82,11 +171,12 @@ export async function checkPlanLimit(
     const db = supabaseAdmin()
 
     // 1. Get user
-    const { data: user } = await db
+    const { data: user, error: userErr } = await db
       .from('users')
       .select('plan_id, plan_expires_at, trial_ends_at')
       .eq('id', userId)
       .maybeSingle()
+    if (userErr) throw userErr
 
     // No user found → allow (don't block)
     if (!user) return ALLOW()
@@ -104,18 +194,20 @@ export async function checkPlanLimit(
     // users with no plan_id (e.g. before any purchase webhook) had NO
     // campaign limit at all.
     if (!planId || expired) {
-      const { data: freePlans } = await db.from('plans').select('id').ilike('name', 'free').order('id')
+      const { data: freePlans, error: freeErr } = await db.from('plans').select('id').ilike('name', 'free').order('id')
+      if (freeErr) throw freeErr
       const freePlan = freePlans?.[0]
       if (!freePlan) return ALLOW() // no Free plan configured → don't block
       planId = freePlan.id
     }
 
     // 2. Get plan
-    const { data: plan } = await db
+    const { data: plan, error: planErr } = await db
       .from('plans')
       .select('max_messages_month, max_contacts, max_instances, max_campaigns')
       .eq('id', planId)
       .maybeSingle()
+    if (planErr) throw planErr
 
     // Plan not found → allow
     if (!plan) return ALLOW()
@@ -150,26 +242,30 @@ export async function checkPlanLimit(
         .eq('user_id', userId)
         .eq('direction', 'outbound')
         .gte('created_at', monthStart)
-      current = count ?? 0
+      if (count === null) throw new Error('message count unavailable')
+      current = count
 
     } else if (type === 'contacts') {
       const { count } = await db.from('contacts')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', userId)
-      current = count ?? 0
+      if (count === null) throw new Error('contact count unavailable')
+      current = count
 
     } else if (type === 'instances') {
       const { count } = await db.from('whatsapp_instances')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', userId)
-      current = count ?? 0
+      if (count === null) throw new Error('instance count unavailable')
+      current = count
 
     } else if (type === 'campaigns') {
       const { count } = await db.from('campaigns')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', userId)
         .gte('created_at', monthStart)
-      current = count ?? 0
+      if (count === null) throw new Error('campaign count unavailable')
+      current = count
     }
 
     // 5. Compare
@@ -177,9 +273,9 @@ export async function checkPlanLimit(
     return ALLOW(limit, current)
 
   } catch (err) {
-    // On any error → allow (never block due to infrastructure issues)
-    console.error('[checkPlanLimit] error — allowing by default:', err)
-    return ALLOW()
+    // Fail CLOSED: an infrastructure error must not grant unlimited usage.
+    console.error('[checkPlanLimit] error — blocking:', err)
+    return BLOCK()
   }
 }
 
@@ -196,7 +292,8 @@ export async function checkPlanFeature(
 ): Promise<boolean> {
   try {
     const db = supabaseAdmin()
-    const { data: user } = await db.from('users').select('plan_id, plan_expires_at').eq('id', userId).maybeSingle()
+    const { data: user, error: userErr } = await db.from('users').select('plan_id, plan_expires_at').eq('id', userId).maybeSingle()
+    if (userErr) throw userErr
 
     let planId = user?.plan_id
 
@@ -204,17 +301,20 @@ export async function checkPlanFeature(
     const expired = user?.plan_expires_at && new Date(user.plan_expires_at) < new Date()
 
     if (!planId || expired) {
-      const { data: freePlans } = await db.from('plans').select('id').ilike('name', 'free').order('id')
+      const { data: freePlans, error: freeErr } = await db.from('plans').select('id').ilike('name', 'free').order('id')
+      if (freeErr) throw freeErr
       const freePlan = freePlans?.[0]
-      if (!freePlan) return true // no Free plan configured → don't block (fail open)
+      if (!freePlan) return true // no Free plan configured → don't block
       planId = freePlan.id
     }
 
-    const { data: plan } = await db.from('plans').select(feature).eq('id', planId).maybeSingle()
+    const { data: plan, error: planErr } = await db.from('plans').select(feature).eq('id', planId).maybeSingle()
+    if (planErr) throw planErr
     if (!plan) return true
     return (plan as Record<string, unknown>)[feature] !== false
-  } catch {
-    return true // on error → allow
+  } catch (err) {
+    console.error('[checkPlanFeature] error — denying:', err)
+    return false // fail closed
   }
 }
 

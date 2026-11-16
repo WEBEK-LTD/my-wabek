@@ -15,7 +15,11 @@ interface User {
   last_login_at?: string
   last_login_ip?: string
   last_login_device?: string
-  api_key?: string
+  api_key?: string // no longer returned by /api/auth/me (see /api/settings/default-api-key)
+  has_api_key?: boolean
+  api_key_prefix?: string
+  sub_account_of?: string | null
+  member_role?: 'admin' | 'agent' | 'viewer' | null
   language?: string
   timezone?: string
 }
@@ -86,7 +90,16 @@ if (typeof window !== 'undefined') {
   })
 
   axios.interceptors.response.use(
-    (r) => r,
+    (r) => {
+      // The server rotates the session (e.g. after a password change) and
+      // sends the replacement token in this header.
+      const rotated = r.headers?.['x-session-token']
+      if (typeof rotated === 'string' && rotated && useAuthStore.getState().token) {
+        useAuthStore.getState().setToken(rotated)
+        try { localStorage.setItem('wabek_token', rotated) } catch {}
+      }
+      return r
+    },
     (err) => {
       if (err.response?.status === 401 && window.location.pathname.startsWith('/dashboard')) {
         localStorage.removeItem('wabek_token')
