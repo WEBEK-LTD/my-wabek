@@ -1,5 +1,7 @@
 import React from 'react'
 import { AreaChart, Badge, ProgressBar } from '@/components/ui'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/public/marketing'
 
 // Illustrative campaign used in the landing preview (labelled as such on screen).
 const FUNNEL = [
@@ -7,7 +9,7 @@ const FUNNEL = [
   { key: 'mk_preview_delivered', value: 8102, pct: 73 },
   { key: 'mk_preview_read', value: 6912, pct: 62 },
   { key: 'mk_preview_replies', value: 1304, pct: 18 },
-]
+] as const
 const HOURS = ['09:00', '11:00', '13:00', '15:00', '17:00', '19:00', '21:00']
 const SENT = [420, 1540, 1520, 1430, 1340, 1320, 670]
 const READ = [180, 1130, 1300, 1270, 1190, 1190, 650]
@@ -16,8 +18,8 @@ const READ = [180, 1130, 1300, 1270, 1190, 1190, 650]
  * ProductPreview — a campaign screen built from UI-kit components, shown at the
  * bottom of the landing hero. Figures are illustrative and marked as such.
  */
-export function ProductPreview({ t, lang }: { t: (k: string) => string; lang: string }) {
-  const fmt = (n: number) => n.toLocaleString(lang === 'ar' ? 'en-US' : lang)
+export function ProductPreview() {
+  const { t, fmtNumber: fmt } = useT(messages)
   return (
     <section aria-label={t('mk_preview_label')} className="relative mx-auto max-w-[1160px] px-4 pt-14 sm:px-8 sm:pt-[70px]">
       <div className="rounded-t-hero border border-b-0 border-white/[0.14] bg-white/[0.06] p-2.5 pb-0 sm:p-3.5 sm:pb-0">
