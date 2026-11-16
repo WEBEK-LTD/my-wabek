@@ -1,0 +1,918 @@
+# Arabic translation of WABEK WhatsApp for WooCommerce.
+# Copyright (C) 2026 webek.org
+# This file is distributed under the WABEK proprietary license.
+msgid ""
+msgstr ""
+"Project-Id-Version: WABEK WhatsApp for WooCommerce 1.0.0\n"
+"Report-Msgid-Bugs-To: https://waabek.com\n"
+"Language-Team: webek.org\n"
+"Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=6; plural=(n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 ? 4 : 5);\n"
+"X-Domain: wabek-whatsapp\n"
+
+#. Plugin Name of the plugin
+#: wabek-whatsapp.php
+msgid "WABEK WhatsApp for WooCommerce"
+msgstr "واتساب WABEK لمتاجر WooCommerce"
+
+#. Description of the plugin
+#: wabek-whatsapp.php
+msgid "WhatsApp order notifications, abandoned-cart reminders and WhatsApp OTP login for WooCommerce, powered by the WABEK WhatsApp Business platform."
+msgstr "إشعارات الطلبات عبر واتساب، وتذكيرات السلال المتروكة، وتسجيل الدخول برمز التحقق عبر واتساب لمتاجر WooCommerce، بتشغيل منصة WABEK لواتساب للأعمال."
+
+#: includes/admin/class-admin.php:56
+msgid "The previous WABEK plugin (WAABEK for WooCommerce) is still active. Deactivate it so customers do not receive every WhatsApp notification twice."
+msgstr "إضافة WABEK السابقة (WAABEK for WooCommerce) لا تزال مفعّلة. عطّلها كي لا يتلقى العملاء كل إشعار واتساب مرتين."
+
+#: includes/admin/class-admin.php:56
+msgid "Go to Plugins"
+msgstr "الانتقال إلى الإضافات"
+
+#: includes/admin/class-admin.php:66
+msgid "Connection"
+msgstr "الاتصال"
+
+#: includes/admin/class-admin.php:67
+msgid "Order notifications"
+msgstr "إشعارات الطلبات"
+
+#: includes/admin/class-admin.php:68
+msgid "Consent & carts"
+msgstr "الموافقة والسلال"
+
+#: includes/admin/class-admin.php:69
+msgid "OTP login"
+msgstr "الدخول برمز التحقق"
+
+#: includes/admin/class-admin.php:94 includes/admin/views/header.php:30 includes/admin/views/header.php:35
+msgid "WABEK WhatsApp"
+msgstr "واتساب WABEK"
+
+#: includes/admin/class-admin.php:95
+msgid "WABEK"
+msgstr "WABEK"
+
+#: includes/admin/class-admin.php:102
+msgid "WABEK WhatsApp settings"
+msgstr "إعدادات واتساب WABEK"
+
+#: includes/admin/class-admin.php:102 includes/admin/class-admin.php:113
+msgid "Settings"
+msgstr "الإعدادات"
+
+#: includes/admin/class-admin.php:103
+msgid "WhatsApp send log"
+msgstr "سجل رسائل واتساب"
+
+#: includes/admin/class-admin.php:103 includes/admin/views/header.php:46
+msgid "Send log"
+msgstr "سجل الإرسال"
+
+#: includes/admin/class-admin.php:139
+msgid "Testing…"
+msgstr "جارٍ الاختبار…"
+
+#: includes/admin/class-admin.php:140 includes/class-otp.php:81
+msgid "Sending…"
+msgstr "جارٍ الإرسال…"
+
+#: includes/admin/class-admin.php:141
+msgid "Request failed. Please try again."
+msgstr "تعذّر إتمام الطلب. يُرجى المحاولة مرة أخرى."
+
+#: includes/admin/class-admin.php:142
+msgid "Delete all finished log entries?"
+msgstr "هل تريد حذف جميع السجلات المكتملة؟"
+
+#: includes/admin/class-admin.php:143 includes/admin/views/header.php:20
+msgid "Connected"
+msgstr "متصل"
+
+#: includes/admin/class-admin.php:144 includes/admin/views/header.php:22
+msgid "Not connected"
+msgstr "غير متصل"
+
+#: includes/admin/class-admin.php:145 includes/admin/views/tab-connection.php:64
+msgid "— Platform default —"
+msgstr "— الرقم الافتراضي في المنصة —"
+
+#: includes/admin/class-admin.php:158 includes/admin/class-admin.php:180
+msgid "You do not have permission to access this page."
+msgstr "لا تملك صلاحية الوصول إلى هذه الصفحة."
+
+#: includes/admin/class-admin.php:210
+msgid "Queued"
+msgstr "في قائمة الانتظار"
+
+#: includes/admin/class-admin.php:211
+msgid "Sending"
+msgstr "قيد الإرسال"
+
+#: includes/admin/class-admin.php:212
+msgid "Retrying"
+msgstr "إعادة المحاولة"
+
+#: includes/admin/class-admin.php:213
+msgid "Sent"
+msgstr "أُرسلت"
+
+#: includes/admin/class-admin.php:214 includes/class-settings.php:202
+msgid "Failed"
+msgstr "فشل"
+
+#: includes/admin/class-admin.php:215
+msgid "Skipped"
+msgstr "تم التخطي"
+
+#: includes/admin/class-admin.php:229
+msgid "Invalid request."
+msgstr "طلب غير صالح."
+
+#: includes/admin/class-admin.php:232
+msgid "You do not have permission to change these settings."
+msgstr "لا تملك صلاحية تعديل هذه الإعدادات."
+
+#: includes/admin/class-admin.php:408 includes/admin/class-admin.php:452 includes/admin/class-admin.php:491 includes/admin/class-admin.php:515
+msgid "You do not have permission to do this."
+msgstr "لا تملك صلاحية تنفيذ هذا الإجراء."
+
+#: includes/admin/class-admin.php:411
+msgid "Save your API key first."
+msgstr "احفظ مفتاح الواجهة البرمجية أولًا."
+
+#: includes/admin/class-admin.php:422
+msgid "The API key was rejected. Check that you copied the full key from your WABEK dashboard."
+msgstr "رُفض مفتاح الواجهة البرمجية. تحقّق من نسخ المفتاح كاملًا من لوحة تحكم WABEK."
+
+#. translators: %d: number of WhatsApp numbers
+#: includes/admin/class-admin.php:432
+#, php-format
+msgid "Connected. %d WhatsApp number found."
+msgid_plural "Connected. %d WhatsApp numbers found."
+msgstr[0] "متصل. لم يُعثر على أي رقم واتساب."
+msgstr[1] "متصل. عُثر على رقم واتساب واحد."
+msgstr[2] "متصل. عُثر على رقمَي واتساب."
+msgstr[3] "متصل. عُثر على %d أرقام واتساب."
+msgstr[4] "متصل. عُثر على %d رقمًا لواتساب."
+msgstr[5] "متصل. عُثر على %d رقم واتساب."
+
+#: includes/admin/class-admin.php:437
+msgid "Connected. Your API key is valid, but this WABEK server cannot list numbers by API key yet; enter the instance ID manually or leave it empty to use your first connected number."
+msgstr "متصل. مفتاح الواجهة البرمجية صالح، لكن خادم WABEK هذا لا يتيح بعدُ عرض الأرقام عبر مفتاح الواجهة البرمجية؛ أدخل معرّف الرقم يدويًا أو اتركه فارغًا لاستخدام أول رقم متصل لديك."
+
+#: includes/admin/class-admin.php:457 includes/class-otp.php:167
+msgid "Enter a valid WhatsApp number, including the country code."
+msgstr "أدخل رقم واتساب صحيحًا يتضمن رمز الدولة."
+
+#. translators: %s: store name
+#: includes/admin/class-admin.php:464
+#, php-format
+msgid "✅ Test message from %s. WhatsApp notifications are working."
+msgstr "✅ رسالة تجريبية من %s. إشعارات واتساب تعمل بنجاح."
+
+#: includes/admin/class-admin.php:470
+msgid "Could not write to the send log."
+msgstr "تعذّرت الكتابة في سجل الإرسال."
+
+#: includes/admin/class-admin.php:478
+msgid "Test message sent."
+msgstr "أُرسلت الرسالة التجريبية."
+
+#. translators: %s: error message
+#: includes/admin/class-admin.php:481
+#, php-format
+msgid "Sending failed: %s"
+msgstr "فشل الإرسال: %s"
+
+#: includes/admin/class-admin.php:538
+msgid "Settings saved."
+msgstr "حُفظت الإعدادات."
+
+#: includes/admin/class-admin.php:539
+msgid "The API URL must start with https://. The previous URL was kept."
+msgstr "يجب أن يبدأ عنوان الواجهة البرمجية بـ https://. أُبقي على العنوان السابق."
+
+#: includes/admin/class-admin.php:540
+msgid "The admin WhatsApp number is not valid. Use the international format, e.g. +9665XXXXXXXX."
+msgstr "رقم واتساب المدير غير صالح. استخدم الصيغة الدولية، مثل: ‎+9665XXXXXXXX."
+
+#: includes/admin/class-admin.php:541
+msgid "The message was queued again."
+msgstr "أُعيدت الرسالة إلى قائمة الإرسال."
+
+#: includes/admin/class-admin.php:542
+msgid "This entry cannot be resent."
+msgstr "لا يمكن إعادة إرسال هذا السجل."
+
+#: includes/admin/class-admin.php:543
+msgid "The send log was cleared."
+msgstr "مُسح سجل الإرسال."
+
+#: includes/admin/views/header.php:18
+msgid "No API key"
+msgstr "لا يوجد مفتاح"
+
+#: includes/admin/views/header.php:24
+msgid "Not tested"
+msgstr "لم يُختبر"
+
+#: includes/admin/views/header.php:36
+msgid "Order notifications, cart reminders and OTP login for WooCommerce"
+msgstr "إشعارات الطلبات وتذكيرات السلال والدخول برمز التحقق لمتاجر WooCommerce"
+
+#: includes/admin/views/header.php:42
+msgid "WABEK sections"
+msgstr "أقسام WABEK"
+
+#: includes/admin/views/header.php:54
+msgid "Add your WABEK API key to start sending WhatsApp messages."
+msgstr "أضف مفتاح الواجهة البرمجية من WABEK لبدء إرسال رسائل واتساب."
+
+#: includes/admin/views/header.php:55
+msgid "Open connection settings"
+msgstr "فتح إعدادات الاتصال"
+
+#: includes/admin/views/page-log.php:23 includes/admin/views/page-log.php:60
+msgid "Status"
+msgstr "الحالة"
+
+#: includes/admin/views/page-log.php:25
+msgid "All statuses"
+msgstr "جميع الحالات"
+
+#: includes/admin/views/page-log.php:30
+msgid "Filter"
+msgstr "تصفية"
+
+#: includes/admin/views/page-log.php:35
+msgid "Clear log"
+msgstr "مسح السجل"
+
+#. translators: %d: number of entries kept
+#: includes/admin/views/page-log.php:42
+#, php-format
+msgid "The latest %d messages are kept. Phone numbers are partly hidden."
+msgstr "يُحتفظ بآخر %d رسالة، وتُخفى أجزاء من أرقام الهواتف."
+
+#: includes/admin/views/page-log.php:49
+msgid "No messages yet. They will appear here as soon as orders come in."
+msgstr "لا توجد رسائل بعد. ستظهر هنا فور ورود الطلبات."
+
+#: includes/admin/views/page-log.php:56
+msgid "Time"
+msgstr "الوقت"
+
+#: includes/admin/views/page-log.php:57
+msgid "Order"
+msgstr "الطلب"
+
+#: includes/admin/views/page-log.php:58
+msgid "Phone"
+msgstr "الهاتف"
+
+#: includes/admin/views/page-log.php:59
+msgid "Event"
+msgstr "الحدث"
+
+#: includes/admin/views/page-log.php:61
+msgid "Error"
+msgstr "الخطأ"
+
+#: includes/admin/views/page-log.php:62
+msgid "Actions"
+msgstr "الإجراءات"
+
+#. translators: %d: number of attempts
+#: includes/admin/views/page-log.php:91
+#, php-format
+msgid "%d attempts"
+msgstr "عدد المحاولات: %d"
+
+#: includes/admin/views/page-log.php:106
+msgid "Resend"
+msgstr "إعادة الإرسال"
+
+#: includes/admin/views/tab-checkout.php:22
+msgid "Customer consent"
+msgstr "موافقة العميل"
+
+#: includes/admin/views/tab-checkout.php:24
+msgid "Show a WhatsApp consent checkbox at checkout"
+msgstr "إظهار مربع الموافقة على إشعارات واتساب في صفحة إتمام الطلب"
+
+#: includes/admin/views/tab-checkout.php:24
+msgid "Works on the classic checkout and on the block checkout (WooCommerce 8.9 or later). The answer is saved on the order."
+msgstr "يعمل في صفحة إتمام الطلب التقليدية وفي صفحة إتمام الطلب بالكتل (WooCommerce 8.9 أو أحدث)، وتُحفظ الإجابة ضمن بيانات الطلب."
+
+#: includes/admin/views/tab-checkout.php:25
+msgid "Only message customers who ticked the checkbox"
+msgstr "عدم مراسلة إلا العملاء الذين حدّدوا مربع الموافقة"
+
+#: includes/admin/views/tab-checkout.php:25
+msgid "When off, customers are messaged unless they untick the checkbox. Orders created without the checkbox (e.g. by an admin) count as not consented while this is on."
+msgstr "عند تعطيل هذا الخيار، يُراسَل العملاء ما لم يُلغوا تحديد المربع. وعند تفعيله، تُعدّ الطلبات المنشأة دون المربع (كالتي ينشئها المدير) غير موافق عليها."
+
+#: includes/admin/views/tab-checkout.php:28
+msgid "Checkbox text"
+msgstr "نص مربع الموافقة"
+
+#: includes/admin/views/tab-checkout.php:29 includes/class-settings.php:186
+msgid "I agree to receive order notifications via WhatsApp"
+msgstr "أوافق على تلقي إشعارات الطلب عبر واتساب"
+
+#: includes/admin/views/tab-checkout.php:31
+msgid "Let customers opt out from My Account → Account details"
+msgstr "السماح للعملاء بإلغاء الاشتراك من: حسابي ← تفاصيل الحساب"
+
+#: includes/admin/views/tab-checkout.php:35
+msgid "Abandoned cart reminder"
+msgstr "تذكير السلة المتروكة"
+
+#: includes/admin/views/tab-checkout.php:36
+msgid "When a shopper types a phone number at checkout but does not order, one WhatsApp reminder is sent after the delay below. Placing an order cancels it."
+msgstr "إذا أدخل المتسوّق رقم هاتفه في صفحة إتمام الطلب ولم يُكمل الطلب، تُرسل إليه رسالة تذكير واحدة عبر واتساب بعد المدة المحددة أدناه، ويُلغى التذكير عند إتمام الطلب."
+
+#: includes/admin/views/tab-checkout.php:37
+msgid "Send abandoned cart reminders"
+msgstr "إرسال تذكيرات السلال المتروكة"
+
+#: includes/admin/views/tab-checkout.php:39
+msgid "Delay (minutes)"
+msgstr "المهلة (بالدقائق)"
+
+#: includes/admin/views/tab-checkout.php:43
+msgid "Reminder message"
+msgstr "نص رسالة التذكير"
+
+#: includes/admin/views/tab-checkout.php:49 includes/admin/views/tab-notifications.php:47
+msgid "Approved template (outside 24 hours)"
+msgstr "القالب المعتمد (خارج نافذة الـ24 ساعة)"
+
+#: includes/admin/views/tab-checkout.php:53 includes/admin/views/tab-notifications.php:51
+msgid "Template variables"
+msgstr "متغيرات القالب"
+
+#: includes/admin/views/tab-checkout.php:57
+msgid "Shoppers who did not consent (when consent is required) or who opted out are never reminded. On the block checkout, carts are only captured when consent is not required."
+msgstr "لا يُرسل أي تذكير إلى المتسوّقين الذين لم يوافقوا (عند اشتراط الموافقة) أو الذين ألغوا اشتراكهم. وفي صفحة إتمام الطلب بالكتل، لا تُرصد السلال إلا إذا كانت الموافقة غير مشترطة."
+
+#: includes/admin/views/tab-checkout.php:60 includes/admin/views/tab-connection.php:108 includes/admin/views/tab-notifications.php:59 includes/admin/views/tab-otp.php:43
+msgid "Save changes"
+msgstr "حفظ التغييرات"
+
+#: includes/admin/views/tab-connection.php:30
+msgid "API connection"
+msgstr "الاتصال بالواجهة البرمجية"
+
+#: includes/admin/views/tab-connection.php:31
+msgid "Create an API key in your WABEK dashboard (Dashboard → API Keys) and paste it here. The key is stored on your server and sent only in the X-API-Key header over HTTPS."
+msgstr "أنشئ مفتاح واجهة برمجية من لوحة تحكم WABEK (لوحة التحكم ← مفاتيح API) والصقه هنا. يُخزَّن المفتاح على خادمك ولا يُرسل إلا في الترويسة X-API-Key عبر اتصال HTTPS."
+
+#: includes/admin/views/tab-connection.php:34
+msgid "API base URL"
+msgstr "العنوان الأساسي للواجهة البرمجية"
+
+#: includes/admin/views/tab-connection.php:39
+msgid "API key"
+msgstr "مفتاح الواجهة البرمجية"
+
+#: includes/admin/views/tab-connection.php:41
+msgid "Paste your API key"
+msgstr "الصق مفتاح الواجهة البرمجية"
+
+#. translators: %s: masked API key
+#: includes/admin/views/tab-connection.php:46
+#, php-format
+msgid "Saved key: %s. Leave the field empty to keep it."
+msgstr "المفتاح المحفوظ: %s. اترك الحقل فارغًا للإبقاء عليه."
+
+#: includes/admin/views/tab-connection.php:49
+msgid "Remove the saved key"
+msgstr "حذف المفتاح المحفوظ"
+
+#: includes/admin/views/tab-connection.php:54
+msgid "Test connection"
+msgstr "اختبار الاتصال"
+
+#: includes/admin/views/tab-connection.php:60
+msgid "Sending number"
+msgstr "رقم الإرسال"
+
+#: includes/admin/views/tab-connection.php:62
+msgid "Default WhatsApp number"
+msgstr "رقم واتساب الافتراضي"
+
+#: includes/admin/views/tab-connection.php:71
+msgid "Run “Test connection” to load your numbers. With no choice, WABEK uses your first connected number."
+msgstr "اضغط «اختبار الاتصال» لتحميل أرقامك. وإن لم تختر رقمًا، تستخدم WABEK أول رقم متصل لديك."
+
+#: includes/admin/views/tab-connection.php:74
+msgid "Or enter an instance ID"
+msgstr "أو أدخل معرّف الرقم"
+
+#: includes/admin/views/tab-connection.php:78
+msgid "Default country for phone numbers"
+msgstr "الدولة الافتراضية لأرقام الهواتف"
+
+#. translators: %s: store base country code
+#: includes/admin/views/tab-connection.php:83
+#, php-format
+msgid "Store base country (%s)"
+msgstr "دولة المتجر الأساسية (%s)"
+
+#: includes/admin/views/tab-connection.php:90
+msgid "Numbers typed without a country code use the billing country, then this country. Invalid numbers are skipped."
+msgstr "تُستخدم دولة الفوترة للأرقام المكتوبة دون رمز الدولة، ثم هذه الدولة. ويُتخطّى الإرسال إلى الأرقام غير الصالحة."
+
+#: includes/admin/views/tab-connection.php:95
+msgid "Store owner alerts"
+msgstr "تنبيهات صاحب المتجر"
+
+#: includes/admin/views/tab-connection.php:96
+msgid "Send me a WhatsApp alert for every new order"
+msgstr "أرسل إليّ تنبيهًا عبر واتساب عند كل طلب جديد"
+
+#: includes/admin/views/tab-connection.php:98
+msgid "Admin WhatsApp number"
+msgstr "رقم واتساب المدير"
+
+#: includes/admin/views/tab-connection.php:102
+msgid "Alert message"
+msgstr "نص التنبيه"
+
+#: includes/admin/views/tab-connection.php:112
+msgid "Send a test message"
+msgstr "إرسال رسالة تجريبية"
+
+#: includes/admin/views/tab-connection.php:114 includes/class-otp.php:129
+msgid "WhatsApp number"
+msgstr "رقم واتساب"
+
+#: includes/admin/views/tab-connection.php:116
+msgid "Send test"
+msgstr "إرسال تجريبي"
+
+#: includes/admin/views/tab-connection.php:119
+msgid "Outside the 24-hour WhatsApp window, plain text needs an approved template. Message the business number from this phone first to open the window."
+msgstr "خارج نافذة واتساب البالغة 24 ساعة، لا تُسلَّم الرسائل النصية إلا عبر قالب معتمد. أرسل رسالة إلى رقم النشاط التجاري من هذا الهاتف أولًا لفتح النافذة."
+
+#: includes/admin/views/tab-notifications.php:24
+msgid "How delivery works"
+msgstr "آلية التسليم"
+
+#: includes/admin/views/tab-notifications.php:25
+msgid "Messages are queued in the background and never slow down checkout. If the customer messaged your business number in the last 24 hours, the text below is delivered as written. Otherwise WhatsApp only allows approved templates: enter the name of an approved template and the variables it uses, or WABEK falls back to your account’s default template."
+msgstr "تُضاف الرسائل إلى قائمة انتظار في الخلفية، فلا تُبطئ إتمام الطلب أبدًا. إذا راسل العميل رقم نشاطك التجاري خلال الساعات الأربع والعشرين الماضية، يُسلَّم النص أدناه كما هو؛ وإلا فإن واتساب لا يسمح إلا بالقوالب المعتمدة: أدخل اسم قالب معتمد والمتغيرات التي يستخدمها، وإلا لجأت WABEK إلى القالب الافتراضي في حسابك."
+
+#: includes/admin/views/tab-notifications.php:37
+msgid "On"
+msgstr "مفعّل"
+
+#: includes/admin/views/tab-notifications.php:37
+msgid "Off"
+msgstr "معطّل"
+
+#: includes/admin/views/tab-notifications.php:39
+msgid "Send this message to the customer"
+msgstr "إرسال هذه الرسالة إلى العميل"
+
+#: includes/admin/views/tab-notifications.php:41
+msgid "Message"
+msgstr "نص الرسالة"
+
+#: includes/admin/views/tab-notifications.php:55
+msgid "Template variables are the named parameters of the approved template, separated by commas, using the variable names above (e.g. customer_name, order_id, order_total)."
+msgstr "متغيرات القالب هي المعاملات المسمّاة في القالب المعتمد، مفصولة بفواصل، وبأسماء المتغيرات المذكورة أعلاه (مثل: customer_name, order_id, order_total)."
+
+#: includes/admin/views/tab-otp.php:20
+msgid "WhatsApp verification codes"
+msgstr "رموز التحقق عبر واتساب"
+
+#: includes/admin/views/tab-otp.php:21
+msgid "Codes are generated, sent and checked by WABEK through your approved WhatsApp Authentication template (set it in WABEK under Settings → Security & OTP)."
+msgstr "تتولى WABEK إنشاء الرموز وإرسالها والتحقق منها عبر قالب المصادقة المعتمد في واتساب (اضبطه في WABEK من: الإعدادات ← الأمان ورموز التحقق)."
+
+#: includes/admin/views/tab-otp.php:23
+msgid "Allow customers to log in with a WhatsApp code"
+msgstr "السماح للعملاء بتسجيل الدخول برمز يصلهم عبر واتساب"
+
+#: includes/admin/views/tab-otp.php:23
+msgid "Adds “Log in with WhatsApp” to the WooCommerce login form. Staff accounts (shop managers, editors, administrators) can never log in this way."
+msgstr "يضيف خيار «تسجيل الدخول عبر واتساب» إلى نموذج دخول WooCommerce. ولا يمكن لحسابات الطاقم (مديري المتجر والمحررين والمديرين) الدخول بهذه الطريقة مطلقًا."
+
+#: includes/admin/views/tab-otp.php:24
+msgid "Require WhatsApp number verification at registration"
+msgstr "اشتراط التحقق من رقم واتساب عند التسجيل"
+
+#: includes/admin/views/tab-otp.php:24
+msgid "Adds a WhatsApp number field to the WooCommerce registration form; the account is created only after the code is confirmed."
+msgstr "يضيف حقل رقم واتساب إلى نموذج التسجيل في WooCommerce، ولا يُنشأ الحساب إلا بعد تأكيد الرمز."
+
+#: includes/admin/views/tab-otp.php:29
+msgid "Abuse protection"
+msgstr "الحماية من إساءة الاستخدام"
+
+#: includes/admin/views/tab-otp.php:32
+msgid "Codes per number every 15 minutes"
+msgstr "عدد الرموز لكل رقم في كل 15 دقيقة"
+
+#: includes/admin/views/tab-otp.php:36
+msgid "Codes per IP address every hour"
+msgstr "عدد الرموز لكل عنوان IP في الساعة"
+
+#: includes/admin/views/tab-otp.php:40
+msgid "A number can request one code per minute, and each code allows 5 attempts and expires after 10 minutes."
+msgstr "يمكن طلب رمز واحد في الدقيقة لكل رقم، ولكل رمز 5 محاولات، وتنتهي صلاحيته بعد 10 دقائق."
+
+#: includes/class-abandoned-cart.php:232 includes/class-message-builder.php:66
+msgid "Customer"
+msgstr "عميلنا العزيز"
+
+#: includes/class-api-client.php:159
+msgid "The API key is not configured."
+msgstr "لم يُضبط مفتاح الواجهة البرمجية."
+
+#: includes/class-api-client.php:163
+msgid "The API URL must use HTTPS."
+msgstr "يجب أن يستخدم عنوان الواجهة البرمجية بروتوكول HTTPS."
+
+#. translators: %s: network error message
+#: includes/class-api-client.php:186
+#, php-format
+msgid "Could not reach the WABEK API: %s"
+msgstr "تعذّر الوصول إلى واجهة WABEK البرمجية: %s"
+
+#: includes/class-api-client.php:197
+msgid "The API URL redirects to another address. Enter the final URL in the settings."
+msgstr "يُعيد عنوان الواجهة البرمجية التوجيه إلى عنوان آخر. أدخل العنوان النهائي في الإعدادات."
+
+#. translators: %d: HTTP status code
+#: includes/class-api-client.php:206
+#, php-format
+msgid "HTTP error %d"
+msgstr "خطأ HTTP رقم %d"
+
+#: includes/class-consent.php:203
+msgid "Yes"
+msgstr "نعم"
+
+#: includes/class-consent.php:205
+msgid "No"
+msgstr "لا"
+
+#: includes/class-consent.php:207
+msgid "Not recorded"
+msgstr "غير مسجّلة"
+
+#: includes/class-consent.php:209
+msgid "WhatsApp notifications consent:"
+msgstr "الموافقة على إشعارات واتساب:"
+
+#: includes/class-consent.php:219
+msgid "WhatsApp notifications"
+msgstr "إشعارات واتساب"
+
+#: includes/class-consent.php:222
+msgid "Do not send me WhatsApp notifications"
+msgstr "لا ترسلوا إليّ إشعارات عبر واتساب"
+
+#: includes/class-message-builder.php:24 includes/class-message-builder.php:45
+msgid "Customer first name"
+msgstr "الاسم الأول للعميل"
+
+#: includes/class-message-builder.php:25
+msgid "Order number"
+msgstr "رقم الطلب"
+
+#: includes/class-message-builder.php:26
+msgid "Order total"
+msgstr "إجمالي الطلب"
+
+#: includes/class-message-builder.php:27
+msgid "Order status"
+msgstr "حالة الطلب"
+
+#: includes/class-message-builder.php:28 includes/class-message-builder.php:46
+msgid "Item list"
+msgstr "قائمة المنتجات"
+
+#: includes/class-message-builder.php:29
+msgid "Shipping address"
+msgstr "عنوان الشحن"
+
+#: includes/class-message-builder.php:30
+msgid "Tracking link"
+msgstr "رابط تتبّع الشحنة"
+
+#: includes/class-message-builder.php:31 includes/class-message-builder.php:49
+msgid "Store name"
+msgstr "اسم المتجر"
+
+#: includes/class-message-builder.php:32
+msgid "Payment link"
+msgstr "رابط الدفع"
+
+#: includes/class-message-builder.php:33 includes/class-settings.php:203
+msgid "Note to customer"
+msgstr "ملاحظة للعميل"
+
+#: includes/class-message-builder.php:34
+msgid "Customer phone"
+msgstr "هاتف العميل"
+
+#: includes/class-message-builder.php:47
+msgid "Cart total"
+msgstr "إجمالي السلة"
+
+#: includes/class-message-builder.php:48
+msgid "Cart recovery link"
+msgstr "رابط استعادة السلة"
+
+#: includes/class-notifications.php:160
+msgid "No WhatsApp consent, or the customer opted out."
+msgstr "لا توجد موافقة على مراسلة واتساب، أو ألغى العميل اشتراكه."
+
+#: includes/class-notifications.php:164
+msgid "Missing or invalid phone number."
+msgstr "رقم الهاتف مفقود أو غير صالح."
+
+#: includes/class-otp.php:82
+msgid "Verifying…"
+msgstr "جارٍ التحقق…"
+
+#: includes/class-otp.php:83
+msgid "Resend code"
+msgstr "إعادة إرسال الرمز"
+
+#: includes/class-otp.php:84
+msgid "Something went wrong. Please try again."
+msgstr "حدث خطأ ما. يُرجى المحاولة مرة أخرى."
+
+#: includes/class-otp.php:125
+msgid "or"
+msgstr "أو"
+
+#: includes/class-otp.php:126
+msgid "Log in with a code sent to your WhatsApp"
+msgstr "سجّل الدخول برمز يصلك عبر واتساب"
+
+#: includes/class-otp.php:133
+msgid "Verification code"
+msgstr "رمز التحقق"
+
+#: includes/class-otp.php:140
+msgid "Send code via WhatsApp"
+msgstr "إرسال الرمز عبر واتساب"
+
+#: includes/class-otp.php:141
+msgid "Verify and log in"
+msgstr "تحقّق وسجّل الدخول"
+
+#: includes/class-otp.php:141
+msgid "Verify number"
+msgstr "تحقّق من الرقم"
+
+#: includes/class-otp.php:159 includes/class-otp.php:237
+msgid "This feature is not available."
+msgstr "هذه الميزة غير متاحة."
+
+#: includes/class-otp.php:162
+msgid "You are already logged in."
+msgstr "أنت مسجّل الدخول بالفعل."
+
+#: includes/class-otp.php:172
+msgid "Please wait a minute before requesting another code."
+msgstr "يُرجى الانتظار دقيقة قبل طلب رمز آخر."
+
+#: includes/class-otp.php:176
+msgid "Too many code requests. Please try again later."
+msgstr "طلبات رموز كثيرة جدًا. يُرجى المحاولة لاحقًا."
+
+#: includes/class-otp.php:194
+msgid "This number is already linked to an account. Please log in instead."
+msgstr "هذا الرقم مرتبط بحساب قائم. يُرجى تسجيل الدخول بدلًا من ذلك."
+
+#: includes/class-otp.php:203
+msgid "We could not send the code right now. Please try again later."
+msgstr "تعذّر إرسال الرمز حاليًا. يُرجى المحاولة لاحقًا."
+
+#. translators: %s: masked phone number
+#: includes/class-otp.php:215
+#, php-format
+msgid "If this number can receive codes, a verification code was sent to %s on WhatsApp."
+msgstr "إذا كان هذا الرقم مؤهلًا لاستقبال الرموز، فقد أُرسل رمز التحقق إلى %s عبر واتساب."
+
+#: includes/class-otp.php:234
+msgid "The code has expired. Please request a new one."
+msgstr "انتهت صلاحية الرمز. يُرجى طلب رمز جديد."
+
+#: includes/class-otp.php:240
+msgid "Enter the code you received on WhatsApp."
+msgstr "أدخل الرمز الذي وصلك عبر واتساب."
+
+#: includes/class-otp.php:246
+msgid "Too many attempts. Please request a new code."
+msgstr "محاولات كثيرة جدًا. يُرجى طلب رمز جديد."
+
+#: includes/class-otp.php:254
+msgid "We could not verify the code right now. Please try again."
+msgstr "تعذّر التحقق من الرمز حاليًا. يُرجى المحاولة مرة أخرى."
+
+#: includes/class-otp.php:259 includes/class-otp.php:267
+msgid "The code is incorrect."
+msgstr "الرمز غير صحيح."
+
+#: includes/class-otp.php:278
+msgid "Verified. Logging you in…"
+msgstr "تم التحقق. جارٍ تسجيل دخولك…"
+
+#: includes/class-otp.php:286
+msgid "Your WhatsApp number is verified."
+msgstr "تم التحقق من رقم واتساب الخاص بك."
+
+#: includes/class-otp.php:303
+msgid "Please verify your WhatsApp number with the code we send you."
+msgstr "يُرجى التحقق من رقم واتساب الخاص بك بالرمز الذي نرسله إليك."
+
+#: includes/class-plugin.php:83
+msgid "WABEK WhatsApp requires WooCommerce to be installed and active."
+msgstr "تتطلب إضافة واتساب WABEK تثبيت WooCommerce وتفعيلها."
+
+#: includes/class-settings.php:196
+msgid "New order"
+msgstr "طلب جديد"
+
+#: includes/class-settings.php:197
+msgid "Processing"
+msgstr "قيد المعالجة"
+
+#: includes/class-settings.php:198
+msgid "Completed"
+msgstr "مكتمل"
+
+#: includes/class-settings.php:199
+msgid "Cancelled"
+msgstr "ملغى"
+
+#: includes/class-settings.php:200
+msgid "Refunded"
+msgstr "مسترد"
+
+#: includes/class-settings.php:201
+msgid "On hold"
+msgstr "معلّق"
+
+#: includes/class-settings.php:214
+msgid "Admin alert: new order"
+msgstr "تنبيه المدير: طلب جديد"
+
+#: includes/class-settings.php:215
+msgid "Abandoned cart"
+msgstr "سلة متروكة"
+
+#: includes/class-settings.php:216
+msgid "Test message"
+msgstr "رسالة تجريبية"
+
+#. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
+#: includes/class-settings.php:298
+msgid ""
+"Hello {customer_name} 👋\n"
+"Thank you for your order *#{order_id}* from {site_name}.\n"
+"\n"
+"Items:\n"
+"{order_items}\n"
+"\n"
+"Total: *{order_total}*\n"
+"We will let you know as soon as it ships."
+msgstr ""
+"مرحبًا {customer_name} 👋\n"
+"شكرًا لطلبك *#{order_id}* من {site_name}.\n"
+"\n"
+"المنتجات:\n"
+"{order_items}\n"
+"\n"
+"الإجمالي: *{order_total}*\n"
+"سنُعلمك فور شحن طلبك."
+
+#. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
+#: includes/class-settings.php:300
+msgid ""
+"Hello {customer_name},\n"
+"Your order *#{order_id}* is now being processed. We will notify you when it ships.\n"
+"{site_name}"
+msgstr ""
+"مرحبًا {customer_name}،\n"
+"طلبك *#{order_id}* قيد المعالجة الآن، وسنُعلمك عند شحنه.\n"
+"{site_name}"
+
+#. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
+#: includes/class-settings.php:302
+msgid ""
+"Hello {customer_name} 🎉\n"
+"Your order *#{order_id}* has been completed.\n"
+"{tracking_url}\n"
+"Thank you for shopping with {site_name}."
+msgstr ""
+"مرحبًا {customer_name} 🎉\n"
+"اكتمل طلبك *#{order_id}*.\n"
+"{tracking_url}\n"
+"شكرًا لتسوّقك من {site_name}."
+
+#. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
+#: includes/class-settings.php:304
+msgid ""
+"Hello {customer_name},\n"
+"Your order *#{order_id}* has been cancelled. If this is unexpected, please reply to this message.\n"
+"{site_name}"
+msgstr ""
+"مرحبًا {customer_name}،\n"
+"أُلغي طلبك *#{order_id}*. إن لم تكن تتوقع ذلك، فيُرجى الرد على هذه الرسالة.\n"
+"{site_name}"
+
+#. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
+#: includes/class-settings.php:306
+msgid ""
+"Hello {customer_name},\n"
+"Your order *#{order_id}* has been refunded ({order_total}).\n"
+"{site_name}"
+msgstr ""
+"مرحبًا {customer_name}،\n"
+"استُرد مبلغ طلبك *#{order_id}* ({order_total}).\n"
+"{site_name}"
+
+#. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
+#: includes/class-settings.php:308
+msgid ""
+"Hello {customer_name},\n"
+"Your order *#{order_id}* is on hold until we confirm your payment.\n"
+"{site_name}"
+msgstr ""
+"مرحبًا {customer_name}،\n"
+"طلبك *#{order_id}* معلّق إلى أن نؤكد استلام دفعتك.\n"
+"{site_name}"
+
+#. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
+#: includes/class-settings.php:310
+msgid ""
+"Hello {customer_name},\n"
+"The payment for your order *#{order_id}* did not go through. You can try again here:\n"
+"{payment_url}\n"
+"{site_name}"
+msgstr ""
+"مرحبًا {customer_name}،\n"
+"لم تكتمل عملية الدفع لطلبك *#{order_id}*. يمكنك المحاولة مجددًا من هنا:\n"
+"{payment_url}\n"
+"{site_name}"
+
+#. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
+#: includes/class-settings.php:312
+msgid ""
+"Hello {customer_name},\n"
+"A new note was added to your order *#{order_id}*:\n"
+"\n"
+"{customer_note}\n"
+"\n"
+"{site_name}"
+msgstr ""
+"مرحبًا {customer_name}،\n"
+"أُضيفت ملاحظة جديدة إلى طلبك *#{order_id}*:\n"
+"\n"
+"{customer_note}\n"
+"\n"
+"{site_name}"
+
+#. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
+#: includes/class-settings.php:323
+msgid ""
+"🛒 New order *#{order_id}* on {site_name}\n"
+"Customer: {customer_name} ({customer_phone})\n"
+"Total: *{order_total}*\n"
+"\n"
+"{order_items}"
+msgstr ""
+"🛒 طلب جديد *#{order_id}* في {site_name}\n"
+"العميل: {customer_name} ({customer_phone})\n"
+"الإجمالي: *{order_total}*\n"
+"\n"
+"{order_items}"
+
+#. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
+#: includes/class-settings.php:333
+msgid ""
+"Hello {customer_name} 👋\n"
+"You left some items in your cart at {site_name}:\n"
+"{cart_items}\n"
+"\n"
+"Complete your order here:\n"
+"{cart_url}"
+msgstr ""
+"مرحبًا {customer_name} 👋\n"
+"تركتَ بعض المنتجات في سلتك لدى {site_name}:\n"
+"{cart_items}\n"
+"\n"
+"أكمل طلبك من هنا:\n"
+"{cart_url}"

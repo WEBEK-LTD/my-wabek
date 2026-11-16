@@ -1,0 +1,26 @@
+/*
+ * WABEK WhatsApp — RTL overrides for admin.css (loaded after it when is_rtl()).
+ * Everything else already uses logical properties.
+ */
+
+.wabek-hero {
+	background: radial-gradient(120% 160% at 100% 0%, #0d4a50 0%, #04282c 55%) #04282c;
+}
+
+.wabek-switch__track::after {
+	left: auto;
+	right: 3px;
+}
+
+.wabek-switch input:checked + .wabek-switch__track::after {
+	transform: translateX(-18px);
+}
+
+.wabek-wrap select {
+	background-position: left 8px top 55%;
+}
+
+/* Variable names are Latin code: keep them left-to-right but aligned to the start. */
+.wabek-chips {
+	justify-content: flex-end;
+}
