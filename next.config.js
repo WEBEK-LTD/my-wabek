@@ -1,5 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  async redirects() {
+    return [
+      // The in-app docs moved to the public documentation site.
+      { source: '/dashboard/docs', destination: '/docs', permanent: false },
+    ]
+  },
   async rewrites() {
     return [
       { source: '/sitemap.xml', destination: '/api/sitemap' },

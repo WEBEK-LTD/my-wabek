@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { GetServerSideProps } from 'next'
+import { docsSitemapPaths } from '@/components/docs/lib/manifest'
 
 const BASE_URL = 'https://waabek.com'
 
@@ -20,6 +21,8 @@ const STATIC_PAGES = [
   { url: '/legal/privacy', priority: '0.5', changefreq: 'monthly' },
   { url: '/legal/refund', priority: '0.4', changefreq: 'monthly' },
   { url: '/legal/accessibility', priority: '0.3', changefreq: 'yearly' },
+  // Public documentation (Arabic + English), from content/docs/manifest.json
+  ...docsSitemapPaths().map(p => ({ url: p.path, priority: p.priority, changefreq: p.changefreq })),
 ]
 
 function generateSitemap(pages: typeof STATIC_PAGES): string {
