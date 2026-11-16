@@ -7,7 +7,7 @@ Requires PHP: 7.4
 Requires Plugins: woocommerce
 WC requires at least: 7.0
 WC tested up to: 10.3
-Stable tag: 1.1.0
+Stable tag: 1.1.1
 License: Proprietary
 License URI: https://waabek.com/legal/terms
 
@@ -86,6 +86,9 @@ The plugin ships with English and Arabic. Default messages follow the site langu
 
 == Changelog ==
 
+= 1.1.1 =
+* API calls identify the plugin version (`X-WABEK-Client`) and the store host (`X-WABEK-Site`).
+
 = 1.1.0 =
 * Uses the new WABEK v1 API: number list, account default number, template language and numbered template variables, Idempotency-Key on every send, delivery status, opt-out sync, OTP sent from your own number with your store name.
 
@@ -93,6 +96,9 @@ The plugin ships with English and Arabic. Default messages follow the site langu
 * New plugin, rewritten from scratch (replaces "WAABEK for WooCommerce").
 
 == Upgrade Notice ==
+
+= 1.1.1 =
+Maintenance release, no settings change.
 
 = 1.1.0 =
 Set your template language (Arabic by default) under Order notifications if your approved templates use another language.

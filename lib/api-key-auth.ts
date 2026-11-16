@@ -11,6 +11,7 @@ import { NextApiRequest } from 'next'
 import { createHash } from 'crypto'
 import { supabaseAdmin } from './supabase'
 import { safeEqual } from './security'
+import { noteAddonClient } from './addon-usage'
 
 export interface ApiKeyAuth {
   userId: string
@@ -134,7 +135,7 @@ export async function authenticateApiKey(
   }
 
   const headerCandidate = key || bearer
-  if (headerCandidate) return lookupApiKey(headerCandidate)
+  if (headerCandidate) return withAddonUsage(req, await lookupApiKey(headerCandidate))
 
   const legacy = legacyKey(req, !!opts.allowBody)
   if (!legacy) {
@@ -148,7 +149,13 @@ export async function authenticateApiKey(
   }
   if (!queryApiKeyAllowed()) return null
   console.warn(`[api-key] DEPRECATED: API key sent in the query string/body on ${opts.route || req.url?.split('?')[0]} — send it in the X-API-Key header instead`)
-  return lookupApiKey(legacy)
+  return withAddonUsage(req, await lookupApiKey(legacy))
+}
+
+/** Records X-WABEK-Client (WordPress / WHMCS add-on version) for key-authenticated calls. */
+function withAddonUsage(req: NextApiRequest, auth: ApiKeyAuth | null): ApiKeyAuth | null {
+  if (auth) noteAddonClient(req, auth.userId)
+  return auth
 }
 
 const _apiLogAt = new Map<string, number>()

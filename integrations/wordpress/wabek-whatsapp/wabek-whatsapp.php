@@ -3,7 +3,7 @@
  * Plugin Name:          WABEK WhatsApp for WooCommerce
  * Plugin URI:           https://waabek.com
  * Description:          WhatsApp order notifications, abandoned-cart reminders and WhatsApp OTP login for WooCommerce, powered by the WABEK WhatsApp Business platform.
- * Version:              1.1.0
+ * Version:              1.1.1
  * Requires at least:    6.0
  * Requires PHP:         7.4
  * Requires Plugins:     woocommerce
@@ -21,7 +21,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'WABEK_WA_VERSION', '1.1.0' );
+define( 'WABEK_WA_VERSION', '1.1.1' );
 define( 'WABEK_WA_FILE', __FILE__ );
 define( 'WABEK_WA_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WABEK_WA_URL', plugin_dir_url( __FILE__ ) );

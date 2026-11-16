@@ -4,7 +4,7 @@ import {
   CpuChipIcon, ChartBarIcon, PuzzlePieceIcon, AdjustmentsHorizontalIcon,
   UsersIcon, CreditCardIcon, BuildingStorefrontIcon, LifebuoyIcon,
   DocumentDuplicateIcon, Cog6ToothIcon, SparklesIcon, MagnifyingGlassCircleIcon,
-  ClipboardDocumentListIcon, SignalIcon,
+  ClipboardDocumentListIcon, SignalIcon, CubeIcon,
 } from '@heroicons/react/24/outline'
 
 export interface NavItem {
@@ -116,6 +116,7 @@ export const ADMIN_SECTIONS: NavSection[] = [
     ],
   },
   { id: 'support', labelKey: 'admin_support', icon: LifebuoyIcon, items: [{ href: '/admin/support', labelKey: 'admin_tickets' }] },
+  { id: 'addons', labelKey: 'admin_addons', icon: CubeIcon, items: [{ href: '/admin/addons', labelKey: 'admin_addons' }] },
   { id: 'wa-templates', labelKey: 'admin_wa_templates', icon: DocumentDuplicateIcon, items: [{ href: '/admin/wa-templates', labelKey: 'admin_wa_templates' }] },
   {
     id: 'settings', labelKey: 'admin_settings', icon: Cog6ToothIcon,

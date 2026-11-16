@@ -104,7 +104,7 @@ import AdminLayout from '@/components/layout/AdminLayout'
 <AdminLayout title="Users">…</AdminLayout>
 ```
 
-Same frame with an “Admin” tag, `useAdminAuth()` guard and a "back to app" link. Sections: نظرة عامة (`/admin`, `/admin/analytics`), المستخدمون, الباقات, الموزّعون (`/admin/resellers`, `/admin/payouts`), الدعم, قوالب واتساب, الإعدادات (`/admin/settings`, `/admin/whatsapp`), الذكاء الاصطناعي (`/admin/ai-settings`), SEO, السجلات, حالة الخدمة (`/admin/service-status`).
+Same frame with an “Admin” tag, `useAdminAuth()` guard and a "back to app" link. Sections: نظرة عامة (`/admin`, `/admin/analytics`), المستخدمون, الباقات, الموزّعون (`/admin/resellers`, `/admin/payouts`), الدعم, قوالب واتساب, الإعدادات (`/admin/settings`, `/admin/whatsapp`), الذكاء الاصطناعي (`/admin/ai-settings`), SEO, السجلات, حالة الخدمة (`/admin/service-status`), الإضافات (`/admin/addons`: إضافتا WordPress وWHMCS).
 
 ### PublicNav / PublicFooter
 

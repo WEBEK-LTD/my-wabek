@@ -165,6 +165,16 @@ final class Api_Client {
 	}
 
 	/**
+	 * Host name of this store (sent as X-WABEK-Site), e.g. "shop.example.com".
+	 *
+	 * @return string
+	 */
+	private static function site_host() {
+		$host = (string) wp_parse_url( home_url(), PHP_URL_HOST );
+		return preg_match( '/^[A-Za-z0-9.-]{1,253}$/', $host ) ? strtolower( $host ) : '';
+	}
+
+	/**
 	 * Performs a request.
 	 *
 	 * @param string     $method  HTTP method.
@@ -190,10 +200,16 @@ final class Api_Client {
 			'sslverify'   => true,
 			'user-agent'  => 'WABEK-WhatsApp-WordPress/' . WABEK_WA_VERSION,
 			'headers'     => array(
-				'X-API-Key' => $key,
-				'Accept'    => 'application/json',
+				'X-API-Key'      => $key,
+				'Accept'         => 'application/json',
+				// Identifies the plugin and its version to the platform (usage stats).
+				'X-WABEK-Client' => 'wordpress/' . WABEK_WA_VERSION,
 			),
 		);
+		$site = self::site_host();
+		if ( '' !== $site ) {
+			$args['headers']['X-WABEK-Site'] = $site;
+		}
 		$args['headers'] += $headers;
 		if ( null !== $body ) {
 			$args['headers']['Content-Type'] = 'application/json';

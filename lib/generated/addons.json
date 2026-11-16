@@ -1,0 +1,153 @@
+{
+  "generatedAt": "2026-11-16T13:47:06.635Z",
+  "addons": [
+    {
+      "id": "wordpress",
+      "name": "WABEK WhatsApp for WooCommerce",
+      "version": "1.1.1",
+      "download": "/downloads/wabek-wordpress-plugin.zip",
+      "size": 147696,
+      "sha256": "894d5ce331ddee4b751e120bc8c00e3ee828fca10e05a573d0a336a94448e913",
+      "changelog": [
+        {
+          "version": "1.1.1",
+          "date": "2026-11-16",
+          "notes": null,
+          "sections": [
+            {
+              "title": "Added",
+              "items": [
+                "Every API call identifies the plugin with `X-WABEK-Client: wordpress/<version>` and the store host with `X-WABEK-Site`, so the WABEK admin can see which plugin versions are in use. No customer data is sent in these headers."
+              ]
+            }
+          ]
+        },
+        {
+          "version": "1.1.0",
+          "date": "2026-11-16",
+          "notes": null,
+          "sections": [
+            {
+              "title": "Added",
+              "items": [
+                "Template language setting (default `ar`) and named or numbered (positional) template variables, sent as `template_language` / `template_params`.",
+                "`Idempotency-Key` header on every send, reused across retries of the same queued message; `409 idempotency_in_progress` is retried later.",
+                "\"Check delivery\" in the send log (`GET /api/v1/message-status`), stored per message.",
+                "Opt-out sync with WABEK contacts (`POST /api/v1/contacts-opt-out`) when a customer opts out/in in My Account or withdraws/renews consent at checkout.",
+                "OTP codes are sent from the store's selected number with the store name (`instance_id`, `brand_name`)."
+              ]
+            },
+            {
+              "title": "Changed",
+              "items": [
+                "Number list comes from `GET /api/v1/instances` (default number marked); the manual instance ID moved under \"Advanced\". Without a selection the account's default number is used."
+              ]
+            }
+          ]
+        },
+        {
+          "version": "1.0.0",
+          "date": "2026-11-16",
+          "notes": "First release of the rewritten plugin (slug `wabek-whatsapp`), replacing \"WAABEK for WooCommerce\".",
+          "sections": [
+            {
+              "title": "Added",
+              "items": [
+                "Customer WhatsApp notifications for new order, processing, completed, cancelled, refunded, on-hold, failed and notes to customer, each with its own switch, message editor and optional approved template + named variables for messages outside the 24-hour window.",
+                "Store owner alert for new orders.",
+                "Background sending through Action Scheduler (WP-Cron fallback) with retries after 1, 5 and 15 minutes for timeouts and 5xx responses; 4xx responses are never retried.",
+                "Send log (latest 200 messages, masked phone numbers) with \"Resend\" and \"Clear log\".",
+                "WhatsApp consent checkbox for the classic and block checkout, optional \"consent required\" mode and My Account opt-out.",
+                "Optional abandoned cart reminder (one reminder, configurable delay, cart restore link).",
+                "Optional WhatsApp OTP login and registration number verification with local rate limits.",
+                "E.164 phone normalization (billing country → default country → store base country), including Arabic-Indic digits.",
+                "Connection test that validates the API key and lists WhatsApp numbers when the server supports it.",
+                "One-time import of the old plugin's API key, API URL, number and admin phone; warning while the old plugin is still active.",
+                "HPOS and Cart & Checkout blocks compatibility declarations.",
+                "English source strings, Arabic (Modern Standard Arabic) translation, RTL admin styles."
+              ]
+            },
+            {
+              "title": "Security",
+              "items": [
+                "API key sent only in the `X-API-Key` header over verified HTTPS, redirects disabled, key masked in the UI and never logged.",
+                "Capability checks and nonces on every form and AJAX handler; sanitized input, escaped output, prepared SQL."
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "whmcs",
+      "name": "WABEK WhatsApp for WHMCS",
+      "version": "4.1.0",
+      "download": "/downloads/wabek-whmcs-addon.zip",
+      "size": 162307,
+      "sha256": "5dd83ecfaebbc57a472b5254f3ef7d840be83c8a2a544476c17027af357b3bfe",
+      "changelog": [
+        {
+          "version": "4.1.0",
+          "date": "2026-11-16",
+          "notes": null,
+          "sections": [
+            {
+              "title": "Added",
+              "items": [
+                "**Theme-native client area.** The active client-area theme is detected (template variable, WHMCS `Theme::factory()`, `?systpl=` session, `Template` setting; child themes followed through the `parent:` key of `theme.yaml`; unknown themes sniffed for their Bootstrap version) and the pages are rendered from `templates/bs3/` (six, Lagom 1.x, other Bootstrap 3 themes), `templates/bs4/` (twenty-one, Nexus, other Bootstrap 4/5 themes, and the default) or `templates/lagom2/` (Lagom 2.x and its child themes). Each set uses the theme's own panels / cards / Lagom sections, buttons, alerts, labels / badges and form controls, so it takes the theme's colours, light/dark style and RTL.",
+                "**WhatsApp consent checkbox at checkout** (optional, setting *Show a WhatsApp consent checkbox at checkout*). Printed through `ShoppingCartCheckoutOutput`, so it works in every order form (standard_cart, premium/pure/supreme comparison, universal/cloud slider, boxes, Lagom, Lagom One Step, Nexus) without template edits. A changed choice is recorded with source `checkout` (new clients before the welcome message is queued).",
+                "Sidebar panel on the module pages and a theme-aware WhatsApp icon on the Account menu item (FA4 / v4-shims class on Bootstrap 3 themes, FA5/6 brands elsewhere), both through the WHMCS menu API.",
+                "French, German, Spanish and Turkish texts for the client area and checkout (other strings fall back to English).",
+                "`tests/`: template / theme-detection checks and a Playwright screenshot harness (Bootstrap 3.4.1 and 4.6.2, simulated six, Lagom 1, twenty-one and Lagom 2 light/dark, LTR and RTL, 390px and 1280px)."
+              ]
+            },
+            {
+              "title": "Changed",
+              "items": [
+                "The client pages no longer carry their own branded header and inline `<style>`; the small stylesheet `assets/client.css` is scoped to `.wabek-ca` / `.wabek-co`, loaded only on `index.php?m=wabek` (and the checkout step when the checkbox is on) and uses Lagom / Bootstrap colour variables.",
+                "`templates/preferences.tpl` and `templates/verify.tpl` (still the `templatefile` WHMCS loads) are now thin shims that include the variant set from the absolute path in `$wabekTplDir`, falling back to `templates/bs4/`.",
+                "The WhatsApp-code-after-login redirect never touches the theme's login, logout or password-reset pages."
+              ]
+            }
+          ]
+        },
+        {
+          "version": "4.0.0",
+          "date": "2026-11-16",
+          "notes": "Complete rewrite of the addon (no code from 3.x).",
+          "sections": [
+            {
+              "title": "Added",
+              "items": [
+                "PSR-4 `WABEK\\` library under `lib/`, Capsule schema created on activate and versioned migrations on upgrade.",
+                "Client notifications for 18 events (accounts, billing, orders, services, support, domains) and 3 admin alerts, each with English and Modern Standard Arabic texts, merge fields, a per-event \"critical\" flag and an optional approved template for outside the 24-hour window.",
+                "Daily reminders: X days before due, on the due date, X days after due, domain renewals — de-duplicated per invoice/domain and day offset.",
+                "Queue + send log (`mod_wabek_outbox`) processed by `AfterCronJob` with a cron lock, exponential backoff on 5xx / 429 / network errors, no retry on other 4xx, immediate send for critical messages with fallback to the queue.",
+                "Admin area: overview, settings with connection test, notification editor with sample sends, filtered send log with resend/cancel, manual send, bulk messages by product / service status / client status, consent management. Branded, RTL-aware UI.",
+                "Client area: WhatsApp preferences page (POST + CSRF) and WhatsApp verification page; optional WhatsApp code after login.",
+                "E.164 normalisation from the WHMCS phone number and client country, with an optional custom-field override.",
+                "Import of 3.x API settings (re-encrypted) and opt-outs.",
+                "Platform API integration: every message is sent with `type: \"notification\"` and an `Idempotency-Key` per outbox row (`409 idempotency_in_progress` is retried); approved templates take a language and named or positional parameters; instances are listed by `GET /api/v1/instances`; opt-ins/opt-outs are mirrored with `POST /api/v1/contacts-opt-out`; delivery status can be checked from the send log (`GET /api/v1/message-status`); OTP codes are sent from the default instance with the WHMCS company name as `brand_name`."
+              ]
+            },
+            {
+              "title": "Security",
+              "items": [
+                "API key encrypted with WHMCS `encrypt()`, masked in the UI, sent only in the `X-API-Key` header, redacted from `logModuleCall`.",
+                "CSRF token on every POST; all state changes are POST-only; output escaped; inputs validated against allow-lists.",
+                "cURL with HTTPS-only, TLS verification, no redirects and connect/total timeouts."
+              ]
+            },
+            {
+              "title": "Fixed (compared with 3.x)",
+              "items": [
+                "Client opt-in/opt-out was a GET request without CSRF protection.",
+                "OTP verification was routed to the wrong handler and never succeeded."
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
