@@ -22,6 +22,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const assigned_to = typeof req.query.assigned_to === 'string' ? req.query.assigned_to : undefined
     const instance_id = typeof req.query.instance_id === 'string' ? req.query.instance_id : undefined
     const search = typeof req.query.search === 'string' ? escapeFilterValue(req.query.search) : ''
+    // Deep link from a contact page: only this contact's conversation(s).
+    const contactFilter = typeof req.query.contact_id === 'string' && /^[0-9a-f-]{36}$/i.test(req.query.contact_id) ? req.query.contact_id : undefined
     const page = Math.min(Math.max(parseInt(String(req.query.page || '1'), 10) || 1, 1), 1000)
     const limit = 30
     const offset = (page - 1) * limit
@@ -54,6 +56,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (status !== 'all') query = query.eq('status', status)
     if (assigned_to) query = query.eq('assigned_to', assigned_to)
+    if (contactFilter) query = query.eq('contact_id', contactFilter)
     if (search) {
       query = query.or(`contacts.name.ilike.%${search}%,contacts.phone.ilike.%${search}%`)
     }

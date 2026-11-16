@@ -8,6 +8,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout'
 import { Avatar, Button, Select, Skeleton, Tooltip } from '@/components/ui'
 import { cn } from '@/components/ui/utils'
 import { useAuthStore } from '@/lib/store'
+import { useRouter } from 'next/router'
 import { useRequireAuth } from '@/hooks/useAuth'
 import { localeTag } from '@/components/auth/makeCopy'
 import { useInboxCopy } from '@/components/inbox/copy'
@@ -135,6 +136,39 @@ export default function ChatPage() {
       axios.get('/api/team').then(r => setTeamMembers(r.data.members || [])).catch(() => {}),
     ]).finally(() => setLoading(false))
   }, [])
+
+  // Deep link: /dashboard/chat?contact=<id> (e.g. "open chat" on a contact page)
+  // opens that contact's conversation, or starts one when none exists yet.
+  const router = useRouter()
+  const deepLinkDone = useRef(false)
+  useEffect(() => {
+    if (loading || deepLinkDone.current || !router.isReady) return
+    const raw = router.query.contact
+    const contactId = typeof raw === 'string' && /^[0-9a-f-]{36}$/i.test(raw) ? raw : null
+    if (!contactId) return
+    deepLinkDone.current = true
+    ;(async () => {
+      try {
+        const known = conversations.find(cv => cv.contact_id === contactId)
+        if (known) { openConversation(known); return }
+        const { data } = await axios.get('/api/inbox', { params: { status: 'all', contact_id: contactId, ...(canSeeAll ? { instance_id: 'all' } : {}) } })
+        const found = (data?.conversations || [])[0]
+        if (found) {
+          setConversations(prev => (prev.some(cv => cv.id === found.id) ? prev : [found, ...prev]))
+          openConversation(found)
+          return
+        }
+        // No conversation yet: open an empty thread for the contact.
+        const { data: cd } = await axios.get(`/api/contacts/${contactId}`)
+        const contact = cd?.contact
+        if (!contact) return
+        openConversation({
+          id: null, contact_id: contact.id, instance_id: selectedInstance || instances[0]?.id || null, status: 'open',
+          contacts: { id: contact.id, name: contact.name, phone: contact.phone, tags: contact.tags },
+        })
+      } catch { /* invalid or inaccessible contact: stay on the list */ }
+    })()
+  }, [loading, router.isReady, router.query.contact])
 
   // Keep ref in sync so realtime handler always reads current value
   useEffect(() => { activeConvRef.current = activeConv }, [activeConv])
