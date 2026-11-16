@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { requireMemberAccess } from '@/lib/auth'
 import { logAction, getClientIp } from '@/lib/middleware'
 import { toPublicInstance } from '@/lib/whatsapp'
+import { callWAServer, isValidInstanceId } from '@/lib/wa-web'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await requireMemberAccess(req, res, 'instances')
@@ -47,6 +48,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'DELETE') {
+    // QR (Baileys) numbers: log the session out and drop its saved creds on
+    // the WA server too, or it keeps running (and reconnecting) after the row
+    // is gone. A failure there must not block deleting the row.
+    if (instance.instance_type === 'wa_web' && isValidInstanceId(instance.id)) {
+      try {
+        await callWAServer(`/instance/${instance.id}`, undefined, { method: 'DELETE' })
+      } catch (err) {
+        console.error(`[instances] WA server delete failed for ${instance.id}:`, err instanceof Error ? err.message : err)
+      }
+    }
     await db.from('whatsapp_instances').delete().eq('id', id).eq('user_id', user.userId)
     await logAction({ userId: user.userId, action: 'delete_instance', resource: 'whatsapp_instance', resourceId: id, ipAddress: getClientIp(req) })
     return res.status(200).json({ success: true })
