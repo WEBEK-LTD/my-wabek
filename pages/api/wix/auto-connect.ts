@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { randomBytes } from 'crypto'
 import { supabaseAdmin } from '@/lib/supabase'
-import { verifyWixInstance, getLinkedUserId, wixAppConfigured } from '@/lib/wix-auth'
+import { verifyWixInstance, getLinkedUserId, wixAppConfigured, reactivateWixInstallation } from '@/lib/wix-auth'
 import { v4 as uuidv4 } from 'uuid'
 
 // Called by /wix-setup with the `instance` param Wix gives the app page.
@@ -25,6 +25,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Already linked → that account
   const linkedUserId = await getLinkedUserId(instanceId)
   if (linkedUserId) {
+    // A signed instance means the app is installed: undo an App Removed mark
+    await reactivateWixInstallation(instanceId)
     const { data: u } = await db.from('users').select('email').eq('id', linkedUserId).maybeSingle()
     return res.status(200).json({
       success: true, user_id: linkedUserId,
@@ -76,6 +78,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       installed_at:    new Date().toISOString(),
       updated_at:      new Date().toISOString(),
     })
+  } else {
+    await reactivateWixInstallation(instanceId)
   }
 
   await db.from('wix_user_links').upsert({
