@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { ArrowPathIcon, PaperAirplaneIcon } from '@heroicons/react/24/outline'
 import { Button, cn } from '@/components/ui'
+import { useT } from '@/lib/i18n-local'
+import common from '@/locales/dashboard/common-a'
 
 export interface ChatMessage {
   role: 'user' | 'bot'
@@ -33,9 +35,10 @@ export interface ChatPreviewProps {
  * header, bubbles, typing indicator and a composer.
  */
 export function ChatPreview({
-  title, subtitle, messages, loading, value, onChange, onSend, onReset, placeholder = 'اكتب رسالة تجريبية…',
+  title, subtitle, messages, loading, value, onChange, onSend, onReset, placeholder,
   emptyHint, disabled, className, height = 'h-[380px]', avatar,
 }: ChatPreviewProps) {
+  const { t } = useT(common)
   const endRef = useRef<HTMLDivElement>(null)
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' }) }, [messages.length, loading])
 
@@ -48,18 +51,18 @@ export function ChatPreview({
           {subtitle && <p className="truncate text-xs text-deep-muted">{subtitle}</p>}
         </div>
         {onReset && messages.length > 0 && (
-          <Button size="xs" variant="on-deep-ghost" icon={ArrowPathIcon} onClick={onReset}>مسح</Button>
+          <Button size="xs" variant="on-deep-ghost" icon={ArrowPathIcon} onClick={onReset}>{t('chat_clear')}</Button>
         )}
       </div>
 
       <div
         className={cn('flex flex-col gap-2.5 overflow-y-auto bg-surface-2 px-3 py-4', height)}
         style={{ backgroundImage: 'radial-gradient(rgb(var(--line) / 0.9) 1px, transparent 1px)', backgroundSize: '18px 18px' }}
-        role="log" aria-live="polite" aria-label="محادثة الاختبار"
+        role="log" aria-live="polite" aria-label={t('chat_log_aria')}
       >
         {messages.length === 0 && !loading && (
           <div className="m-auto max-w-[260px] rounded-card bg-surface/90 px-4 py-3 text-center text-xs leading-relaxed text-muted shadow-sm">
-            {emptyHint || 'أرسل رسالة كما سيكتبها عميلك لترى الرد.'}
+            {emptyHint || t('chat_empty')}
           </div>
         )}
         {messages.map((m, i) => (
@@ -74,7 +77,7 @@ export function ChatPreview({
           </div>
         ))}
         {loading && (
-          <div className="flex justify-end" aria-label="جارٍ الرد">
+          <div className="flex justify-end" aria-label={t('chat_replying')}>
             <div className="flex gap-1 rounded-2xl rounded-se-sm bg-chip px-4 py-3">
               {[0, 1, 2].map(i => <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-brand-ink" style={{ animationDelay: `${i * 0.15}s` }} />)}
             </div>
@@ -87,12 +90,12 @@ export function ChatPreview({
         <input
           value={value}
           onChange={e => onChange(e.target.value)}
-          placeholder={placeholder}
+          placeholder={placeholder ?? t('chat_placeholder')}
           disabled={disabled}
-          aria-label="رسالة الاختبار"
+          aria-label={t('chat_input_aria')}
           className="h-10 min-w-0 flex-1 rounded-full border border-line-strong bg-surface-2 px-4 text-sm text-ink placeholder:text-muted focus:border-brand-teal focus:outline-none disabled:opacity-50"
         />
-        <Button type="submit" size="icon" icon={PaperAirplaneIcon} aria-label="إرسال" disabled={!value.trim() || loading || disabled} className="rounded-full rtl:[&>svg]:-scale-x-100" />
+        <Button type="submit" size="icon" icon={PaperAirplaneIcon} aria-label={t('chat_send')} disabled={!value.trim() || loading || disabled} className="rounded-full rtl:[&>svg]:-scale-x-100" />
       </form>
     </div>
   )
