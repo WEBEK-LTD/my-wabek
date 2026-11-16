@@ -284,7 +284,7 @@ export default function CampaignsPage() {
   ])
   const [showTemplates, setShowTemplates] = useState(false)
   const [previewContact, setPreviewContact] = useState('John')
-  const [form, setForm] = useState({ name: '', instance_id: '', tags: '', delay_seconds: '3', scheduled_at: '', template_name: '' })
+  const [form, setForm] = useState({ name: '', instance_id: '', tags: '', segment_id: '', delay_seconds: '3', scheduled_at: '', template_name: '', template_language: '', template_variables: [] as string[], template_param_names: [] as string[] })
 
   const { data: cData } = useQuery('campaigns', () => axios.get('/api/campaigns').then(r => r.data), {
     refetchInterval: (data: any) => {
@@ -338,10 +338,18 @@ export default function CampaignsPage() {
       instance_id: form.instance_id,
       message,
       template_name: form.template_name || undefined,
-      template_language: 'en',
-      contact_filter: form.tags ? { tags: form.tags.split(',').map(t => t.trim()) } : { all: true },
+      // The selected template's approved language (from Meta)
+      template_language: form.template_name && form.template_language ? form.template_language : undefined,
+      ...(form.template_name ? {
+        template_variables: form.template_variables,
+        ...(form.template_param_names.length ? { template_param_names: form.template_param_names } : {}),
+      } : {}),
+      segment_id: form.segment_id || undefined,
+      contact_filter: form.segment_id ? { segment_id: form.segment_id }
+        : form.tags ? { tags: form.tags.split(',').map(t => t.trim()).filter(Boolean) } : { all: true },
       delay_seconds: parseInt(form.delay_seconds) || 3,
-      scheduled_at: form.scheduled_at || undefined,
+      // datetime-local is the browser's local time → send an ISO instant
+      scheduled_at: form.scheduled_at ? new Date(form.scheduled_at).toISOString() : undefined,
     })
   }
 
@@ -532,14 +540,24 @@ export default function CampaignsPage() {
               ) : null}
 
               <select
-                value={form.template_name}
-                onChange={e => setForm(d => ({...d, template_name: e.target.value}))}
+                value={form.template_name ? `${form.template_name}|${form.template_language}` : ''}
+                onChange={e => {
+                  const [name, language] = e.target.value.split('|')
+                  const t = approvedTemplates.find((x: any) => x.name === name && x.language === language)
+                  const count = t?.variableCount || 0
+                  setForm(d => ({
+                    ...d, template_name: name || '', template_language: language || '',
+                    // Defaults: first variable = contact name; edit below
+                    template_variables: Array.from({ length: count }, (_, i) => (i === 0 ? '{name}' : '')),
+                    template_param_names: t?.parameterFormat === 'NAMED' ? (t.paramNames || []) : [],
+                  }))
+                }}
                 className="input font-mono text-sm"
                 disabled={!form.instance_id}
               >
                 <option value="">— Select an approved template —</option>
                 {approvedTemplates.map((t: any) => (
-                  <option key={`${t.name}_${t.language}`} value={t.name}>
+                  <option key={`${t.name}_${t.language}`} value={`${t.name}|${t.language}`}>
                     {t.name} ({t.language}, {t.category}, {t.variableCount} variable{t.variableCount === 1 ? '' : 's'})
                   </option>
                 ))}
@@ -547,7 +565,17 @@ export default function CampaignsPage() {
 
               {form.template_name && approvedTemplates.find((t: any) => t.name === form.template_name) && (
                 <div className="mt-2 p-2 bg-slate-50 rounded text-xs text-slate-600 whitespace-pre-wrap">
-                  {approvedTemplates.find((t: any) => t.name === form.template_name)?.body}
+                  {approvedTemplates.find((t: any) => t.name === form.template_name && t.language === form.template_language)?.body}
+                </div>
+              )}
+
+              {form.template_variables.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {form.template_variables.map((v, i) => (
+                    <input key={i} value={v} className="input text-sm font-mono"
+                      placeholder={`{{${form.template_param_names[i] || i + 1}}} — e.g. {name}, {phone}, {city}`}
+                      onChange={e => setForm(d => ({ ...d, template_variables: d.template_variables.map((x, j) => (j === i ? e.target.value : x)) }))} />
+                  ))}
                 </div>
               )}
 

@@ -34,16 +34,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const result = await getMessageTemplates(instance.waba_id, instance.access_token)
-    const templates = (result.data || []).map((t: any) => ({
-      name: t.name,
-      status: t.status, // APPROVED, PENDING, REJECTED, ...
-      category: t.category,
-      language: t.language,
-      // Extract a human-readable preview of the body text + variable count
-      body: (t.components || []).find((c: any) => c.type === 'BODY')?.text || '',
-      variableCount: (((t.components || []).find((c: any) => c.type === 'BODY')?.text || '').match(/\{\{\d+\}\}/g) || []).length,
-      hasButtons: (t.components || []).some((c: any) => c.type === 'BUTTONS'),
-    }))
+    const templates = (result.data || []).map((t: any) => {
+      const bodyText: string = (t.components || []).find((c: any) => c.type === 'BODY')?.text || ''
+      const positional = bodyText.match(/\{\{\s*\d+\s*\}\}/g) || []
+      const named = Array.from(new Set((bodyText.match(/\{\{\s*([a-z0-9_]+)\s*\}\}/g) || [])
+        .map(m => m.replace(/[{}\s]/g, ''))
+        .filter(n => !/^\d+$/.test(n))))
+      const isNamed = t.parameter_format === 'NAMED' || (named.length > 0 && positional.length === 0)
+      return {
+        name: t.name,
+        status: t.status, // APPROVED, PENDING, REJECTED, ...
+        category: t.category,
+        // The approved language code ("ar", "en_US" …) — must be sent back
+        // exactly when using this template.
+        language: t.language,
+        // Extract a human-readable preview of the body text + variables
+        body: bodyText,
+        parameterFormat: isNamed ? 'NAMED' : 'POSITIONAL',
+        // Named templates: the parameter names in body order ({{customer_name}} …)
+        paramNames: isNamed ? named : [],
+        variableCount: isNamed ? named.length : positional.reduce((max, p) => Math.max(max, parseInt(p.replace(/[{}\s]/g, ''), 10) || 0), 0),
+        hasButtons: (t.components || []).some((c: any) => c.type === 'BUTTONS'),
+      }
+    })
 
     return res.status(200).json({ templates })
   } catch (err: any) {
