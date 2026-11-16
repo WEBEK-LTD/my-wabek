@@ -21,14 +21,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const db = supabaseAdmin()
 
   if (req.method === 'GET') {
-    let { data, error } = await db.from('zapier_hooks').select(`${PUBLIC_FIELDS}, last_status, last_error`)
+    let migrated = true
+    let { data, error } = await db.from('zapier_hooks').select(`${PUBLIC_FIELDS}, last_status, last_error, failure_count`)
       .eq('user_id', user.userId).order('created_at', { ascending: false })
     if (error) {
       // Migration 032 not applied yet
+      migrated = false
       ;({ data } = await db.from('zapier_hooks').select(PUBLIC_FIELDS)
         .eq('user_id', user.userId).order('created_at', { ascending: false }) as any)
     }
-    return res.status(200).json({ hooks: data || [], events: WEBHOOK_EVENTS })
+    let hooks: Record<string, unknown>[] = (data || []) as Record<string, unknown>[]
+    if (migrated && hooks.length) {
+      // Delivery queue per hook (webhook_deliveries, migration 032): head counts only.
+      const count = async (hookId: string, status: 'pending' | 'failed') => {
+        const { count: n, error: e } = await db.from('webhook_deliveries').select('id', { count: 'exact', head: true })
+          .eq('user_id', user.userId).eq('hook_id', hookId).eq('status', status)
+        return e ? null : (n || 0)
+      }
+      hooks = await Promise.all(hooks.slice(0, 100).map(async h => {
+        const [pending, failed] = await Promise.all([count(String(h.id), 'pending'), count(String(h.id), 'failed')])
+        return { ...h, pending_deliveries: pending, failed_deliveries: failed }
+      }))
+    }
+    return res.status(200).json({ hooks, events: WEBHOOK_EVENTS })
   }
 
   if (req.method === 'POST') {
