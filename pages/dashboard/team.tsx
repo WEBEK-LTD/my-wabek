@@ -16,40 +16,38 @@ import {
 import { useAuthStore } from '@/lib/store'
 import { CopyField, ErrorState, Notice, apiError } from '@/components/settings/Shared'
 import { PerformancePanel, ReviewsPanel, NoteModal } from '@/components/settings/TeamPanels'
-import { fmtDate } from '@/components/settings/format'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/team'
 
+// Labels are dictionary keys (locales/dashboard/team.ts).
 const ROLE_META = {
-  admin:  { label: 'مدير', tone: 'violet', icon: ShieldCheckIcon },
-  agent:  { label: 'وكيل', tone: 'brand', icon: ChatBubbleLeftRightIcon },
-  viewer: { label: 'مشاهد', tone: 'neutral', icon: EyeIcon },
+  admin:  { label: 'role_admin', tone: 'violet', icon: ShieldCheckIcon },
+  agent:  { label: 'role_agent', tone: 'brand', icon: ChatBubbleLeftRightIcon },
+  viewer: { label: 'role_viewer', tone: 'neutral', icon: EyeIcon },
 }
 const STATUS_META = {
-  active:    { label: 'نشط', tone: 'success' },
-  pending:   { label: 'بانتظار القبول', tone: 'warning' },
-  suspended: { label: 'موقوف', tone: 'danger' },
+  active:    { label: 'status_active', tone: 'success' },
+  pending:   { label: 'status_pending', tone: 'warning' },
+  suspended: { label: 'status_suspended', tone: 'danger' },
 }
 const ROLE_OPTIONS = [
-  { value: 'agent', label: 'وكيل' },
-  { value: 'admin', label: 'مدير' },
-  { value: 'viewer', label: 'مشاهد' },
+  { value: 'agent', label: 'role_agent' },
+  { value: 'admin', label: 'role_admin' },
+  { value: 'viewer', label: 'role_viewer' },
 ]
 
 // What each role can do — shown in the invite dialog and the roles card.
 const ROLE_CAPS = [
-  { role: 'owner', label: 'المالك', icon: StarIcon, tone: 'bg-brand-gradient text-[#04282C]', can: ['كل الصلاحيات', 'الفوترة والباقة', 'إدارة الفريق ومفاتيح API'], cannot: [] },
-  { role: 'admin', label: 'مدير', icon: ShieldCheckIcon, tone: 'bg-violet-bg text-violet', can: ['كل الصلاحيات', 'المحادثات والحملات وجهات الاتصال', 'الإعدادات والتكاملات'], cannot: [] },
-  { role: 'agent', label: 'وكيل', icon: ChatBubbleLeftRightIcon, tone: 'bg-chip text-chip-ink', can: ['صندوق المحادثات والرد على العملاء', 'جهات الاتصال', 'الردود السريعة'], cannot: ['الإعدادات والفوترة'] },
-  { role: 'viewer', label: 'مشاهد', icon: EyeIcon, tone: 'bg-surface-3 text-muted', can: ['عرض فقط لكل الأقسام المتاحة'], cannot: ['الإرسال أو التعديل'] },
+  { role: 'owner', label: 'role_owner', icon: StarIcon, tone: 'bg-brand-gradient text-[#04282C]', can: ['cap_all', 'cap_billing', 'cap_team_api'], cannot: [] },
+  { role: 'admin', label: 'role_admin', icon: ShieldCheckIcon, tone: 'bg-violet-bg text-violet', can: ['cap_all', 'cap_core', 'cap_settings'], cannot: [] },
+  { role: 'agent', label: 'role_agent', icon: ChatBubbleLeftRightIcon, tone: 'bg-chip text-chip-ink', can: ['cap_inbox', 'cap_contacts', 'cap_quick'], cannot: ['cap_no_settings'] },
+  { role: 'viewer', label: 'role_viewer', icon: EyeIcon, tone: 'bg-surface-3 text-muted', can: ['cap_view_only'], cannot: ['cap_no_edit'] },
 ]
 
-const RANGES = [
-  { id: '1d', label: 'اليوم' },
-  { id: '7d', label: '7 أيام' },
-  { id: '30d', label: '30 يومًا' },
-]
-const RANGE_LABEL = { '1d': 'اليوم', '7d': 'آخر 7 أيام', '30d': 'آخر 30 يومًا' }
+const RANGES = ['1d', '7d', '30d']
 
 export default function TeamPage() {
+  const { t, fmtDate } = useT(messages)
   const qc = useQueryClient()
   const { user } = useAuthStore()
   const isOwner = !user?.sub_account_of  // owner has no parent account
@@ -68,7 +66,7 @@ export default function TeamPage() {
   const { data, isLoading, error: teamError, refetch } = useQuery(
     'team',
     () => axios.get('/api/team').then(r => r.data),
-    { onError: (e: any) => toast.error(e?.response?.data?.error || 'تعذّر تحميل الفريق') }
+    { onError: (e: any) => toast.error(apiError(e, t('loadTeamError'))) }
   )
   const members = data?.members || []
   const activeCount = members.filter(m => m.status === 'active').length
@@ -89,9 +87,9 @@ export default function TeamPage() {
       onSuccess: () => {
         qc.invalidateQueries(['ai-reviews', 'owner'])
         setCommentModal(null)
-        toast.success('تم حفظ الملاحظة')
+        toast.success(t('noteSaved'))
       },
-      onError: (e: any) => toast.error(e?.response?.data?.error || 'تعذّر الحفظ'),
+      onError: (e: any) => toast.error(apiError(e, t('saveError'))),
     }
   )
 
@@ -107,25 +105,25 @@ export default function TeamPage() {
         qc.invalidateQueries('team')
         setInviteUrl(r.data.inviteUrl)
         setForm({ name: '', email: '', role: 'agent' })
-        toast.success('أُنشئت الدعوة — شارك الرابط')
+        toast.success(t('inviteCreated'))
       },
-      onError: (e) => toast.error(e?.response?.data?.error || 'تعذّر إنشاء الدعوة'),
+      onError: (e) => toast.error(apiError(e, t('inviteError'))),
     }
   )
 
   const updateMut = useMutation(
     ({ id, ...body }) => axios.put(`/api/team/${id}`, body),
     {
-      onSuccess: () => { qc.invalidateQueries('team'); qc.invalidateQueries('team-performance'); toast.success('تم التحديث'); setRoleChange(null); setToSuspend(null) },
-      onError: (e: any) => toast.error(e?.response?.data?.error || 'تعذّر التحديث'),
+      onSuccess: () => { qc.invalidateQueries('team'); qc.invalidateQueries('team-performance'); toast.success(t('updated')); setRoleChange(null); setToSuspend(null) },
+      onError: (e: any) => toast.error(apiError(e, t('updateError'))),
     }
   )
 
   const deleteMut = useMutation(
     (id) => axios.delete(`/api/team/${id}`),
     {
-      onSuccess: () => { qc.invalidateQueries('team'); qc.invalidateQueries('team-performance'); toast.success('تمت إزالة العضو'); setToRemove(null) },
-      onError: (e: any) => toast.error(e?.response?.data?.error || 'تعذّرت الإزالة'),
+      onSuccess: () => { qc.invalidateQueries('team'); qc.invalidateQueries('team-performance'); toast.success(t('memberRemoved')); setToRemove(null) },
+      onError: (e: any) => toast.error(apiError(e, t('removeError'))),
     }
   )
 
@@ -135,27 +133,27 @@ export default function TeamPage() {
   const instancesList = data?.instances || []
 
   return (
-    <DashboardLayout title="Team">
+    <DashboardLayout title={t('title')}>
       <div className="space-y-6">
         <PageHeader
-          eyebrow="الإعدادات"
-          title="الفريق"
-          description="ادعُ زملاءك، وحدد دور كل عضو وصناديق الوارد التي يصل إليها، وتابع أداءهم."
+          eyebrow={t('eyebrow')}
+          title={t('title')}
+          description={t('description')}
           actions={
             <>
-              <Button variant="secondary" icon={BookOpenIcon} href="/docs/guides/team-roles">الأدوار والصلاحيات</Button>
-              {isOwner && <Button icon={UserPlusIcon} onClick={openInvite}>دعوة عضو</Button>}
+              <Button variant="secondary" icon={BookOpenIcon} href="/docs/guides/team-roles">{t('rolesDocs')}</Button>
+              {isOwner && <Button icon={UserPlusIcon} onClick={openInvite}>{t('invite')}</Button>}
             </>
           }
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <Tabs idPrefix="team" aria-label="أقسام الفريق" value={tab} onChange={v => setTab(v as typeof tab)} tabs={[
-              { id: 'members', label: 'الأعضاء', icon: UsersIcon, count: members.length || undefined },
-              { id: 'performance', label: 'الأداء', icon: ChartBarIcon },
-              { id: 'reviews', label: 'مراجعات الذكاء الاصطناعي', icon: SparklesIcon },
+            <Tabs idPrefix="team" aria-label={t('tabsLabel')} value={tab} onChange={v => setTab(v as typeof tab)} tabs={[
+              { id: 'members', label: t('tab_members'), icon: UsersIcon, count: members.length || undefined },
+              { id: 'performance', label: t('tab_performance'), icon: ChartBarIcon },
+              { id: 'reviews', label: t('tab_reviews'), icon: SparklesIcon },
             ]} />
             {tab === 'performance' && (
-              <Tabs variant="segmented" size="sm" idPrefix="team-range" aria-label="الفترة" value={range} onChange={v => setRange(v as typeof range)} tabs={RANGES} />
+              <Tabs variant="segmented" size="sm" idPrefix="team-range" aria-label={t('periodLabel')} value={range} onChange={v => setRange(v as typeof range)} tabs={RANGES.map(id => ({ id, label: t(`range_${id}`) }))} />
             )}
           </div>
         </PageHeader>
@@ -163,39 +161,41 @@ export default function TeamPage() {
         {tab === 'members' && (
           <div className="space-y-5">
             {!isOwner && (
-              <Notice tone="info">أنت تشاهد الفريق كعضو. تواصل مع مالك الحساب لإجراء أي تغيير.</Notice>
+              <Notice tone="info">{t('memberNotice')}</Notice>
             )}
 
             {isLoading ? (
               <Card padding="none"><div className="space-y-3 p-5">{[0, 1, 2].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div></Card>
             ) : teamError ? (
-              <ErrorState title="تعذّر تحميل أعضاء الفريق" message={(teamError as any)?.response?.data?.error || 'خطأ غير معروف'} onRetry={() => refetch()} />
+              <ErrorState title={t('loadMembersError')} message={apiError(teamError, t('unknownError'))} onRetry={() => refetch()} />
             ) : members.length === 0 ? (
               <EmptyState
                 variant="card"
                 icon={UsersIcon}
-                title="لا يوجد أعضاء في الفريق بعد"
-                description="ادعُ فريقك للتعاون على المحادثات وخدمة العملاء."
-                action={isOwner ? <Button icon={UserPlusIcon} onClick={openInvite}>دعوة أول عضو</Button> : undefined}
+                title={t('emptyTitle')}
+                description={t('emptyDesc')}
+                action={isOwner ? <Button icon={UserPlusIcon} onClick={openInvite}>{t('inviteFirst')}</Button> : undefined}
               />
             ) : (
               <Card padding="none">
-                <CardHeader title="أعضاء الفريق" subtitle={`${activeCount} نشط${pendingCount ? ` · ${pendingCount} دعوة معلّقة` : ''}`} divider />
-                <Table minWidth={760} caption="أعضاء الفريق">
+                <CardHeader title={t('membersTitle')} subtitle={`${t('activeCount', { n: activeCount })}${pendingCount ? ` · ${t(pendingCount === 1 ? 'pendingOne' : 'pendingMany', { n: pendingCount })}` : ''}`} divider />
+                <Table minWidth={760} caption={t('membersTitle')}>
                   <THead>
                     <TR>
-                      <TH>العضو</TH>
-                      <TH>الدور</TH>
-                      <TH>الحالة</TH>
-                      {isOwner && instancesList.length > 0 && <TH>صناديق الوارد</TH>}
-                      <TH>أُضيف</TH>
-                      {isOwner && <TH align="end"><span className="sr-only">إجراءات</span></TH>}
+                      <TH>{t('th_member')}</TH>
+                      <TH>{t('th_role')}</TH>
+                      <TH>{t('th_status')}</TH>
+                      {isOwner && instancesList.length > 0 && <TH>{t('th_inboxes')}</TH>}
+                      <TH>{t('th_added')}</TH>
+                      {isOwner && <TH align="end"><span className="sr-only">{t('th_actions')}</span></TH>}
                     </TR>
                   </THead>
                   <TBody>
                     {members.map(member => {
-                      const role = ROLE_META[member.role] || { label: member.role, tone: 'neutral' }
-                      const status = STATUS_META[member.status] || { label: member.status, tone: 'neutral' }
+                      const roleMeta = ROLE_META[member.role]
+                      const role = roleMeta ? { ...roleMeta, label: t(roleMeta.label) } : { label: member.role, tone: 'neutral' }
+                      const statusMeta = STATUS_META[member.status]
+                      const status = statusMeta ? { ...statusMeta, label: t(statusMeta.label) } : { label: member.status, tone: 'neutral' }
                       const allowed = member.allowed_instances || []
                       return (
                         <TR key={member.id}>
@@ -212,10 +212,10 @@ export default function TeamPage() {
                             {isOwner && member.status === 'active' ? (
                               <Select
                                 size="sm"
-                                aria-label={`دور ${member.name || member.email}`}
+                                aria-label={t('roleOf', { name: member.name || member.email })}
                                 value={member.role}
                                 onChange={e => { if (e.target.value !== member.role) setRoleChange({ member, role: e.target.value }) }}
-                                options={ROLE_OPTIONS}
+                                options={ROLE_OPTIONS.map(o => ({ value: o.value, label: t(o.label) }))}
                                 className="w-28"
                               />
                             ) : (
@@ -226,7 +226,7 @@ export default function TeamPage() {
                           {isOwner && instancesList.length > 0 && (
                             <TD>
                               {member.status === 'active' ? (
-                                <div className="flex max-w-[18rem] flex-wrap gap-1.5" role="group" aria-label="صناديق الوارد المسموح بها (دون تحديد = الكل)">
+                                <div className="flex max-w-[18rem] flex-wrap gap-1.5" role="group" aria-label={t('inboxesGroup')}>
                                   {instancesList.map(inst => {
                                     const on = allowed.includes(inst.id)
                                     return (
@@ -243,7 +243,7 @@ export default function TeamPage() {
                                       </button>
                                     )
                                   })}
-                                  {allowed.length === 0 && <span className="self-center text-[11px] text-muted">الكل</span>}
+                                  {allowed.length === 0 && <span className="self-center text-[11px] text-muted">{t('all')}</span>}
                                 </div>
                               ) : <span className="text-xs text-muted">—</span>}
                             </TD>
@@ -253,13 +253,13 @@ export default function TeamPage() {
                             <TD align="end">
                               {member.id && (
                                 <Dropdown
-                                  label={`خيارات ${member.name || member.email}`}
+                                  label={t('optionsFor', { name: member.name || member.email })}
                                   triggerClassName="h-9 w-9 justify-center rounded-btn text-muted hover:bg-surface-3 hover:text-ink"
                                   trigger={<EllipsisHorizontalIcon className="h-5 w-5" />}
                                   items={[
-                                    ...(member.status === 'active' ? [{ label: 'إيقاف العضو مؤقتًا', icon: PauseCircleIcon, onClick: () => setToSuspend({ member, status: 'suspended' }) }] : []),
-                                    ...(member.status === 'suspended' ? [{ label: 'إعادة تفعيل العضو', icon: PlayCircleIcon, onClick: () => setToSuspend({ member, status: 'active' }) }] : []),
-                                    { label: member.status === 'pending' ? 'إلغاء الدعوة' : 'إزالة من الفريق', icon: TrashIcon, danger: true, divider: member.status !== 'pending', onClick: () => setToRemove(member) },
+                                    ...(member.status === 'active' ? [{ label: t('suspend'), icon: PauseCircleIcon, onClick: () => setToSuspend({ member, status: 'suspended' }) }] : []),
+                                    ...(member.status === 'suspended' ? [{ label: t('reactivate'), icon: PlayCircleIcon, onClick: () => setToSuspend({ member, status: 'active' }) }] : []),
+                                    { label: member.status === 'pending' ? t('cancelInvite') : t('removeFromTeam'), icon: TrashIcon, danger: true, divider: member.status !== 'pending', onClick: () => setToRemove(member) },
                                   ]}
                                 />
                               )}
@@ -271,24 +271,24 @@ export default function TeamPage() {
                   </TBody>
                 </Table>
                 {isOwner && instancesList.length > 0 && (
-                  <p className="border-t border-line-soft px-5 py-3 text-xs text-muted">صناديق الوارد: اضغط رقمًا لتقييد وصول العضو إليه. عدم تحديد أي رقم يعني الوصول إلى كل الصناديق.</p>
+                  <p className="border-t border-line-soft px-5 py-3 text-xs text-muted">{t('inboxesHint')}</p>
                 )}
               </Card>
             )}
 
             {/* Roles */}
             <Card padding="none">
-              <CardHeader title="ماذا يستطيع كل دور؟" divider />
+              <CardHeader title={t('rolesCardTitle')} divider />
               <div className="grid gap-px bg-line-soft sm:grid-cols-2 xl:grid-cols-4">
                 {ROLE_CAPS.map(r => (
                   <div key={r.role} className="bg-surface p-5">
                     <div className="flex items-center gap-2.5">
                       <span className={cn('flex h-9 w-9 items-center justify-center rounded-xl', r.tone)}><r.icon className="h-5 w-5" aria-hidden="true" /></span>
-                      <span className="font-semibold text-ink">{r.label}</span>
+                      <span className="font-semibold text-ink">{t(r.label)}</span>
                     </div>
                     <ul className="mt-3 space-y-1.5 text-sm">
-                      {r.can.map(c => <li key={c} className="flex items-start gap-2 text-body"><CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />{c}</li>)}
-                      {r.cannot.map(c => <li key={c} className="flex items-start gap-2 text-muted"><XMarkIcon className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden="true" />{c}</li>)}
+                      {r.can.map(c => <li key={c} className="flex items-start gap-2 text-body"><CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />{t(c)}</li>)}
+                      {r.cannot.map(c => <li key={c} className="flex items-start gap-2 text-muted"><XMarkIcon className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden="true" />{t(c)}</li>)}
                     </ul>
                   </div>
                 ))}
@@ -298,7 +298,7 @@ export default function TeamPage() {
         )}
 
         {tab === 'performance' && (
-          <PerformancePanel perfData={perfData} perfLoading={perfLoading} perfFetching={perfFetching} refetchPerf={refetchPerf} rangeLabel={RANGE_LABEL[range]} />
+          <PerformancePanel perfData={perfData} perfLoading={perfLoading} perfFetching={perfFetching} refetchPerf={refetchPerf} rangeLabel={t(`rangeLabel_${range}`)} />
         )}
 
         {tab === 'reviews' && (
@@ -318,29 +318,29 @@ export default function TeamPage() {
         onClose={closeInvite}
         size="lg"
         icon={UserPlusIcon}
-        title={inviteUrl ? 'الدعوة جاهزة' : 'دعوة عضو إلى الفريق'}
-        description={inviteUrl ? 'تُرسل الدعوة إلى بريده الإلكتروني، ويمكنك أيضًا مشاركة الرابط مباشرة. صلاحية الرابط 7 أيام.' : 'سيصل إلى العضو رابط لإنشاء حسابه والانضمام إلى فريقك.'}
+        title={inviteUrl ? t('inviteReadyTitle') : t('inviteTitle')}
+        description={inviteUrl ? t('inviteReadyDesc') : t('inviteDesc')}
         footer={inviteUrl
-          ? <><Button variant="secondary" onClick={() => setInviteUrl('')}>دعوة شخص آخر</Button><Button onClick={closeInvite}>تم</Button></>
-          : <><Button variant="secondary" onClick={closeInvite}>إلغاء</Button><Button type="submit" form="invite-form" loading={inviteMut.isLoading} disabled={!form.name || !form.email}>إنشاء رابط الدعوة</Button></>}
+          ? <><Button variant="secondary" onClick={() => setInviteUrl('')}>{t('inviteAnother')}</Button><Button onClick={closeInvite}>{t('done')}</Button></>
+          : <><Button variant="secondary" onClick={closeInvite}>{t('cancel')}</Button><Button type="submit" form="invite-form" loading={inviteMut.isLoading} disabled={!form.name || !form.email}>{t('createInvite')}</Button></>}
       >
         {inviteUrl ? (
           <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm font-medium text-ink"><LinkIcon className="h-4 w-4 text-brand-ink" aria-hidden="true" />رابط الدعوة</div>
+            <div className="flex items-center gap-2 text-sm font-medium text-ink"><LinkIcon className="h-4 w-4 text-brand-ink" aria-hidden="true" />{t('inviteLink')}</div>
             <CopyField value={inviteUrl} className="py-2.5" />
           </div>
         ) : (
           <form id="invite-form" className="space-y-5" onSubmit={e => { e.preventDefault(); inviteMut.mutate(form) }}>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="الاسم الكامل" required>
-                <Input value={form.name} onChange={e => setForm(d => ({ ...d, name: e.target.value }))} placeholder="سارة محمود" />
+              <Field label={t('fullName')} required>
+                <Input value={form.name} onChange={e => setForm(d => ({ ...d, name: e.target.value }))} placeholder={t('namePlaceholder')} />
               </Field>
-              <Field label="البريد الإلكتروني" required>
+              <Field label={t('email')} required>
                 <Input type="email" value={form.email} onChange={e => setForm(d => ({ ...d, email: e.target.value }))} placeholder="sara@example.com" dir="ltr" />
               </Field>
             </div>
             <fieldset>
-              <legend className="mb-2 text-sm font-medium text-ink">الدور</legend>
+              <legend className="mb-2 text-sm font-medium text-ink">{t('roleLegend')}</legend>
               <div className="grid gap-2 sm:grid-cols-3" role="radiogroup">
                 {ROLE_CAPS.filter(r => r.role !== 'owner').map(r => {
                   const selected = form.role === r.role
@@ -349,9 +349,9 @@ export default function TeamPage() {
                       className={cn('rounded-card border p-3 text-start transition', selected ? 'border-brand-teal bg-chip/40 shadow-ring' : 'border-line hover:border-line-strong')}>
                       <span className="flex items-center gap-2">
                         <span className={cn('flex h-8 w-8 items-center justify-center rounded-lg', r.tone)}><r.icon className="h-4 w-4" aria-hidden="true" /></span>
-                        <span className="text-sm font-semibold text-ink">{r.label}</span>
+                        <span className="text-sm font-semibold text-ink">{t(r.label)}</span>
                       </span>
-                      <span className="mt-2 block text-xs leading-relaxed text-muted">{r.can.join('، ')}</span>
+                      <span className="mt-2 block text-xs leading-relaxed text-muted">{r.can.map(c => t(c)).join(t('listSep'))}</span>
                     </button>
                   )
                 })}
@@ -366,9 +366,9 @@ export default function TeamPage() {
         onClose={() => setRoleChange(null)}
         onConfirm={() => { if (roleChange) updateMut.mutate({ id: roleChange.member.id, role: roleChange.role }) }}
         loading={updateMut.isLoading}
-        title="تغيير الدور؟"
-        description={roleChange ? `سيصبح ${roleChange.member.name || roleChange.member.email} «${ROLE_META[roleChange.role]?.label}». تُطبَّق الصلاحيات الجديدة فورًا.` : ''}
-        confirmLabel="تغيير الدور"
+        title={t('changeRoleTitle')}
+        description={roleChange ? t('changeRoleDesc', { name: roleChange.member.name || roleChange.member.email, role: ROLE_META[roleChange.role] ? t(ROLE_META[roleChange.role].label) : roleChange.role }) : ''}
+        confirmLabel={t('changeRoleConfirm')}
       />
       <ConfirmDialog
         destructive={toSuspend?.status === 'suspended'}
@@ -376,11 +376,11 @@ export default function TeamPage() {
         onClose={() => setToSuspend(null)}
         onConfirm={() => { if (toSuspend) updateMut.mutate({ id: toSuspend.member.id, status: toSuspend.status }) }}
         loading={updateMut.isLoading}
-        title={toSuspend?.status === 'suspended' ? 'إيقاف العضو مؤقتًا؟' : 'إعادة تفعيل العضو؟'}
+        title={toSuspend?.status === 'suspended' ? t('suspendTitle') : t('reactivateTitle')}
         description={toSuspend?.status === 'suspended'
-          ? 'سيُسجَّل خروجه فورًا ولن يتمكن من الدخول حتى تعيد تفعيله.'
-          : 'سيتمكن العضو من تسجيل الدخول مجددًا بدوره الحالي.'}
-        confirmLabel={toSuspend?.status === 'suspended' ? 'إيقاف' : 'إعادة التفعيل'}
+          ? t('suspendDesc')
+          : t('reactivateDesc')}
+        confirmLabel={toSuspend?.status === 'suspended' ? t('suspendConfirm') : t('reactivateConfirm')}
       />
       <ConfirmDialog
         destructive
@@ -388,9 +388,9 @@ export default function TeamPage() {
         onClose={() => setToRemove(null)}
         onConfirm={() => { if (toRemove) deleteMut.mutate(toRemove.id) }}
         loading={deleteMut.isLoading}
-        title={toRemove?.status === 'pending' ? 'إلغاء الدعوة؟' : 'إزالة العضو من الفريق؟'}
-        description={`سيفقد ${toRemove?.name || toRemove?.email || 'العضو'} الوصول إلى الحساب فورًا.`}
-        confirmLabel="إزالة"
+        title={toRemove?.status === 'pending' ? t('cancelInviteTitle') : t('removeTitle')}
+        description={t('removeDesc', { name: toRemove?.name || toRemove?.email || t('theMember') })}
+        confirmLabel={t('removeConfirm')}
       />
 
       <NoteModal

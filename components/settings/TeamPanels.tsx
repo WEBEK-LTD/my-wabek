@@ -8,24 +8,26 @@ import {
 import {
   Avatar, Button, Card, CardHeader, EmptyState, Modal, Skeleton, StatCard, Table, TBody, TD, TH, THead, TR, Textarea, Tooltip, cn,
 } from '@/components/ui'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/team'
 import { ErrorState } from './Shared'
-import { fmtDate, fmtDateTime, fmtRelative } from './format'
 
 const scoreTone = (s?: number | null) => (s ?? 0) >= 8 ? 'text-success' : (s ?? 0) >= 6 ? 'text-warning' : 'text-danger'
 const rateTone = (r: number) => r >= 80 ? 'success' : r >= 50 ? 'warning' : 'danger'
-const fmtMinutes = (m?: number | null) => m === null || m === undefined ? '—' : m < 60 ? `${m} د` : `${Math.round(m / 60)} س`
+const fmtMinutes = (t, m?: number | null) => m === null || m === undefined ? '—' : m < 60 ? t('minutesShort', { n: m }) : t('hoursShort', { n: Math.round(m / 60) })
 
 /* ── Performance ─────────────────────────────────────────── */
 
 export function PerformancePanel({ perfData, perfLoading, perfFetching, refetchPerf, rangeLabel }) {
+  const { t, fmtDateTime, fmtRelative } = useT(messages)
   if (perfLoading) return <div className="space-y-3">{[0, 1, 2].map(i => <Skeleton key={i} className="h-16 w-full rounded-card" />)}</div>
   if (!perfData || (perfData.mode !== 'team' && perfData.mode !== 'self')) {
-    return <ErrorState title="تعذّر تحميل بيانات الأداء" onRetry={() => refetchPerf()} />
+    return <ErrorState title={t('perfLoadError')} onRetry={() => refetchPerf()} />
   }
 
   const refresh = (
-    <Tooltip content="تحديث">
-      <Button size="icon-sm" variant="ghost" icon={ArrowPathIcon} aria-label="تحديث بيانات الأداء" onClick={() => refetchPerf()} disabled={perfFetching} className={cn(perfFetching && '[&_svg]:animate-spin')} />
+    <Tooltip content={t('refresh')}>
+      <Button size="icon-sm" variant="ghost" icon={ArrowPathIcon} aria-label={t('refreshPerf')} onClick={() => refetchPerf()} disabled={perfFetching} className={cn(perfFetching && '[&_svg]:animate-spin')} />
     </Tooltip>
   )
 
@@ -35,17 +37,17 @@ export function PerformancePanel({ perfData, perfLoading, perfFetching, refetchP
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-[17px] font-semibold text-ink">أدائي</h2>
+            <h2 className="text-[17px] font-semibold text-ink">{t('myPerformance')}</h2>
             <p className="text-sm text-muted">{rangeLabel}</p>
           </div>
           {refresh}
         </div>
         <div className="grid grid-cols-2 gap-3 sm:gap-3.5 lg:grid-cols-4">
-          <StatCard label="محادثات تمت معالجتها" value={String(s.conversations_handled ?? 0)} icon={ChatBubbleLeftRightIcon} />
-          <StatCard label="رسائل مرسلة" value={String(s.messages_sent ?? 0)} icon={PaperAirplaneIcon} />
-          <StatCard label="نسبة الرد" value={s.response_rate !== null && s.response_rate !== undefined ? `${s.response_rate}%` : '—'} icon={ArrowUturnLeftIcon}
+          <StatCard label={t('statHandled')} value={String(s.conversations_handled ?? 0)} icon={ChatBubbleLeftRightIcon} />
+          <StatCard label={t('statSent')} value={String(s.messages_sent ?? 0)} icon={PaperAirplaneIcon} />
+          <StatCard label={t('statResponseRate')} value={s.response_rate !== null && s.response_rate !== undefined ? `${s.response_rate}%` : '—'} icon={ArrowUturnLeftIcon}
             progress={s.response_rate ?? undefined} progressMax={100} />
-          <StatCard label="متوسط زمن الرد" value={fmtMinutes(s.avg_response_minutes)} icon={ClockIcon} />
+          <StatCard label={t('statAvgResponse')} value={fmtMinutes(t, s.avg_response_minutes)} icon={ClockIcon} />
         </div>
       </div>
     )
@@ -60,23 +62,23 @@ export function PerformancePanel({ perfData, perfLoading, perfFetching, refetchP
     <div className="space-y-4">
       <Card padding="none">
         <CardHeader
-          title="أداء الفريق"
-          subtitle={memberCount === 0 ? 'لا يوجد أعضاء نشطون بعد — يظهر نشاطك فقط' : `${memberCount} عضو نشط بالإضافة إليك · ${rangeLabel}`}
+          title={t('teamPerformance')}
+          subtitle={memberCount === 0 ? t('noActiveMembers') : t(memberCount === 1 ? 'activeMembersOne' : 'activeMembersMany', { n: memberCount, range: rangeLabel })}
           action={refresh}
           divider
         />
         {rows.length === 0 ? (
-          <EmptyState size="sm" icon={ChatBubbleLeftRightIcon} title="لا يوجد نشاط في هذه الفترة" />
+          <EmptyState size="sm" icon={ChatBubbleLeftRightIcon} title={t('noActivity')} />
         ) : (
-          <Table minWidth={720} caption="أداء الفريق">
+          <Table minWidth={720} caption={t('teamPerformance')}>
             <THead>
               <TR>
-                <TH>العضو</TH>
-                <TH align="center">المحادثات</TH>
-                <TH align="center">المرسلة</TH>
-                <TH>نسبة الرد</TH>
-                <TH align="center">متوسط الرد</TH>
-                <TH>آخر نشاط</TH>
+                <TH>{t('th_member')}</TH>
+                <TH align="center">{t('th_conversations')}</TH>
+                <TH align="center">{t('th_sent')}</TH>
+                <TH>{t('th_responseRate')}</TH>
+                <TH align="center">{t('th_avgResponse')}</TH>
+                <TH>{t('th_lastActive')}</TH>
               </TR>
             </THead>
             <TBody>
@@ -86,8 +88,8 @@ export function PerformancePanel({ perfData, perfLoading, perfFetching, refetchP
                     <div className="flex items-center gap-2.5">
                       <Avatar name={m.name || m.email || '?'} size="sm" />
                       <div className="min-w-0">
-                        <p className="max-w-[12rem] truncate font-medium text-ink">{m.name || 'غير معروف'}</p>
-                        <p className="max-w-[12rem] truncate text-xs text-muted"><span dir="ltr">{m.email || (m.name === 'You (Owner)' ? 'Account owner' : '')}</span></p>
+                        <p className="max-w-[12rem] truncate font-medium text-ink">{m.name === 'You (Owner)' ? t('youOwner') : (m.name || t('unknown'))}</p>
+                        <p className="max-w-[12rem] truncate text-xs text-muted">{m.email ? <span dir="ltr">{m.email}</span> : (m.name === 'You (Owner)' ? t('accountOwner') : '')}</p>
                       </div>
                     </div>
                   </TD>
@@ -105,7 +107,7 @@ export function PerformancePanel({ perfData, perfLoading, perfFetching, refetchP
                   </TD>
                   <TD align="center">
                     <span className={cn('font-semibold', m.avg_response_minutes === null || m.avg_response_minutes === undefined ? 'text-muted' : m.avg_response_minutes <= 5 ? 'text-success' : m.avg_response_minutes <= 30 ? 'text-warning' : 'text-danger')}>
-                      {fmtMinutes(m.avg_response_minutes)}
+                      {fmtMinutes(t, m.avg_response_minutes)}
                     </span>
                   </TD>
                   <TD className="text-sm text-muted">
@@ -118,9 +120,9 @@ export function PerformancePanel({ perfData, perfLoading, perfFetching, refetchP
         )}
       </Card>
       <div className="flex flex-wrap gap-4 text-xs text-muted">
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-success" aria-hidden="true" />نسبة رد 80% فأكثر أو 5 دقائق فأقل</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-warning" aria-hidden="true" />50–79% أو 5–30 دقيقة</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-danger" aria-hidden="true" />أقل من 50% أو أكثر من 30 دقيقة</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-success" aria-hidden="true" />{t('legendGood')}</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-warning" aria-hidden="true" />{t('legendMid')}</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-danger" aria-hidden="true" />{t('legendBad')}</span>
       </div>
     </div>
   )
@@ -128,21 +130,22 @@ export function PerformancePanel({ perfData, perfLoading, perfFetching, refetchP
 
 /* ── AI reviews ──────────────────────────────────────────── */
 
-const SCORE_LABELS = [
-  ['الدقة', 'score_accuracy'],
-  ['الاحترافية', 'score_professionalism'],
-  ['الوضوح', 'score_clarity'],
-  ['التعاطف', 'score_empathy'],
-  ['الإفادة', 'score_helpfulness'],
-  ['اللغة', 'score_grammar'],
+const SCORE_KEYS = [
+  'score_accuracy',
+  'score_professionalism',
+  'score_clarity',
+  'score_empathy',
+  'score_helpfulness',
+  'score_grammar',
 ]
 
 function ScoreGrid({ item }) {
+  const { t } = useT(messages)
   return (
     <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
-      {SCORE_LABELS.map(([label, key]) => (
+      {SCORE_KEYS.map(key => (
         <div key={key} className="rounded-xl bg-surface-2 px-2 py-2 text-center">
-          <p className="text-[11px] text-muted">{label}</p>
+          <p className="text-[11px] text-muted">{t(key)}</p>
           <p className={cn('text-sm font-bold tabular', scoreTone(item[key]))}>{item[key] ? Number(item[key]).toFixed(1) : '—'}</p>
         </div>
       ))}
@@ -151,35 +154,36 @@ function ScoreGrid({ item }) {
 }
 
 function ItemNotes({ item, member }) {
+  const { t } = useT(messages)
   return (
     <>
       {item.strengths?.length > 0 && (
         <div>
-          <p className="mb-1 text-xs font-semibold text-success">نقاط القوة</p>
+          <p className="mb-1 text-xs font-semibold text-success">{t('strengths')}</p>
           <ul className="list-disc space-y-0.5 ps-5 text-xs text-body">{item.strengths.map(s => <li key={s}>{s}</li>)}</ul>
         </div>
       )}
       {item.issues?.length > 0 && (
         <div>
-          <p className="mb-1 text-xs font-semibold text-danger">{member ? 'جوانب للتحسين' : 'ملاحظات'}</p>
+          <p className="mb-1 text-xs font-semibold text-danger">{member ? t('toImprove') : t('notes')}</p>
           <ul className="list-disc space-y-0.5 ps-5 text-xs text-body">{item.issues.map(s => <li key={s}>{s}</li>)}</ul>
         </div>
       )}
       {item.suggested_reply && (
         <div className="rounded-xl border border-brand-teal/20 bg-chip/40 px-3 py-2">
-          <p className="mb-1 flex items-center gap-1 text-xs font-semibold text-chip-ink"><LightBulbIcon className="h-3.5 w-3.5" aria-hidden="true" />رد مقترح أفضل</p>
+          <p className="mb-1 flex items-center gap-1 text-xs font-semibold text-chip-ink"><LightBulbIcon className="h-3.5 w-3.5" aria-hidden="true" />{t('suggestedReply')}</p>
           <p className="text-xs text-body">{item.suggested_reply}</p>
         </div>
       )}
       {member && item.coaching_notes && (
         <div className="rounded-xl border border-violet/20 bg-violet-bg/60 px-3 py-2">
-          <p className="mb-1 flex items-center gap-1 text-xs font-semibold text-violet"><AcademicCapIcon className="h-3.5 w-3.5" aria-hidden="true" />توجيه</p>
+          <p className="mb-1 flex items-center gap-1 text-xs font-semibold text-violet"><AcademicCapIcon className="h-3.5 w-3.5" aria-hidden="true" />{t('coaching')}</p>
           <p className="text-xs text-body">{item.coaching_notes}</p>
         </div>
       )}
       {item.manual_comment && (
         <div className="rounded-xl border border-warning/20 bg-warning-bg/60 px-3 py-2">
-          <p className="mb-1 flex items-center gap-1 text-xs font-semibold text-warning"><PencilSquareIcon className="h-3.5 w-3.5" aria-hidden="true" />ملاحظة المدير</p>
+          <p className="mb-1 flex items-center gap-1 text-xs font-semibold text-warning"><PencilSquareIcon className="h-3.5 w-3.5" aria-hidden="true" />{t('managerNote')}</p>
           <p className="text-xs text-body">{item.manual_comment}</p>
         </div>
       )}
@@ -188,11 +192,13 @@ function ItemNotes({ item, member }) {
 }
 
 export function ReviewsPanel({ isOwner, reviewsData, reviewsLoading, refetchReviews, onEditNote }) {
+  const { t, fmtDate } = useT(messages)
+  const msgs = (n) => t(n === 1 ? 'messagesOne' : 'messagesMany', { n })
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 rounded-card bg-chip/50 px-4 py-2.5 text-xs text-chip-ink">
         <InformationCircleIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
-        تُحدَّث المراجعات تلقائيًا كل ساعة، وتُحلَّل المحادثة بعد ساعتين من توقفها.
+        {t('reviewsInfo')}
       </div>
 
       {reviewsLoading ? (
@@ -207,7 +213,7 @@ export function ReviewsPanel({ isOwner, reviewsData, reviewsLoading, refetchRevi
                     <Avatar name={m.member_name || '?'} size="sm" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-ink">{m.member_name}</p>
-                      <p className="text-xs text-muted">{m.review_count} مراجعة</p>
+                      <p className="text-xs text-muted">{t(m.review_count === 1 ? 'reviewCountOne' : 'reviewCountMany', { n: m.review_count })}</p>
                     </div>
                     <span className={cn('text-2xl font-bold tabular', scoreTone(m.avg_score))}>{m.avg_score ?? '—'}</span>
                   </div>
@@ -223,19 +229,19 @@ export function ReviewsPanel({ isOwner, reviewsData, reviewsLoading, refetchRevi
           )}
 
           <div className="flex items-center justify-between">
-            <p className="text-sm text-muted">{reviewsData?.total || 0} مراجعة مكتملة</p>
-            <Tooltip content="تحديث"><Button size="icon-sm" variant="ghost" icon={ArrowPathIcon} aria-label="تحديث المراجعات" onClick={() => refetchReviews()} /></Tooltip>
+            <p className="text-sm text-muted">{t((reviewsData?.total || 0) === 1 ? 'completedOne' : 'completedMany', { n: reviewsData?.total || 0 })}</p>
+            <Tooltip content={t('refresh')}><Button size="icon-sm" variant="ghost" icon={ArrowPathIcon} aria-label={t('refreshReviews')} onClick={() => refetchReviews()} /></Tooltip>
           </div>
 
           {(reviewsData?.reviews || []).length === 0 ? (
-            <EmptyState variant="card" icon={SparklesIcon} title="لا توجد مراجعات بعد" description="تظهر المراجعات بعد توقف المحادثات لمدة ساعتين." />
+            <EmptyState variant="card" icon={SparklesIcon} title={t('noReviews')} description={t('noReviewsOwnerDesc')} />
           ) : (reviewsData?.reviews || []).map(review => (
             <Card key={review.id} className="space-y-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate font-semibold text-ink">{review.contacts?.name || review.contacts?.phone || 'جهة اتصال غير معروفة'}</p>
+                  <p className="truncate font-semibold text-ink">{review.contacts?.name || review.contacts?.phone || t('unknownContact')}</p>
                   <p className="mt-0.5 text-xs text-muted">
-                    {review.message_count} رسالة · المراجعة رقم {review.review_version}{review.reviewed_at ? ` · ${fmtDate(review.reviewed_at)}` : ''}
+                    {msgs(review.message_count)} · {t('reviewVersion', { v: review.review_version })}{review.reviewed_at ? ` · ${fmtDate(review.reviewed_at)}` : ''}
                   </p>
                 </div>
                 {review.overall_score && <span className={cn('text-3xl font-bold tabular', scoreTone(review.overall_score))}>{Number(review.overall_score).toFixed(1)}</span>}
@@ -249,13 +255,13 @@ export function ReviewsPanel({ isOwner, reviewsData, reviewsLoading, refetchRevi
                         <Avatar name={item.member_name || '?'} size="xs" />
                         <div>
                           <p className="text-sm font-medium text-ink">{item.member_name}</p>
-                          <p className="text-[11px] text-muted">{item.messages_count} رسالة</p>
+                          <p className="text-[11px] text-muted">{msgs(item.messages_count)}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className={cn('text-lg font-bold tabular', scoreTone(item.score_overall))}>{item.score_overall ? `${Number(item.score_overall).toFixed(1)}/10` : '—'}</span>
                         <Button size="xs" variant="secondary" icon={PencilSquareIcon} onClick={() => onEditNote(item)}>
-                          {item.manual_comment ? 'تعديل الملاحظة' : 'إضافة ملاحظة'}
+                          {item.manual_comment ? t('editNote') : t('addNote')}
                         </Button>
                       </div>
                     </div>
@@ -272,8 +278,8 @@ export function ReviewsPanel({ isOwner, reviewsData, reviewsLoading, refetchRevi
           {reviewsData?.stats && (
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <StatCard label="متوسط التقييم" value={String(reviewsData.stats.avg_score ?? '—')} icon={SparklesIcon} />
-                <StatCard label="عدد المراجعات" value={String(reviewsData.stats.review_count ?? 0)} icon={ChatBubbleLeftRightIcon} />
+                <StatCard label={t('avgScore')} value={String(reviewsData.stats.avg_score ?? '—')} icon={SparklesIcon} />
+                <StatCard label={t('reviewsTotal')} value={String(reviewsData.stats.review_count ?? 0)} icon={ChatBubbleLeftRightIcon} />
               </div>
               <div className="flex flex-wrap gap-2">
                 {reviewsData.stats.top_strengths?.slice(0, 3).map(s => <span key={s.text} className="rounded-full bg-success-bg px-3 py-1 text-xs text-success">{s.text}</span>)}
@@ -282,13 +288,13 @@ export function ReviewsPanel({ isOwner, reviewsData, reviewsLoading, refetchRevi
             </div>
           )}
           {(reviewsData?.items || []).length === 0 ? (
-            <EmptyState variant="card" icon={SparklesIcon} title="لا توجد مراجعات بعد" description="استمر في العمل الجيد! ستظهر مراجعاتك هنا." />
+            <EmptyState variant="card" icon={SparklesIcon} title={t('noReviews')} description={t('noReviewsMemberDesc')} />
           ) : (reviewsData?.items || []).map(item => (
             <Card key={item.id} className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-ink">{item.ai_reviews?.contacts?.name || item.ai_reviews?.contacts?.phone || 'عميل'}</p>
-                  <p className="text-[11px] text-muted">{item.ai_reviews?.reviewed_at ? fmtDate(item.ai_reviews.reviewed_at) : ''} · {item.messages_count} رسالة</p>
+                  <p className="truncate text-sm font-medium text-ink">{item.ai_reviews?.contacts?.name || item.ai_reviews?.contacts?.phone || t('customer')}</p>
+                  <p className="text-[11px] text-muted">{item.ai_reviews?.reviewed_at ? fmtDate(item.ai_reviews.reviewed_at) : ''} · {msgs(item.messages_count)}</p>
                 </div>
                 <span className={cn('text-xl font-bold tabular', scoreTone(item.score_overall))}>{item.score_overall ? `${Number(item.score_overall).toFixed(1)}/10` : '—'}</span>
               </div>
@@ -303,16 +309,17 @@ export function ReviewsPanel({ isOwner, reviewsData, reviewsLoading, refetchRevi
 }
 
 export function NoteModal({ open, onClose, value, onChange, onSave, saving }) {
+  const { t } = useT(messages)
   return (
     <Modal
       open={open}
       onClose={onClose}
       icon={PencilSquareIcon}
-      title="ملاحظة المدير"
-      description="ملاحظة توجيه أو إشادة تظهر للعضو مع المراجعة."
-      footer={<><Button variant="secondary" onClick={onClose}>إلغاء</Button><Button loading={saving} onClick={onSave}>حفظ الملاحظة</Button></>}
+      title={t('managerNote')}
+      description={t('noteDesc')}
+      footer={<><Button variant="secondary" onClick={onClose}>{t('cancel')}</Button><Button loading={saving} onClick={onSave}>{t('saveNote')}</Button></>}
     >
-      <Textarea value={value} onChange={e => onChange(e.target.value)} rows={5} aria-label="نص الملاحظة" placeholder="أضف ملاحظات التوجيه أو الإشادة أو التحسين…" />
+      <Textarea value={value} onChange={e => onChange(e.target.value)} rows={5} aria-label={t('noteText')} placeholder={t('notePlaceholder')} />
     </Modal>
   )
 }
