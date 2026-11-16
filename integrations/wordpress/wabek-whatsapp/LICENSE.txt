@@ -1,0 +1,18 @@
+WABEK WhatsApp for WooCommerce
+Copyright (c) 2025-2026 webek.org. All Rights Reserved.
+
+This plugin is part of WABEK and is distributed under the WABEK Proprietary
+Software License (the LICENSE file of the WABEK platform). In short:
+
+- It may be used only together with an active WABEK subscription, on stores
+  you operate, as permitted by the Terms of Service at
+  https://waabek.com/legal/terms
+- You may not copy, redistribute, sell, sublicense, modify or create
+  derivative works of this plugin, or remove these notices, without prior
+  written permission from webek.org.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED. IN NO EVENT SHALL webek.org BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY ARISING FROM THE USE OF THE SOFTWARE.
+
+Contact: https://webek.org
