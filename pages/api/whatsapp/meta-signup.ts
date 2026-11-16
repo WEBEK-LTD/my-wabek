@@ -1,7 +1,12 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuth } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { GRAPH_BASE_URL } from '@/lib/whatsapp'
+import { checkInstanceCreateAllowed } from '@/lib/wa-smart-send'
+import { createMetaOAuthState, readMetaOAuthState, updateMetaOAuthState, consumeMetaOAuthState } from '@/lib/meta-oauth'
 import { v4 as uuidv4 } from 'uuid'
+
+const isGraphId = (v: unknown) => typeof v === 'string' && /^\d{1,30}$/.test(v)
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await requireAuth(req, res)
@@ -13,72 +18,69 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!appId) return res.status(500).json({ error: 'META_APP_ID not configured in Netlify env vars' })
     const configId = process.env.META_CONFIG_ID || ''
 
-    const db = supabaseAdmin()
-    const oauthState = uuidv4()
-    await db.from('system_settings').upsert({
-      key:        `meta_oauth_${oauthState}`,
-      value:      { userId: user.userId, created_at: new Date().toISOString() },
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'key' })
+    const limit = await checkInstanceCreateAllowed(user.userId)
+    if (!limit.allowed) return res.status(403).json({ error: limit.error, code: 'PLAN_LIMIT' })
 
+    const oauthState = await createMetaOAuthState({ userId: user.userId, source: 'dashboard' })
     return res.status(200).json({ appId, configId, oauthState })
   }
 
   // ── PUT: save phone_number_id + waba_id from Embedded Signup session ──
   // Called when Embedded Signup completes (before OAuth redirect)
   if (req.method === 'PUT') {
-    const { oauthState, phoneNumberId, wabaId } = req.body
+    const { oauthState, phoneNumberId, wabaId } = req.body || {}
     if (!oauthState) return res.status(400).json({ error: 'oauthState required' })
 
-    const db = supabaseAdmin()
-    const { data: existing } = await db.from('system_settings').select('value').eq('key', `meta_oauth_${oauthState}`).single()
-    
-    if (existing?.value) {
-      const updated = { ...(existing.value as object), phoneNumberId: phoneNumberId || '', wabaId: wabaId || '' }
-      await db.from('system_settings').update({ value: updated, updated_at: new Date().toISOString() }).eq('key', `meta_oauth_${oauthState}`)
-      return res.status(200).json({ success: true })
-    }
-    return res.status(404).json({ error: 'State not found' })
+    const existing = await readMetaOAuthState(oauthState, user.userId)
+    if (!existing) return res.status(404).json({ error: 'State not found' })
+    await updateMetaOAuthState(oauthState, {
+      phoneNumberId: isGraphId(phoneNumberId) ? phoneNumberId : '',
+      wabaId: isGraphId(wabaId) ? wabaId : '',
+    })
+    return res.status(200).json({ success: true })
   }
 
   // ── POST: exchange code + save instance (from FB.login) ──
   if (req.method === 'POST') {
-    const { code, oauthState, redirectUri, access_token, phone_number_id, waba_id, display_name } = req.body
+    const { code, oauthState, access_token, phone_number_id, waba_id, display_name } = req.body || {}
 
     const appId     = process.env.META_APP_ID
     const appSecret = process.env.META_APP_SECRET
 
-    let finalToken  = access_token || ''
-    let phoneNumberId = phone_number_id || ''
-    let wabaId      = waba_id || ''
+    const limit = await checkInstanceCreateAllowed(user.userId)
+    if (!limit.allowed) return res.status(403).json({ error: limit.error, code: 'PLAN_LIMIT' })
+
+    let finalToken    = typeof access_token === 'string' ? access_token : ''
+    let phoneNumberId = isGraphId(phone_number_id) ? phone_number_id : ''
+    let wabaId        = isGraphId(waba_id) ? waba_id : ''
 
     // Exchange code for token if provided
     if (code && appId && appSecret) {
-      try {
-        // Get saved phone_number_id from state
-        const db2 = supabaseAdmin()
-        if (oauthState) {
-          const { data: stateRec } = await db2.from('system_settings').select('value').eq('key', `meta_oauth_${oauthState}`).single()
-          if (stateRec?.value) {
-            const v = stateRec.value as any
-            if (!phoneNumberId) phoneNumberId = v.phoneNumberId || ''
-            if (!wabaId)        wabaId        = v.wabaId || ''
-            await db2.from('system_settings').delete().eq('key', `meta_oauth_${oauthState}`)
-          }
-        }
+      // The state must be this user's, unexpired, and is consumed here.
+      const state = oauthState ? await consumeMetaOAuthState(oauthState, user.userId) : null
+      if (oauthState && !state) return res.status(400).json({ error: 'Signup session expired. Please try again.' })
+      if (state) {
+        if (!phoneNumberId) phoneNumberId = state.phoneNumberId || ''
+        if (!wabaId)        wabaId        = state.wabaId || ''
+      }
 
+      try {
         // Exchange code — use empty redirect_uri to match FB.login behavior
-        const tokenRes  = await fetch(`https://graph.facebook.com/v21.0/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&code=${code}`)
+        const tokenRes  = await fetch(`${GRAPH_BASE_URL}/oauth/access_token?client_id=${encodeURIComponent(appId)}&client_secret=${encodeURIComponent(appSecret)}&code=${encodeURIComponent(String(code))}`)
         const tokenData = await tokenRes.json()
-        if (!tokenData.access_token) return res.status(400).json({ error: tokenData.error?.message || 'token_exchange_failed' })
+        if (!tokenData.access_token) {
+          console.error('[meta-signup] token exchange failed:', tokenData?.error?.message)
+          return res.status(400).json({ error: 'Could not complete Meta login. Please try again.' })
+        }
         finalToken = tokenData.access_token
 
         // Long-lived token
-        const llRes  = await fetch(`https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${finalToken}`)
+        const llRes  = await fetch(`${GRAPH_BASE_URL}/oauth/access_token?grant_type=fb_exchange_token&client_id=${encodeURIComponent(appId)}&client_secret=${encodeURIComponent(appSecret)}&fb_exchange_token=${encodeURIComponent(finalToken)}`)
         const llData = await llRes.json()
         if (llData.access_token) finalToken = llData.access_token
       } catch (e: any) {
-        return res.status(400).json({ error: e.message || 'token_exchange_failed' })
+        console.error('[meta-signup] token exchange error:', e?.message)
+        return res.status(400).json({ error: 'Could not complete Meta login. Please try again.' })
       }
     }
 
@@ -86,10 +88,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'access_token and phone_number_id are required' })
     }
 
-    // Get phone details
-    let phoneNumber = '', displayNameFinal = display_name || 'WhatsApp Business'
+    // Get phone details (also proves the token can access this number)
+    let phoneNumber = '', displayNameFinal = typeof display_name === 'string' ? display_name.slice(0, 100) : 'WhatsApp Business'
     try {
-      const phoneRes  = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}?fields=id,display_phone_number,verified_name&access_token=${finalToken}`)
+      const phoneRes  = await fetch(`${GRAPH_BASE_URL}/${phoneNumberId}?fields=id,display_phone_number,verified_name`, {
+        headers: { Authorization: `Bearer ${finalToken}` },
+      })
       const phoneData = await phoneRes.json()
       phoneNumber       = phoneData.display_phone_number || ''
       displayNameFinal  = phoneData.verified_name || displayNameFinal
@@ -108,7 +112,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       status:          'connected',
     })
 
-    if (error) return res.status(500).json({ error: error.message })
+    if (error) {
+      console.error('[meta-signup] save failed:', error.message)
+      return res.status(500).json({ error: 'Failed to save the WhatsApp number' })
+    }
     return res.status(200).json({ success: true })
   }
 
