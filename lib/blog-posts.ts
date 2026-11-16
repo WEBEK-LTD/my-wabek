@@ -753,25 +753,26 @@ To renew at your current rate, click here: {{renewal_link}}
 
 <h2>Installation</h2>
 
-<h3>Step 1: Download the Module</h3>
-<p>From your WABEK dashboard, go to <strong>Dashboard → WHMCS</strong> and click Download Module. You'll get a ZIP file containing the addon module and hooks file.</p>
+<h3>Step 1: Download the Addon</h3>
+<p>Download <a href="/downloads/wabek-whmcs-addon.zip">wabek-whmcs-addon.zip</a> (also linked from <strong>Dashboard → WHMCS</strong>). It contains a single WHMCS addon module — there is no separate hooks file to upload any more; the addon registers its own hooks.</p>
 
-<h3>Step 2: Upload Files</h3>
-<p>Extract the ZIP and upload via FTP or your hosting file manager:</p>
-<pre>Upload /modules/addons/wabek/ to your WHMCS /modules/addons/ directory
-Upload /includes/hooks/wabek_notifications.php to your WHMCS /includes/hooks/ directory</pre>
-
-<p>Set file permissions to 644 for PHP files and 755 for directories.</p>
+<h3>Step 2: Upload to the WHMCS Root</h3>
+<p>Unzip the file and upload the <code>modules</code> folder into your WHMCS root directory (via FTP or your hosting file manager), so that this file exists:</p>
+<pre>&lt;whmcs-root&gt;/modules/addons/wabek/wabek.php</pre>
+<p>If you used the old WABEK hook file (<code>includes/hooks/wabek_notifications.php</code>), delete it so notifications are not sent twice.</p>
 
 <h3>Step 3: Activate the Addon</h3>
-<p>In WHMCS Admin: <strong>Setup → Addon Modules → find WABEK → click Activate</strong>. Once activated, go to Configure and enter your WABEK API key and WhatsApp instance ID.</p>
+<p>In WHMCS Admin go to <strong>System Settings → Addon Modules</strong>, find <strong>WABEK WhatsApp</strong> and click <strong>Activate</strong>. Then click <strong>Configure</strong> and grant access to the admin role groups that should use it.</p>
 
-<h3>Step 4: Configure Notifications</h3>
-<p>Go to <strong>Addons → WABEK</strong> in your WHMCS admin. The configuration panel has tabs for each notification type. For each one:</p>
+<h3>Step 4: Paste Your API Key and Test the Connection</h3>
+<p>Create an API key in <strong>WABEK → Dashboard → API Keys</strong>. In WHMCS open <strong>Addons → WABEK WhatsApp → Settings</strong>, paste the key, click <strong>Test connection</strong>, then send a test message to your own number.</p>
+
+<h3>Step 5: Configure Notifications</h3>
+<p>Open the <strong>Notifications</strong> tab. For each event:</p>
 <ul>
-  <li>Enable/disable the notification</li>
-  <li>Customize the message template</li>
-  <li>Set timing for reminders (e.g., invoice reminder 5 days before due)</li>
+  <li>Enable or disable the notification</li>
+  <li>Edit the English and Arabic texts (merge fields such as <code>{client_name}</code>, <code>{invoice_total}</code>, <code>{invoice_url}</code>)</li>
+  <li>Optionally set an approved WhatsApp template name, used when the client is outside the 24-hour window</li>
 </ul>
 
 <h2>Message Templates</h2>

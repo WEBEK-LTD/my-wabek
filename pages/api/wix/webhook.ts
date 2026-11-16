@@ -196,8 +196,16 @@ async function processOrderEvent(req: NextApiRequest, jwt: Record<string, any>):
     if (!instance) { console.log('[wix webhook] no WA instance for:', userId); return }
 
     // Templates
-    const { data: tplRow } = await db.from('system_settings').select('value').eq('key', `wix_templates_${instanceId}`).maybeSingle()
-    const templates = (tplRow?.value || {}) as Record<string, string>
+    // Custom texts: the dashboard saves them per WABEK user
+    // (wix_templates_<userId>); older rows / the Wix panel per Wix instance
+    // (wix_templates_<instanceId>). The user's own texts win per event.
+    const { data: tplRows } = await db.from('system_settings').select('key, value')
+      .in('key', [`wix_templates_${userId}`, `wix_templates_${instanceId}`])
+    const byKey = new Map((tplRows || []).map(r => [r.key as string, (r.value || {}) as Record<string, string>]))
+    const templates: Record<string, string> = {
+      ...(byKey.get(`wix_templates_${instanceId}`) || {}),
+      ...Object.fromEntries(Object.entries(byKey.get(`wix_templates_${userId}`) || {}).filter(([, v]) => typeof v === 'string' && v.trim())),
+    }
 
     // Build message vars
     const buyerName   = `${buyerInfo.contactDetails?.firstName || buyerInfo.firstName || ''}`.trim() || 'Customer'
