@@ -13,9 +13,11 @@ import { Badge, Button, Card, ConfirmDialog, EmptyState, PageHeader, Skeleton, S
 import { ErrorState, Notice, apiError } from '@/components/settings/Shared'
 import { PlanCard, yearlySaving } from '@/components/billing/PlanCard'
 import { UsageMeters, GiftCodeCard } from '@/components/billing/UsageMeters'
-import { fmtDate } from '@/components/settings/format'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/billing'
 
 export default function BillingPage() {
+  const { t, fmtDate } = useT(messages)
   const router = useRouter()
   const qc = useQueryClient()
   const [cycle, setCycle] = useState('monthly')
@@ -59,12 +61,12 @@ export default function BillingPage() {
 
   useEffect(() => {
     if (router.query.success) {
-      toast.success('تم تفعيل الاشتراك')
+      toast.success(t('subActivated'))
       qc.invalidateQueries('billing')
       router.replace('/dashboard/billing', undefined, { shallow: true })
     }
     if (router.query.cancelled) {
-      toast('أُلغيت عملية الدفع')
+      toast(t('paymentCancelled'))
       router.replace('/dashboard/billing', undefined, { shallow: true })
     }
   }, [router.query])
@@ -72,7 +74,7 @@ export default function BillingPage() {
   const checkoutMut = useMutation(
     body => axios.post('/api/billing', { action: 'checkout', ...body }).then(r => r.data),
     { onSuccess: d => { if (d.url) window.location.href = d.url }, onError: e => {
-      const msg = e?.response?.data?.error || 'خطأ في Stripe'
+      const msg = apiError(e, t('stripeError'))
       if (e?.response?.status === 409) {
         // Already subscribed → plan changes / cancellation go through Manage billing.
         setAlreadySubscribed(msg)
@@ -83,22 +85,23 @@ export default function BillingPage() {
   )
   const portalMut = useMutation(
     () => axios.post('/api/billing', { action: 'portal' }).then(r => r.data),
-    { onSuccess: d => { if (d.url) window.location.href = d.url }, onError: e => toast.error(e?.response?.data?.error || 'بوابة Stripe غير مُعدّة') }
+    { onSuccess: d => { if (d.url) window.location.href = d.url }, onError: e => toast.error(apiError(e, t('portalNotConfigured'))) }
   )
   const redeemMut = useMutation(
     code => axios.post('/api/billing/redeem-gift', { code }).then(r => r.data),
     {
-      onSuccess: r => { toast.success(`تم تفعيل ${r.plan} لمدة ${r.duration_days} يومًا`); qc.invalidateQueries('billing') },
-      onError: e => toast.error(e?.response?.data?.error || 'رمز الهدية غير صالح'),
+      onSuccess: r => { toast.success(t('giftActivated', { plan: r.plan, days: r.duration_days })); qc.invalidateQueries('billing') },
+      // The redeem endpoint answers in English without a code: 404 = invalid/used code, 409 = paid plan active.
+      onError: e => toast.error(e?.response?.status === 404 ? t('giftInvalid') : e?.response?.status === 409 ? t('giftActiveSub') : apiError(e, t('giftInvalid'))),
     }
   )
 
   if (meLoading || me?.wix_instance_id) {
     return (
-      <DashboardLayout title="Billing">
+      <DashboardLayout title={t('pageTitle')}>
         <div className="flex items-center justify-center gap-3 py-20 text-sm text-muted">
           <Spinner className="h-5 w-5 text-brand-ink" />
-          {me?.wix_instance_id ? 'جارٍ التحويل إلى الفوترة في Wix…' : 'جارٍ التحميل…'}
+          {me?.wix_instance_id ? t('redirectingWix') : t('loading')}
         </div>
       </DashboardLayout>
     )
@@ -110,14 +113,14 @@ export default function BillingPage() {
   }
 
   return (
-    <DashboardLayout title="Billing & Plans">
+    <DashboardLayout title={t('pageTitle')}>
       <div className="space-y-6">
         <PageHeader
-          eyebrow="الإعدادات"
-          title="الفوترة والباقة"
-          description="تابع استهلاكك، وغيّر باقتك، وأدر طريقة الدفع والفواتير من بوابة Stripe."
+          eyebrow={t('eyebrow')}
+          title={t('title')}
+          description={t('description')}
           actions={!isManualSub && sub?.stripe_subscription_id
-            ? <Button variant="secondary" icon={ArrowTopRightOnSquareIcon} loading={portalMut.isLoading} onClick={() => portalMut.mutate()}>إدارة الفوترة</Button>
+            ? <Button variant="secondary" icon={ArrowTopRightOnSquareIcon} loading={portalMut.isLoading} onClick={() => portalMut.mutate()}>{t('manageBilling')}</Button>
             : undefined}
         />
 
@@ -125,7 +128,7 @@ export default function BillingPage() {
         {isLoading ? (
           <Skeleton className="h-56 w-full rounded-panel" />
         ) : isError ? (
-          <ErrorState message={apiError(error, 'تعذّر تحميل بيانات الفوترة')} onRetry={() => refetch()} />
+          <ErrorState message={apiError(error, t('loadError'))} onRetry={() => refetch()} />
         ) : sub ? (
           <Card padding="none" className="overflow-hidden">
             <div className="relative overflow-hidden bg-deep-hero px-6 py-6 text-deep-ink sm:px-7">
@@ -135,52 +138,52 @@ export default function BillingPage() {
                   <CreditCardIcon className="h-7 w-7" aria-hidden="true" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[13px] text-deep-muted">باقتك الحالية</p>
+                  <p className="text-[13px] text-deep-muted">{t('currentPlan')}</p>
                   <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                    <h2 className="text-2xl font-bold text-deep-ink">{sub.plans?.name || 'نشطة'}</h2>
-                    <Badge tone="success" dot size="sm">نشطة</Badge>
-                    {isManualSub && <Badge tone="neutral" size="sm">مُعيّنة من الإدارة</Badge>}
+                    <h2 className="text-2xl font-bold text-deep-ink">{sub.plans?.name || t('active')}</h2>
+                    <Badge tone="success" dot size="sm">{t('active')}</Badge>
+                    {isManualSub && <Badge tone="neutral" size="sm">{t('adminAssigned')}</Badge>}
                   </div>
                   <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-deep-muted">
-                    {!isManualSub && sub.billing_cycle && <span className="flex items-center gap-1.5"><ArrowPathIcon className="h-4 w-4" aria-hidden="true" />فوترة {sub.billing_cycle === 'yearly' ? 'سنوية' : 'شهرية'}</span>}
+                    {!isManualSub && sub.billing_cycle && <span className="flex items-center gap-1.5"><ArrowPathIcon className="h-4 w-4" aria-hidden="true" />{sub.billing_cycle === 'yearly' ? t('billedYearly') : t('billedMonthly')}</span>}
                     {periodEnd && (
                       <span className="flex items-center gap-1.5">
                         {sub.cancel_at_period_end ? <ExclamationTriangleIcon className="h-4 w-4 text-[#F5C26B]" aria-hidden="true" /> : <CalendarDaysIcon className="h-4 w-4" aria-hidden="true" />}
-                        {sub.cancel_at_period_end ? 'تنتهي في' : 'تتجدد في'} {fmtDate(periodEnd)}
+                        {t(sub.cancel_at_period_end ? 'endsOn' : 'renewsOn', { date: fmtDate(periodEnd) })}
                       </span>
                     )}
                   </div>
                 </div>
                 {!isManualSub && sub.stripe_subscription_id && (
-                  <Button variant="on-deep" icon={ArrowTopRightOnSquareIcon} loading={portalMut.isLoading} onClick={() => portalMut.mutate()}>إدارة الاشتراك</Button>
+                  <Button variant="on-deep" icon={ArrowTopRightOnSquareIcon} loading={portalMut.isLoading} onClick={() => portalMut.mutate()}>{t('manageSub')}</Button>
                 )}
               </div>
             </div>
             <div className="space-y-3 p-5 sm:p-6">
-              <p className="text-sm font-medium text-ink">الاستهلاك</p>
+              <p className="text-sm font-medium text-ink">{t('usage')}</p>
               <UsageMeters plan={sub.plans} usage={usage} loading={statsLoading} />
               {!isManualSub && sub.stripe_subscription_id && (
                 <p className="flex items-center gap-2 text-xs text-muted">
                   <ReceiptPercentIcon className="h-4 w-4" aria-hidden="true" />
-                  الفواتير وطرق الدفع متاحة في «إدارة الفوترة».
+                  {t('invoicesHint')}
                 </p>
               )}
             </div>
           </Card>
         ) : (
-          <Notice tone="warning" icon={BoltIcon} title="لا يوجد اشتراك نشط">اختر باقة من الأسفل لفتح جميع المزايا.</Notice>
+          <Notice tone="warning" icon={BoltIcon} title={t('noSubTitle')}>{t('noSubBody')}</Notice>
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="contents">
             <div>
-              <h2 className="text-xl font-bold text-ink">الباقات</h2>
-              {data?.isResellerBilling && <p className="mt-0.5 text-sm text-muted">باقات مقدّمة من موزّعك</p>}
+              <h2 className="text-xl font-bold text-ink">{t('plans')}</h2>
+              {data?.isResellerBilling && <p className="mt-0.5 text-sm text-muted">{t('resellerPlans')}</p>}
             </div>
             {hasYearly && (
-              <Tabs variant="segmented" size="sm" idPrefix="cycle" aria-label="دورة الفوترة" value={cycle} onChange={setCycle} tabs={[
-                { id: 'monthly', label: 'شهري' },
-                { id: 'yearly', label: maxSaving > 0 ? `سنوي · وفّر حتى ${maxSaving}%` : 'سنوي' },
+              <Tabs variant="segmented" size="sm" idPrefix="cycle" aria-label={t('cycleLabel')} value={cycle} onChange={setCycle} tabs={[
+                { id: 'monthly', label: t('monthly') },
+                { id: 'yearly', label: maxSaving > 0 ? t('yearlySave', { pct: maxSaving }) : t('yearly') },
               ]} />
             )}
           </div>
@@ -191,7 +194,7 @@ export default function BillingPage() {
             {[0, 1, 2].map(i => <Skeleton key={i} className="h-96 rounded-panel" />)}
           </div>
         ) : isError ? null : plans.length === 0 ? (
-          <EmptyState variant="card" icon={CreditCardIcon} title="لا توجد باقات بعد" description="لم تُضف أي باقات اشتراك حتى الآن. تُدار الباقات من لوحة الإدارة." />
+          <EmptyState variant="card" icon={CreditCardIcon} title={t('noPlansTitle')} description={t('noPlansDesc')} />
         ) : (
           <div className="grid gap-5 pt-2 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))]">
             {plans.map(plan => (
@@ -212,9 +215,9 @@ export default function BillingPage() {
         <div className="grid gap-5 md:grid-cols-[minmax(0,420px)_1fr] md:items-start">
           <GiftCodeCard loading={redeemMut.isLoading} onRedeem={(code, done) => redeemMut.mutate(code, { onSuccess: done })} />
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted md:pt-4">
-            <span className="flex items-center gap-1.5"><LockClosedIcon className="h-4 w-4" aria-hidden="true" />المدفوعات مؤمّنة عبر Stripe</span>
-            <a href="/legal/refund" target="_blank" rel="noopener noreferrer" className="text-link hover:text-link-hover">سياسة الاسترداد</a>
-            <a href="/legal/terms" target="_blank" rel="noopener noreferrer" className="text-link hover:text-link-hover">شروط الخدمة</a>
+            <span className="flex items-center gap-1.5"><LockClosedIcon className="h-4 w-4" aria-hidden="true" />{t('securePayments')}</span>
+            <a href="/legal/refund" target="_blank" rel="noopener noreferrer" className="text-link hover:text-link-hover">{t('refundPolicy')}</a>
+            <a href="/legal/terms" target="_blank" rel="noopener noreferrer" className="text-link hover:text-link-hover">{t('terms')}</a>
           </div>
         </div>
       </div>
@@ -224,10 +227,10 @@ export default function BillingPage() {
         onClose={() => setAlreadySubscribed(null)}
         onConfirm={() => { setAlreadySubscribed(null); portalMut.mutate() }}
         loading={portalMut.isLoading}
-        title="لديك اشتراك نشط بالفعل"
-        description={<>تغيير الباقة أو إلغاؤها يتم من «إدارة الفوترة».<span className="mt-2 block text-xs opacity-80" dir="auto">{alreadySubscribed}</span></>}
-        confirmLabel="فتح إدارة الفوترة"
-        cancelLabel="ليس الآن"
+        title={t('alreadyTitle')}
+        description={t('alreadyDesc')}
+        confirmLabel={t('openBilling')}
+        cancelLabel={t('notNow')}
       />
     </DashboardLayout>
   )
