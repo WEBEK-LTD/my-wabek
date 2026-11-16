@@ -17,6 +17,7 @@
 --        - support_ticket_number_seq +
 --          next_support_ticket_number()                race-free ticket numbers
 --        - status_messages.ip_address                  contact-form rate limit
+--        - dashboard_daily_messages(p_user, p_since)   30-day chart aggregate
 --   2. ENABLEs RLS on every table in schema public.
 --   3. DROPs every policy in public that applies to anon / authenticated /
 --      PUBLIC (e.g. 016's `INSERT WITH CHECK (true)` and `USING (true)`).
