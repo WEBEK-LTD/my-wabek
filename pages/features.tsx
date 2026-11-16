@@ -2,7 +2,7 @@ import React from 'react'
 import Head from 'next/head'
 import {
   BellAlertIcon, BoltIcon, ChartBarIcon, ChatBubbleLeftRightIcon, DevicePhoneMobileIcon, InboxStackIcon,
-  KeyIcon, LinkIcon, MegaphoneIcon, RectangleStackIcon, SparklesIcon, UserGroupIcon,
+  KeyIcon, LinkIcon, MegaphoneIcon, RectangleStackIcon, SparklesIcon,
 } from '@heroicons/react/24/outline'
 import { useWhiteLabel } from '@/hooks/useWhiteLabel'
 import { Button } from '@/components/ui'
@@ -18,7 +18,6 @@ const FEATURES: { icon: React.ElementType; tone: Tone; tk: string; dk: string; b
   { icon: InboxStackIcon, tone: 'brand', tk: 'feat_inbox_title', dk: 'feat_inbox_desc', bk: 'feat_badge_support' },
   { icon: ChatBubbleLeftRightIcon, tone: 'warning', tk: 'feat_chatbot_title', dk: 'feat_chatbot_desc', bk: 'feat_badge_automation' },
   { icon: ChartBarIcon, tone: 'success', tk: 'feat_analytics_title', dk: 'feat_analytics_desc', bk: 'feat_badge_analytics' },
-  { icon: UserGroupIcon, tone: 'violet', tk: 'feat_inbox_title', dk: 'feat_inbox_desc', bk: 'feat_badge_crm' },
   { icon: BoltIcon, tone: 'warning', tk: 'feat_automation_title', dk: 'feat_automation_desc', bk: 'feat_badge_automation' },
   { icon: KeyIcon, tone: 'brand', tk: 'feat_otp_title', dk: 'feat_otp_desc', bk: 'feat_badge_security' },
   { icon: RectangleStackIcon, tone: 'success', tk: 'feat_quick_title', dk: 'feat_quick_desc', bk: 'feat_badge_support' },
