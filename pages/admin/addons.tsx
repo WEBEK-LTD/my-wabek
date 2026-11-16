@@ -41,6 +41,8 @@ interface UsageResponse {
 
 const ADDONS = (manifest.addons as AddonManifest[]).filter((a): a is AddonManifest & { id: AddonId } => a.id === 'wordpress' || a.id === 'whmcs')
 const NAME_KEY: Record<AddonId, MsgKey> = { wordpress: 'nameWordpress', whmcs: 'nameWhmcs' }
+/** Product names (not translated) for the compact stat labels. */
+const SHORT_NAME: Record<AddonId, string> = { wordpress: 'WordPress', whmcs: 'WHMCS' }
 const STEPS: Record<AddonId, { install: MsgKey[]; update: MsgKey[]; compat: MsgKey[] }> = {
   wordpress: {
     install: ['wpStep1', 'wpStep2', 'wpStep3', 'wpStep4', 'wpStep5'],
@@ -152,11 +154,11 @@ export default function AdminAddonsPage() {
 
       {data && !data.available && <Notice tone="warning" icon={InformationCircleIcon} className="mb-4">{t('migrationMissing')}</Notice>}
 
-      <div className="mb-6 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+      <div className="mb-6 grid gap-3.5 sm:grid-cols-2 xl:grid-cols-5">
         {ADDONS.map(a => (
           <React.Fragment key={a.id}>
-            <StatCard loading={isLoading} icon={CubeIcon} label={t('active7', { name: name(a.id) })} value={fmtNumber(stats?.[a.id]?.active7 ?? 0)} />
-            <StatCard loading={isLoading} icon={UsersIcon} label={t('active30', { name: name(a.id) })} value={fmtNumber(stats?.[a.id]?.active30 ?? 0)}
+            <StatCard loading={isLoading} icon={CubeIcon} label={t('active7', { name: SHORT_NAME[a.id] })} value={fmtNumber(stats?.[a.id]?.active7 ?? 0)} />
+            <StatCard loading={isLoading} icon={UsersIcon} label={t('active30', { name: SHORT_NAME[a.id] })} value={fmtNumber(stats?.[a.id]?.active30 ?? 0)}
               sub={t('totalEver', { n: fmtNumber(stats?.[a.id]?.total ?? 0) })} />
           </React.Fragment>
         ))}
