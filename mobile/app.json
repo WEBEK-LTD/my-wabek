@@ -1,0 +1,73 @@
+{
+  "expo": {
+    "name": "WABEK",
+    "slug": "wabek",
+    "scheme": "wabek",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#021A1D",
+    "ios": {
+      "bundleIdentifier": "com.webek.wabek",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "WABEK uses Face ID to unlock the app and the admin panel.",
+        "NSPhotoLibraryUsageDescription": "WABEK lets you send photos from your library to your customers.",
+        "ITSAppUsesNonExemptEncryption": false,
+        "LSApplicationQueriesSchemes": [
+          "whatsapp"
+        ]
+      }
+    },
+    "android": {
+      "package": "com.webek.wabek",
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT",
+        "POST_NOTIFICATIONS"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      "expo-localization",
+      "expo-image",
+      "expo-web-browser",
+      "expo-local-authentication",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "backgroundColor": "#021A1D"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#12B5BE"
+        }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "https://waabek.com",
+      "eas": {
+        "projectId": ""
+      }
+    }
+  }
+}
