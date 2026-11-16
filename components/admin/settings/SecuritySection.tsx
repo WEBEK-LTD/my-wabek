@@ -5,7 +5,7 @@ import {
   BeakerIcon, CheckCircleIcon, ExclamationTriangleIcon, FingerPrintIcon, KeyIcon, LockClosedIcon, PaperAirplaneIcon, ShieldCheckIcon, XCircleIcon,
 } from '@heroicons/react/24/outline'
 import { Badge, Button, Card, CardHeader, Input, Select, cn } from '@/components/ui'
-import { useAdminT } from '../i18n'
+import { useAdminT, useApiError } from '../i18n'
 import { Notice, SettingRow } from '../shared'
 import { Bound, NumberRow, SelectRow, ToggleRow } from './controls'
 import messages from '@/locales/admin/settings/security'
@@ -19,6 +19,7 @@ interface OtpResult {
 
 export function SecuritySection({ settings, set, instances, dirty }: Bound & { instances: Instance[]; dirty: boolean }) {
   const { t } = useAdminT(messages)
+  const apiError = useApiError()
   const b = { settings, set }
   const [otpTestPhone, setOtpTestPhone] = useState('')
   const [otpTesting, setOtpTesting] = useState(false)
@@ -33,8 +34,7 @@ export function SecuritySection({ settings, set, instances, dirty }: Bound & { i
       if (r.data.success) toast.success(t('testOtpSent'))
       else toast.error(t('testOtpFailedSee'))
     } catch (e: unknown) {
-      const err = e as { response?: { data?: { error?: string } }; message?: string }
-      setRes({ success: false, error: err?.response?.data?.error || err?.message })
+      setRes({ success: false, error: apiError(e, (e as { message?: string })?.message || t('requestFailed')) })
       toast.error(t('requestFailed'))
     } finally { setOtpTesting(false) }
   }
@@ -88,7 +88,7 @@ export function SecuritySection({ settings, set, instances, dirty }: Bound & { i
             {res.success ? (
               <>
                 <p className="flex items-center gap-2 font-semibold text-success"><CheckCircleIcon className="h-5 w-5" aria-hidden="true" />{t('sentSuccessfully')}</p>
-                {res.provider === 'wa_web' ? <p className="text-body">{res.note}</p> : (
+                {res.provider === 'wa_web' ? <p className="text-body">{apiError.text(res.note)}</p> : (
                   <dl className="grid gap-1 font-mono text-xs text-body sm:grid-cols-2" dir="ltr">
                     <div><dt className="inline text-muted">{t('diagConfigured')} </dt><dd className="inline font-semibold">{res.templateName}</dd></div>
                     <div><dt className="inline text-muted">{t('diagUsed')} </dt><dd className="inline font-semibold">{res.usedTemplateName}</dd></div>
@@ -106,7 +106,7 @@ export function SecuritySection({ settings, set, instances, dirty }: Bound & { i
             ) : (
               <>
                 <p className="flex items-center gap-2 font-semibold text-danger"><XCircleIcon className="h-5 w-5" aria-hidden="true" />{t('failed')}</p>
-                {res.error && <p className="text-body">{res.error}</p>}
+                {res.error && <p className="text-body">{apiError.text(res.error)}</p>}
                 {Array.isArray(res.attempts) && (
                   <div className="mt-2 max-h-64 space-y-1 overflow-y-auto font-mono text-xs text-body" dir="ltr">
                     <p className="text-muted">{t('diagAttempts', { n: res.attempts.length })}</p>
@@ -134,12 +134,12 @@ export function SecuritySection({ settings, set, instances, dirty }: Bound & { i
         <CardHeader icon={FingerPrintIcon} title={t('securitySpecs')} action={<Badge tone="success" size="sm" icon={KeyIcon}>{t('enforced')}</Badge>} />
         <dl className="mt-3 divide-y divide-line-soft">
           {[
-            { l: t('passwordHashing'), v: 'bcrypt (12 rounds)' },
-            { l: t('jwtAlgorithm'), v: 'HS256 — 7 day expiry' },
-            { l: t('apiKeys'), v: 'SHA-256 hashed in DB' },
-            { l: t('otpCodes'), v: 'SHA-256 hashed, single-use' },
-            { l: t('deviceTracking'), v: 'Browser fingerprint + IP' },
-            { l: t('trustedDevices'), v: '30-day expiry' },
+            { l: t('passwordHashing'), v: t('specBcrypt') },
+            { l: t('jwtAlgorithm'), v: t('specJwt') },
+            { l: t('apiKeys'), v: t('specApiKeys') },
+            { l: t('otpCodes'), v: t('specOtp') },
+            { l: t('deviceTracking'), v: t('specDevice') },
+            { l: t('trustedDevices'), v: t('specTrusted') },
           ].map(r => (
             <div key={r.l} className="flex items-center justify-between gap-3 py-2.5">
               <dt className="text-sm text-muted">{r.l}</dt>

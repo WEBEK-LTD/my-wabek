@@ -11,7 +11,7 @@ import {
   Badge, Button, Card, ConfirmDialog, DataTable, EmptyState, Field, Input, Modal, PageHeader, Select, Skeleton, StatCard, Tabs, cn,
 } from '@/components/ui'
 import type { Column, Tone } from '@/components/ui'
-import { apiError, useAdminT } from '@/components/admin/i18n'
+import { useApiError, useAdminT, useEnumLabel } from '@/components/admin/i18n'
 import { ErrorState } from '@/components/admin/shared'
 import messages from '@/locales/admin/service-status'
 
@@ -39,6 +39,8 @@ const EMPTY_INC = { title: '', status: 'resolved', duration: '', incident_date: 
 
 export default function ServiceStatusPage() {
   const { t, fmtDate, fmtDateTime, fmtNumber } = useAdminT(messages)
+  const apiError = useApiError()
+  const label = useEnumLabel()
   const [tab, setTab] = useState('status')
   const [services, setServices] = useState<Record<string, SvcStatus>>({})
   const [published, setPublished] = useState<Record<string, SvcStatus>>({})
@@ -259,7 +261,7 @@ export default function ServiceStatusPage() {
                 <li key={m.id} className="px-5 py-4">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0"><span className="font-semibold text-ink">{m.name}</span> <span dir="ltr" className="text-xs text-muted">{m.email}</span></div>
-                    <Badge tone={m.status === 'new' ? 'danger' : 'success'} size="sm" dot={m.status === 'new'}>{m.status === 'new' ? t('new') : m.status}</Badge>
+                    <Badge tone={m.status === 'new' ? 'danger' : 'success'} size="sm" dot={m.status === 'new'}>{m.status === 'new' ? t('new') : label('contact', m.status)}</Badge>
                   </div>
                   {m.subject && <p className="mt-1 text-sm font-medium text-body">{m.subject}</p>}
                   <p dir="auto" className="mt-1 whitespace-pre-wrap text-sm text-muted">{m.message}</p>

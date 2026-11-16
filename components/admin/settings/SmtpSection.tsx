@@ -3,7 +3,7 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import { EnvelopeIcon, InformationCircleIcon, PaperAirplaneIcon } from '@heroicons/react/24/outline'
 import { Badge, Button, Card, CardHeader, Field, Input, Select } from '@/components/ui'
-import { apiError, useAdminT } from '../i18n'
+import { useApiError, useAdminT } from '../i18n'
 import { Notice, SecretField } from '../shared'
 import messages from '@/locales/admin/settings/smtp'
 
@@ -12,6 +12,7 @@ type Smtp = typeof DEFAULTS
 
 export function SmtpSection({ smtp, onSaved }: { smtp: Partial<Smtp> | undefined; onSaved: (next: Smtp) => void }) {
   const { t } = useAdminT(messages)
+  const apiError = useApiError()
   const [f, setF] = useState<Smtp>(DEFAULTS)
   const [testTo, setTestTo] = useState('')
   const [testing, setTesting] = useState(false)

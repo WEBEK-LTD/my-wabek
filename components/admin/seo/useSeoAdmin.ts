@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { useAdminT } from '../i18n'
+import { useAdminT, useApiError } from '../i18n'
 import {
   DEFAULT_COMPETITORS, DEFAULT_FORM, DEFAULT_REDIRECTS, DEFAULT_TRACKING, PUBLIC_PAGES, SCHEMA_TEMPLATES,
 } from './data'
@@ -21,6 +21,7 @@ const origin = () => (typeof window !== 'undefined' ? window.location.origin : '
  */
 export function useSeoAdmin() {
   const { t, tn } = useAdminT(messages)
+  const apiError = useApiError()
   const [tab, setTab] = useState('overview')
   const [pageScores, setPageScores] = useState<Record<string, any>>({})
   const [analyzing, setAnalyzing] = useState<string | null>(null)
@@ -61,8 +62,8 @@ export function useSeoAdmin() {
     try {
       const { data } = await axios.post('/api/admin/gsc-oauth', { action: 'connect' })
       if (data.url) window.location.href = data.url
-      else toast.error(data.error || t('connectionFailed'))
-    } catch (e: any) { toast.error(e.response?.data?.error || t('failedStartOauth')) }
+      else toast.error(apiError.text(data.error) || t('connectionFailed'))
+    } catch (e: any) { toast.error(apiError(e, t('failedStartOauth'))) }
     setGscConnecting(false)
   }
   const disconnectGsc = async () => {
@@ -87,7 +88,7 @@ export function useSeoAdmin() {
       setGscSummary(summaryRes.data)
       setGscData(queriesRes.data.rows || [])
       setGscPages(pagesRes.data.rows || [])
-    } catch (e: any) { toast.error(e.response?.data?.error || t('failedLoadGscData')) }
+    } catch (e: any) { toast.error(apiError(e, t('failedLoadGscData'))) }
     setGscLoading(false)
   }
   const loadGscSites = async () => {
@@ -106,7 +107,7 @@ export function useSeoAdmin() {
       setTimeout(() => loadGscData(), 1000)
     }
     if (params.get('gsc_error')) {
-      toast.error(t('gscConnectionFailed') + params.get('gsc_error'))
+      toast.error(t('gscConnectionFailed', { error: apiError.text(params.get('gsc_error')) }))
       window.history.replaceState({}, '', window.location.pathname)
     }
     loadGscStatus()

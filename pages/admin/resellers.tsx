@@ -10,7 +10,7 @@ import {
   Avatar, Badge, Button, Card, ConfirmDialog, DataTable, EmptyState, Input, Modal, PageHeader, Skeleton, StatCard, Tabs, Tooltip,
 } from '@/components/ui'
 import type { Column } from '@/components/ui'
-import { apiError, useAdminT, usd } from '@/components/admin/i18n'
+import { useApiError, useAdminT, useEnumLabel, usd } from '@/components/admin/i18n'
 import { ErrorState, JsonViewer } from '@/components/admin/shared'
 import { RESELLER_KEYS, useResellers, type ResellerProfile } from '@/components/admin/resellers/types'
 import messages from '@/locales/admin/resellers'
@@ -36,6 +36,8 @@ function CommissionEditor({ value, onSave, saving, label }: { value: number; onS
 
 export default function AdminResellersPage() {
   const { t, fmtDate, fmtNumber } = useAdminT(messages)
+  const apiError = useApiError()
+  const label = useEnumLabel()
   const qc = useQueryClient()
   const [tab, setTab] = useState('pending')
   const [commission, setCommission] = useState<Record<string, string>>({})
@@ -129,9 +131,9 @@ export default function AdminResellersPage() {
                         </div>
                         <p dir="ltr" className="text-start text-sm text-muted">{r.user?.email}</p>
                         <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-                          <div className="flex items-center gap-1"><CreditCardIcon className="h-3.5 w-3.5" aria-hidden="true" /><dt>{t('payment')}</dt><dd className="text-body">{r.payment_method || 'platform'}</dd></div>
-                          <div className="flex items-center gap-1"><CalendarDaysIcon className="h-3.5 w-3.5" aria-hidden="true" /><dt>{t('schedule')}</dt><dd className="text-body">{r.payout_schedule || 'monthly'}</dd></div>
-                          <div className="flex items-center gap-1"><BanknotesIcon className="h-3.5 w-3.5" aria-hidden="true" /><dt>{t('payoutVia')}</dt><dd className="text-body">{r.payout_method || '—'}</dd></div>
+                          <div className="flex items-center gap-1"><CreditCardIcon className="h-3.5 w-3.5" aria-hidden="true" /><dt>{t('payment')}</dt><dd className="text-body">{label('payMethod', r.payment_method || 'platform')}</dd></div>
+                          <div className="flex items-center gap-1"><CalendarDaysIcon className="h-3.5 w-3.5" aria-hidden="true" /><dt>{t('schedule')}</dt><dd className="text-body">{label('schedule', r.payout_schedule || 'monthly')}</dd></div>
+                          <div className="flex items-center gap-1"><BanknotesIcon className="h-3.5 w-3.5" aria-hidden="true" /><dt>{t('payoutVia')}</dt><dd className="text-body">{label('payout', r.payout_method)}</dd></div>
                           <div className="flex items-center gap-1"><ClockIcon className="h-3.5 w-3.5" aria-hidden="true" /><dt>{t('applied')}</dt><dd className="text-body">{fmtDate(r.created_at)}</dd></div>
                         </dl>
                         {!!r.payout_details && typeof r.payout_details === 'object' && Object.keys(r.payout_details as object).length > 0 && (

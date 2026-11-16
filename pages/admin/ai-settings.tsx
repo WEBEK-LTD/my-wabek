@@ -5,7 +5,7 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import { AdjustmentsHorizontalIcon, BoltIcon, ChartBarIcon, CheckCircleIcon, CpuChipIcon, KeyIcon, SparklesIcon, XCircleIcon } from '@heroicons/react/24/outline'
 import { AreaChart, Badge, Button, Card, CardHeader, Field, Input, PageHeader, ProgressBar, Select, Skeleton, StatCard, Switch } from '@/components/ui'
-import { apiError, useAdminT, type AdminT } from '@/components/admin/i18n'
+import { useApiError, useAdminT, type AdminT } from '@/components/admin/i18n'
 import { ErrorState, Notice, SecretField } from '@/components/admin/shared'
 import messages from '@/locales/admin/ai-settings'
 
@@ -18,6 +18,7 @@ const REVIEW_FIELDS = (t: AdminT<typeof messages.en>) => [
 
 export default function AISettingsPage() {
   const { t, fmtShort, fmtNumber } = useAdminT(messages)
+  const apiError = useApiError()
   const qc = useQueryClient()
   const fields = useMemo(() => REVIEW_FIELDS(t), [t])
   const [testing, setTesting] = useState(false)

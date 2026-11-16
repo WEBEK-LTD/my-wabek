@@ -8,7 +8,7 @@ import {
   Avatar, Badge, Button, Card, ConfirmDialog, Field, Input, Select, Skeleton, StatusPill, Tabs,
 } from '@/components/ui'
 import { Drawer, InfoTile, Notice } from '../shared'
-import { useAdminT } from '../i18n'
+import { useAdminT, useEnumLabel } from '../i18n'
 import type { AdminPlanRef, AdminUser, AdminUserDetail, UserUpdateBody } from './types'
 import messages from '@/locales/admin/user-drawer'
 
@@ -27,6 +27,7 @@ const dayOnly = (v?: string | null) => (v ? String(v).split('T')[0] : '')
 
 export function UserDrawer({ user, plans, onClose, onSave, saving, error, isSelf }: Props) {
   const { t, fmtDate, fmtNumber } = useAdminT(messages)
+  const label = useEnumLabel()
   const open = !!user
   const { data: detail, isLoading } = useQuery<AdminUserDetail>(
     ['admin-user-detail', user?.id],
@@ -110,8 +111,8 @@ export function UserDrawer({ user, plans, onClose, onSave, saving, error, isSelf
                   <li key={inst.id} className="flex items-center gap-3 px-3.5 py-2.5 text-sm">
                     <DevicePhoneMobileIcon className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
                     <span className="min-w-0 flex-1 truncate text-ink" dir="auto">{inst.display_name || inst.phone_number || t('noNumber')}</span>
-                    <span className="text-xs text-muted">{inst.instance_type === 'wa_web' ? 'WA Web' : (inst.instance_type || inst.type) === 'cloud_api' ? 'Cloud API' : (inst.instance_type || inst.type || '')}</span>
-                    <StatusPill status={inst.status} size="sm">{inst.status || '—'}</StatusPill>
+                    <span className="text-xs text-muted">{label('instanceType', inst.instance_type || inst.type, '')}</span>
+                    <StatusPill status={inst.status} size="sm">{label('instance', inst.status)}</StatusPill>
                   </li>
                 ))}
               </ul>

@@ -26,10 +26,24 @@ export default defineMessages({
   },
   fr: {
     ...common.fr,
-
+    good: 'Bon',
+    fair: 'Correct',
+    poor: 'Faible',
+    high: 'Élevée',
+    medium: 'Moyenne',
+    low: 'Faible',
+    noTitle: '(sans titre)',
+    metaDescriptionWillAppear: 'Votre meta description apparaîtra ici…',
   },
   tr: {
     ...common.tr,
-
+    good: 'İyi',
+    fair: 'Orta',
+    poor: 'Zayıf',
+    high: 'Yüksek',
+    medium: 'Orta',
+    low: 'Düşük',
+    noTitle: '(başlık yok)',
+    metaDescriptionWillAppear: 'Meta açıklamanız burada görünecek…',
   },
 })

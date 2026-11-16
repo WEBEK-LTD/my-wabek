@@ -9,7 +9,7 @@ import {
   Avatar, Badge, Button, Card, Dropdown, EmptyState, Field, Modal, PageHeader, SearchInput, Skeleton, Tabs, Textarea, cn,
 } from '@/components/ui'
 import type { Tone } from '@/components/ui'
-import { apiError, useAdminT } from '@/components/admin/i18n'
+import { useApiError, useAdminT } from '@/components/admin/i18n'
 import { ErrorState, InfoTile } from '@/components/admin/shared'
 import supportMessages from '@/locales/admin/support'
 
@@ -26,6 +26,7 @@ const TONE: Record<Status, Tone> = { open: 'brand', pending: 'warning', resolved
 
 export default function AdminSupportPage() {
   const { t, fmtDate, fmtTime, fmtDateTime } = useAdminT(supportMessages)
+  const apiError = useApiError()
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [loadingList, setLoadingList] = useState(true)
   const [listError, setListError] = useState<string | null>(null)

@@ -6,7 +6,7 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import { AdjustmentsHorizontalIcon, CreditCardIcon, EnvelopeIcon, PuzzlePieceIcon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 import { Button, Card, PageHeader, Skeleton, Tabs, cn } from '@/components/ui'
-import { apiError, useAdminT } from '@/components/admin/i18n'
+import { useApiError, useAdminT } from '@/components/admin/i18n'
 import { ErrorState } from '@/components/admin/shared'
 import type { Settings } from '@/components/admin/settings/controls'
 import { GeneralSection } from '@/components/admin/settings/GeneralSection'
@@ -26,6 +26,7 @@ interface SeoBundle { seo?: Record<string, unknown>; brand?: Record<string, stri
 
 export default function AdminSettingsPage() {
   const { t, tn } = useAdminT(messages)
+  const apiError = useApiError()
   const router = useRouter()
   const [section, setSection] = useState<SectionId>('general')
   const [settings, setSettings] = useState<Settings>({})

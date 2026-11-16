@@ -6,7 +6,7 @@ import {
   ArrowPathIcon, CheckBadgeIcon, Cog6ToothIcon, DevicePhoneMobileIcon, KeyIcon, LinkSlashIcon, QrCodeIcon, ShieldCheckIcon, SignalIcon,
 } from '@heroicons/react/24/outline'
 import { Badge, Button, Card, CardHeader, ConfirmDialog, EmptyState, PageHeader, Skeleton, Spinner, StatusPill, cn } from '@/components/ui'
-import { apiError, useAdminT } from '@/components/admin/i18n'
+import { useApiError, useAdminT, useEnumLabel } from '@/components/admin/i18n'
 import { ErrorState, Notice, Steps } from '@/components/admin/shared'
 import messages from '@/locales/admin/whatsapp'
 
@@ -14,6 +14,8 @@ interface Instance { id: string; display_name?: string | null; phone_number?: st
 
 export default function AdminWhatsAppPage() {
   const { t, tn } = useAdminT(messages)
+  const apiError = useApiError()
+  const label = useEnumLabel()
   const [instances, setInstances] = useState<Instance[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -190,7 +192,7 @@ export default function AdminWhatsAppPage() {
                             </div>
                             <p className="text-xs text-muted"><span dir="ltr">{inst.phone_number || '—'}</span> · {inst.instance_type === 'wa_web' ? 'WhatsApp Web' : 'Cloud API'}</p>
                           </div>
-                          <StatusPill status={inst.status}>{inst.status === 'connected' ? t('connected') : inst.status || '—'}</StatusPill>
+                          <StatusPill status={inst.status}>{label('instance', inst.status)}</StatusPill>
                           <div className="flex gap-1.5">
                             {inst.status === 'connected' && otpInstanceId !== inst.id && (
                               <Button size="xs" variant="secondary" icon={CheckBadgeIcon} loading={settingOtp === inst.id} onClick={() => assignOtp(inst.id)}>{t('useOtp')}</Button>

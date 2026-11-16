@@ -11,7 +11,7 @@ import {
   Badge, Button, Card, ConfirmDialog, DataTable, EmptyState, Field, Input, PageHeader, Select, Skeleton, Tabs, Tooltip, cn,
 } from '@/components/ui'
 import type { Column } from '@/components/ui'
-import { apiError, useAdminT, usd } from '@/components/admin/i18n'
+import { useApiError, useAdminT, usd } from '@/components/admin/i18n'
 import { CopyButton, ErrorState, Notice } from '@/components/admin/shared'
 import { PlanEditor, type Plan } from '@/components/admin/plans/PlanEditor'
 import messages from '@/locales/admin/plans'
@@ -26,6 +26,7 @@ const GIFT_EMPTY = { plan_id: '', duration_days: 30, price: 0, note: '', quantit
 
 export default function AdminPlansPage() {
   const { t, tn, fmtDate, fmtNumber } = useAdminT(messages)
+  const apiError = useApiError()
   const lim = (v: number | null | undefined) => (v === -1 ? '∞' : v == null ? '—' : fmtNumber(v))
   const qc = useQueryClient()
   const [tab, setTab] = useState('plans')

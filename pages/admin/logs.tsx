@@ -9,7 +9,7 @@ import {
   Avatar, Badge, Button, Card, DataTable, EmptyState, Input, PageHeader, SearchInput, Select, Tabs, cn,
 } from '@/components/ui'
 import type { Column, Tone } from '@/components/ui'
-import { useAdminT } from '@/components/admin/i18n'
+import { useAdminT, useEnumLabel } from '@/components/admin/i18n'
 import { Drawer, ErrorState, InfoTile, JsonViewer, Pagination } from '@/components/admin/shared'
 import type { AdminLog } from '@/components/admin/useAdminStats'
 import messages from '@/locales/admin/logs'
@@ -27,6 +27,7 @@ function actionTone(a: string): Tone {
 
 export default function AdminLogsPage() {
   const { t, fmtDateTime, fmtNumber, tn } = useAdminT(messages)
+  const label = useEnumLabel()
   const [mode, setMode] = useState<'system' | 'user'>('system')
   const [search, setSearch] = useState('')
   const [dSearch, setDSearch] = useState('')
@@ -66,7 +67,7 @@ export default function AdminLogsPage() {
 
   const cols: Column<AdminLog>[] = [
     { key: 'time', header: t('time'), cell: l => <span className="tabular whitespace-nowrap font-mono text-xs text-muted" dir="ltr">{fmtDateTime(l.created_at)}</span> },
-    { key: 'action', header: t('action'), cell: l => <Badge tone={actionTone(l.action)} size="sm"><span dir="ltr" className="font-mono">{l.action}</span></Badge> },
+    { key: 'action', header: t('action'), cell: l => <Badge tone={actionTone(l.action)} size="sm" title={l.action}>{label('action', l.action)}</Badge> },
     {
       key: 'user', header: t('user'),
       cell: l => l.users ? (
@@ -75,7 +76,7 @@ export default function AdminLogsPage() {
     },
     {
       key: 'res', header: t('resource'), hideBelow: 'md',
-      cell: l => l.resource ? <span className="text-xs text-body">{l.resource}{l.resource_id && <span dir="ltr" className="font-mono text-muted"> :{l.resource_id.slice(0, 8)}</span>}</span> : <span className="text-muted">—</span>,
+      cell: l => l.resource ? <span className="text-xs text-body">{label('resource', l.resource)}{l.resource_id && <span dir="ltr" className="font-mono text-muted"> :{l.resource_id.slice(0, 8)}</span>}</span> : <span className="text-muted">—</span>,
     },
     { key: 'ip', header: 'IP', hideBelow: 'lg', cell: l => <span dir="ltr" className="font-mono text-xs text-muted">{l.ip_address || '—'}</span> },
     { key: 'd', header: <span className="sr-only">{t('details')}</span>, align: 'end', cell: l => l.details ? <CodeBracketIcon className="ms-auto h-4 w-4 text-brand-ink" aria-label={t('hasDetails')} /> : null },
@@ -129,7 +130,7 @@ export default function AdminLogsPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Select size="sm" aria-label={t('filterAction')} value={actionFilter} onChange={e => { setActionFilter(e.target.value); setPage(1) }} className="min-w-[170px]"
-              options={[{ value: 'all', label: t('allActions') }, ...actions.map(a => ({ value: a, label: a }))]} />
+              options={[{ value: 'all', label: t('allActions') }, ...actions.map(a => ({ value: a, label: label('action', a) }))]} />
             <Input size="sm" type="date" dir="ltr" aria-label={t('date')} value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1) }} wrapperClassName="w-40" />
             <span className="text-xs text-muted">—</span>
             <Input size="sm" type="date" dir="ltr" aria-label={t('date2')} value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1) }} wrapperClassName="w-40" />
@@ -158,12 +159,12 @@ export default function AdminLogsPage() {
       </Card>
 
       <Drawer open={!!detail} onClose={() => setDetail(null)} width="lg" title={t('logEntry')}
-        description={detail ? <span dir="ltr" className="font-mono">{detail.action}</span> : undefined}>
+        description={detail ? label('action', detail.action) : undefined}>
         {detail && (
           <div className="space-y-5">
             <div className="grid grid-cols-2 gap-2.5">
               <InfoTile label={t('time')} value={<span dir="ltr" className="tabular">{fmtDateTime(detail.created_at)}</span>} />
-              <InfoTile label={t('action')} value={<Badge tone={actionTone(detail.action)} size="sm"><span dir="ltr" className="font-mono">{detail.action}</span></Badge>} />
+              <InfoTile label={t('action')} value={<span className="inline-flex flex-wrap items-center gap-1.5"><Badge tone={actionTone(detail.action)} size="sm">{label('action', detail.action)}</Badge><code dir="ltr" className="font-mono text-2xs text-muted">{detail.action}</code></span>} />
               <InfoTile label={t('user')} value={detail.users ? <span>{detail.users.name || '—'} <span dir="ltr" className="block text-xs text-muted">{detail.users.email}</span></span> : t('system')} />
               <InfoTile label="IP" value={<span dir="ltr" className="font-mono text-xs">{detail.ip_address || '—'}</span>} />
               <InfoTile className="col-span-2" label={t('resource')} value={<span dir="ltr" className="break-all font-mono text-xs">{detail.resource || '—'}{detail.resource_id ? ` : ${detail.resource_id}` : ''}</span>} />

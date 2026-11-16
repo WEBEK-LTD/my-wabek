@@ -26,10 +26,24 @@ export default defineMessages({
   },
   fr: {
     ...common.fr,
-
+    monthlyYearlySubscriptionsBilled: 'Les abonnements mensuels et annuels sont facturés via Stripe.',
+    keysLiveEnvironmentVariables: 'Les clés se trouvent dans les variables d’environnement',
+    stripeKeysReadServer: 'Les clés Stripe sont lues depuis les variables d’environnement du serveur (par ex. STRIPE_SECRET_KEY) ; elles ne sont ni stockées dans les paramètres de la plateforme ni affichées ici.',
+    syncPlans: 'Synchroniser les forfaits',
+    createStripePricesEach: 'Créer les prix Stripe de chaque forfait payant.',
+    activatePlansWithoutPayment: 'Activer des forfaits sans paiement.',
+    gifts: 'Cadeaux',
+    recordCommissionTransfers: 'Enregistrer les versements de commissions.',
   },
   tr: {
     ...common.tr,
-
+    monthlyYearlySubscriptionsBilled: 'Aylık ve yıllık abonelikler Stripe üzerinden faturalandırılır.',
+    keysLiveEnvironmentVariables: 'Anahtarlar ortam değişkenlerinde bulunur',
+    stripeKeysReadServer: 'Stripe anahtarları sunucu ortam değişkenlerinden okunur (ör. STRIPE_SECRET_KEY); platform ayarlarında saklanmaz ve burada gösterilmez.',
+    syncPlans: 'Planları eşitle',
+    createStripePricesEach: 'Her ücretli plan için Stripe fiyatları oluşturun.',
+    activatePlansWithoutPayment: 'Ödeme olmadan plan etkinleştirin.',
+    gifts: 'Hediyeler',
+    recordCommissionTransfers: 'Komisyon transferlerini kaydedin.',
   },
 })

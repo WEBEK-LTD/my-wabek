@@ -6,7 +6,7 @@ import {
   ArrowUturnLeftIcon, ClockIcon, DocumentDuplicateIcon, PaperAirplaneIcon, PhoneIcon, SparklesIcon,
 } from '@heroicons/react/24/outline'
 import { Badge, Button, Card, CardHeader, Field, Input, PageHeader, SearchInput, Skeleton, Tooltip, cn } from '@/components/ui'
-import { apiError, useAdminT, type AdminT } from '@/components/admin/i18n'
+import { useApiError, useAdminT, type AdminT } from '@/components/admin/i18n'
 import { ErrorState, Notice } from '@/components/admin/shared'
 import messages from '@/locales/admin/wa-templates'
 
@@ -28,6 +28,7 @@ const BUILT_IN_TEMPLATES = (t: AdminT<typeof messages.en>) => [
 
 export default function WATemplatesPage() {
   const { t } = useAdminT(messages)
+  const apiError = useApiError()
   const templates = useMemo(() => BUILT_IN_TEMPLATES(t), [t])
   const [config, setConfig] = useState<Record<string, string>>({})
   const [saved, setSaved] = useState<Record<string, string>>({})

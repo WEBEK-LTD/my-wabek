@@ -3,7 +3,7 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import { ArrowUpTrayIcon, BuildingOffice2Icon, PhotoIcon, TrashIcon, UserPlusIcon, WrenchScrewdriverIcon } from '@heroicons/react/24/outline'
 import { Button, Card, CardHeader, Field, Input } from '@/components/ui'
-import { apiError, useAdminT } from '../i18n'
+import { useApiError, useAdminT } from '../i18n'
 import { Notice } from '../shared'
 import { Bound, NumberRow, TextRow, ToggleRow, asBool } from './controls'
 import messages from '@/locales/admin/settings/general'
@@ -14,6 +14,7 @@ export function GeneralSection({ settings, set, brand: brandIn, seo, onSeoSaved 
   brand: Brand; seo: Record<string, unknown>; onSeoSaved: (next: Record<string, unknown>) => void
 }) {
   const { t } = useAdminT(messages)
+  const apiError = useApiError()
   const b = { settings, set }
   const [brand, setBrand] = useState<Brand>({})
   const [busy, setBusy] = useState<string | null>(null)
@@ -95,7 +96,7 @@ export function GeneralSection({ settings, set, brand: brandIn, seo, onSeoSaved 
           </Field>
           <Field label={t('browserTabTitle')} hint={t('leaveEmptyUseApp')}>
             <div className="flex gap-2">
-              <Input wrapperClassName="flex-1" value={brand.site_title || ''} onChange={e => setBrand(f => ({ ...f, site_title: e.target.value }))} placeholder="WABEK — WhatsApp Business Platform" />
+              <Input wrapperClassName="flex-1" value={brand.site_title || ''} onChange={e => setBrand(f => ({ ...f, site_title: e.target.value }))} placeholder={t('siteTitlePlaceholder')} />
               <Button size="md" variant="secondary" loading={busy === 'site_title'} onClick={saveSiteTitle}>{t('save')}</Button>
             </div>
           </Field>

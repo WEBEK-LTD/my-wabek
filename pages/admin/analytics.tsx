@@ -77,7 +77,7 @@ export default function AdminAnalyticsPage() {
                   <EmptyState size="sm" icon={CreditCardIcon} title={t('noUsersPlans')} />
                 ) : (
                   <>
-                    <Donut size={132} centerLabel={fmtNumber(planTotal)} centerSub={t('users')}
+                    <Donut size={132} ariaLabel={t('planDistribution')} centerLabel={fmtNumber(planTotal)} centerSub={t('users')}
                       segments={planDist.map((p, i) => ({ label: p.plan, value: p.count, color: CHART_COLORS[i % CHART_COLORS.length] }))} className="mx-auto" />
                     <ul className="space-y-2.5">
                       {planDist.map((p, i) => (

@@ -9,13 +9,14 @@ import {
   AreaChart, Badge, Button, Card, CardHeader, Donut, EmptyState, PageHeader, ProgressBar, Skeleton, StatCard,
   Table, TBody, TD, TH, THead, TR, CHART_COLORS,
 } from '@/components/ui'
-import { useAdminT, usd } from '@/components/admin/i18n'
+import { useAdminT, useEnumLabel, usd } from '@/components/admin/i18n'
 import { ErrorState } from '@/components/admin/shared'
 import { pct, useAdminStats } from '@/components/admin/useAdminStats'
 import messages from '@/locales/admin/dashboard'
 
 export default function AdminDashboard() {
   const { t, fmtDateTime, fmtWeekday, fmtNumber, tn } = useAdminT(messages)
+  const label = useEnumLabel()
   const { data, isLoading, isError, refetch } = useAdminStats()
   const s = data?.stats
   const signups = data?.daily_signups || []
@@ -105,7 +106,7 @@ export default function AdminDashboard() {
                   <EmptyState size="sm" icon={CreditCardIcon} title={t('noUsersPlansYet')}
                     action={<Button size="sm" variant="secondary" href="/admin/plans">{t('managePlans')}</Button>} />
                 ) : (
-                  <Donut legend="bottom" size={140}
+                  <Donut legend="bottom" size={140} ariaLabel={t('planDistribution')}
                     centerLabel={fmtNumber(planDist.reduce((a, p) => a + p.count, 0))} centerSub={t('users')}
                     segments={planDist.map((p, i) => ({ label: p.plan, value: p.count, color: CHART_COLORS[i % CHART_COLORS.length] }))}
                     formatValue={(seg) => fmtNumber(seg.value)} />
@@ -157,9 +158,9 @@ export default function AdminDashboard() {
                     <TBody>
                       {logs.map(log => (
                         <TR key={log.id}>
-                          <TD><code dir="ltr" className="rounded-md bg-surface-3 px-1.5 py-0.5 font-mono text-xs text-ink">{log.action}</code></TD>
+                          <TD><span className="text-xs font-medium text-ink" title={log.action}>{label('action', log.action)}</span></TD>
                           <TD><span dir="ltr" className="font-mono text-xs text-muted">{log.user_id ? `${log.user_id.slice(0, 8)}…` : t('system')}</span></TD>
-                          <TD className="text-xs text-muted">{log.resource || '—'}</TD>
+                          <TD className="text-xs text-muted">{label('resource', log.resource)}</TD>
                           <TD align="end" className="tabular whitespace-nowrap text-xs text-muted">{fmtDateTime(log.created_at)}</TD>
                         </TR>
                       ))}

@@ -11,7 +11,7 @@ import {
 } from '@/components/ui'
 import type { Column } from '@/components/ui'
 import { useAuthStore } from '@/lib/store'
-import { apiError, useAdminT } from '@/components/admin/i18n'
+import { useApiError, useAdminT } from '@/components/admin/i18n'
 import { ErrorState, Pagination } from '@/components/admin/shared'
 import { UserDrawer } from '@/components/admin/users/UserDrawer'
 import type { AdminPlanRef, AdminUser, UserUpdateBody } from '@/components/admin/users/types'
@@ -27,6 +27,7 @@ function useDebounced<T>(value: T, delay = 400) {
 
 export default function AdminUsersPage() {
   const { t, fmtDate, fmtNumber, tn } = useAdminT(messages)
+  const apiError = useApiError()
   const qc = useQueryClient()
   const me = useAuthStore(s => s.user)
   const [rawSearch, setRawSearch] = useState('')

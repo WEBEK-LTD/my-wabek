@@ -10,7 +10,7 @@ import {
   Avatar, Button, Card, CardHeader, ConfirmDialog, DataTable, EmptyState, Field, Input, PageHeader, Select, StatCard,
 } from '@/components/ui'
 import type { Column } from '@/components/ui'
-import { apiError, useAdminT, usd } from '@/components/admin/i18n'
+import { useApiError, useAdminT, useEnumLabel, usd } from '@/components/admin/i18n'
 import { ErrorState, Notice } from '@/components/admin/shared'
 import { PAYOUT_METHODS, RESELLER_KEYS, useResellers, type ResellerProfile } from '@/components/admin/resellers/types'
 import messages from '@/locales/admin/payouts'
@@ -19,6 +19,7 @@ const EMPTY = { reseller_id: '', amount: '', method: 'bank_transfer', reference:
 
 export default function AdminPayoutsPage() {
   const { t, fmtDate, fmtNumber } = useAdminT(messages)
+  const apiError = useApiError()
   const qc = useQueryClient()
   const router = useRouter()
   const [form, setForm] = useState(EMPTY)
@@ -78,9 +79,8 @@ export default function AdminPayoutsPage() {
     })
   }
 
-  const methodLabel = (m: string) => ({
-    bank_transfer: t('bankTransfer'), paypal: 'PayPal', wise: 'Wise', crypto: t('crypto'), stripe: 'Stripe', other: t('other'),
-  } as Record<string, string>)[m] || m
+  const enumLabel = useEnumLabel()
+  const methodLabel = (m: string) => enumLabel('payout', m)
 
   const cols: Column<ResellerProfile>[] = [
     {

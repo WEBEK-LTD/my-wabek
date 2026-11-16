@@ -5,7 +5,7 @@ import {
   ArrowPathIcon, ArrowTopRightOnSquareIcon, BellAlertIcon, ChartBarIcon, CheckCircleIcon, ExclamationTriangleIcon, GlobeAltIcon, SparklesIcon,
 } from '@heroicons/react/24/outline'
 import { Badge, Button, Card, CardHeader, Field, Input, Switch, Textarea } from '@/components/ui'
-import { apiError, useAdminT } from '../i18n'
+import { useApiError, useAdminT } from '../i18n'
 import { Notice, SecretField, Steps } from '../shared'
 import messages from '@/locales/admin/settings/integrations'
 
@@ -19,6 +19,7 @@ const PUSH_DEFAULTS = { vapid_public: '', vapid_private: '', enabled: false }
 
 export function IntegrationsSection({ seo, webmaster, push, onSaved }: { seo: Obj; webmaster?: Obj; push?: Obj; onSaved: () => void }) {
   const { t, tn } = useAdminT(messages)
+  const apiError = useApiError()
   const [seoForm, setSeoForm] = useState<Obj>({ ...SEO_DEFAULTS })
   const [webForm, setWebForm] = useState<Record<string, string>>({ ...WEB_DEFAULTS })
   const [pushForm, setPushForm] = useState<{ vapid_public: string; vapid_private: string; enabled: boolean }>({ ...PUSH_DEFAULTS })
@@ -71,7 +72,7 @@ export function IntegrationsSection({ seo, webmaster, push, onSaved }: { seo: Ob
           <Field label="Facebook Pixel ID"><Input dir="ltr" className="font-mono" value={sv('fb_pixel')} onChange={e => setSeoForm(f => ({ ...f, fb_pixel: e.target.value }))} placeholder="123456789012345" /></Field>
         </div>
         <Field label={t('customHeadCode')} hint={t('injectedEveryPageUse')}>
-          <Textarea rows={4} dir="ltr" className="font-mono text-xs" value={sv('custom_head_code')} onChange={e => setSeoForm(f => ({ ...f, custom_head_code: e.target.value }))} placeholder="<!-- tracking code -->" />
+          <Textarea rows={4} dir="ltr" className="font-mono text-xs" value={sv('custom_head_code')} onChange={e => setSeoForm(f => ({ ...f, custom_head_code: e.target.value }))} placeholder={`<!-- ${t('trackingCode')} -->`} />
         </Field>
         <div className="flex justify-end"><Button loading={saving === 'seo'} onClick={() => put('seo', { seo: seoForm }, t('trackingSettingsSaved'))}>{t('save')}</Button></div>
       </Card>
