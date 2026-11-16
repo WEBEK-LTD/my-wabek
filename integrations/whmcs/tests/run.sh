@@ -31,6 +31,19 @@ if command -v composer >/dev/null 2>&1; then
   [ -f "$WORK/smarty/vendor/autoload.php" ] && SMARTY_ARG=("--smarty=$WORK/smarty/vendor/autoload.php")
 fi
 
+# Consent ↔ custom field sync against in-memory SQLite (illuminate/database, like WHMCS' Capsule).
+if command -v composer >/dev/null 2>&1; then
+  if [ ! -f "$WORK/illuminate/vendor/autoload.php" ]; then
+    mkdir -p "$WORK/illuminate"
+    (cd "$WORK/illuminate" && composer require --no-interaction --quiet "illuminate/database:^8.0") || true
+  fi
+fi
+if [ -f "$WORK/illuminate/vendor/autoload.php" ] && php -m | grep -qi pdo_sqlite; then
+  php "$HERE/consent-sync.php" --illuminate="$WORK/illuminate/vendor/autoload.php"
+else
+  echo "consent-sync: skipped (needs composer + pdo_sqlite)" >&2
+fi
+
 php "$HERE/render-check.php" --out="$WORK/pages" "${SMARTY_ARG[@]}" \
   --bs3="$WORK/bootstrap-3.4.1/package/dist/css/bootstrap.min.css" \
   --bs4="$WORK/bootstrap-4.6.2/package/dist/css/bootstrap.min.css"
