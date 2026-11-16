@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-16T14:07:29.044Z",
+  "generatedAt": "2026-11-16T14:18:32.754Z",
   "addons": [
     {
       "id": "wordpress",
@@ -81,11 +81,26 @@
     {
       "id": "whmcs",
       "name": "WABEK WhatsApp for WHMCS",
-      "version": "4.2.0",
+      "version": "4.2.1",
       "download": "/downloads/wabek-whmcs-addon.zip",
-      "size": 183721,
-      "sha256": "6880c0b02a8c0851bccdb781f43ff265cc65049fd820497c983fcbdfabc37461",
+      "size": 184673,
+      "sha256": "e6d09df5e172ee5927ad21d462817f0dd4e9b94f5e9e52b14fb18c9129240b06",
       "changelog": [
+        {
+          "version": "4.2.1",
+          "date": "2026-11-16",
+          "notes": null,
+          "sections": [
+            {
+              "title": "Fixed",
+              "items": [
+                "**Phone fields in the admin area (Send test, Send message, client profile override)** now work with WHMCS's own country picker: the chosen calling code (`country-calling-code-<field>`) is combined with the national number, a trunk \"0\" or a re-typed country code is removed, and a full number starting with `+` or `00` still wins. Previously a number typed after the picker's default `+1` was rejected with \"No valid WhatsApp number\".",
+                "Arabic-Indic and Persian digits are accepted in phone numbers.",
+                "Clearer error message when a number is invalid."
+              ]
+            }
+          ]
+        },
         {
           "version": "4.2.0",
           "date": "2026-11-16",

@@ -91,7 +91,7 @@ final class ClientProfile
         if (array_key_exists('wabek_phone_override', $_POST) && Config::int('phone_field_id') <= 0) {
             $raw = Security::post('wabek_phone_override', 32);
             $country = (string) Capsule::table('tblclients')->where('id', $clientId)->value('country');
-            $new = $raw === '' ? '' : (string) Phone::toE164($raw, $country);
+            $new = $raw === '' ? '' : (string) Phone::fromPost('wabek_phone_override', $country);
             if ($raw !== '' && $new === '') {
                 if (function_exists('logActivity')) {
                     logActivity('WABEK: ignored an invalid WhatsApp number entered on the client profile - User ID: ' . $clientId);

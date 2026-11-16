@@ -315,7 +315,7 @@ final class AdminController
 
     private function testSend(): void
     {
-        $phone = Phone::toE164(Security::post('test_phone', 32));
+        $phone = Phone::fromPost('test_phone');
         if ($phone === null) {
             $this->flash[] = ['error', Lang::t('err_phone')];
             return;
@@ -360,7 +360,7 @@ final class AdminController
     {
         $key = Security::post('event', 48);
         $event = Events::get($key);
-        $phone = Phone::toE164(Security::post('test_phone', 32));
+        $phone = Phone::fromPost('test_phone');
         if (!$event || $phone === null) {
             $this->flash[] = ['error', Lang::t('err_phone')];
             return;
@@ -381,7 +381,7 @@ final class AdminController
             return;
         }
         $phoneInput = Security::post('phone', 32);
-        $phone = $phoneInput !== '' ? Phone::toE164($phoneInput) : ($clientId > 0 ? Phone::forClient($clientId) : null);
+        $phone = $phoneInput !== '' ? Phone::fromPost('phone') : ($clientId > 0 ? Phone::forClient($clientId) : null);
         if ($phone === null) {
             $this->flash[] = ['error', Lang::t('err_phone')];
             return;
@@ -636,7 +636,7 @@ final class AdminController
                 '<p>' . View::e(Lang::t('help_test_connection')) . '</p>' . View::button(Lang::t('btn_test_connection'), 'secondary'))
             . '<hr class="wb-sep">'
             . View::form('test_send', 'settings', $this->link,
-                View::field(Lang::t('set_test_phone'), View::input('test_phone', '', 'tel', ['placeholder' => '+966500000000', 'required' => true, 'maxlength' => '32']))
+                View::field(Lang::t('set_test_phone'), View::input('test_phone', '', 'tel', ['placeholder' => '501234567', 'required' => true, 'maxlength' => '32']))
                 . View::button(Lang::t('btn_send_test'), 'secondary'));
 
         $instTable = '';
@@ -806,7 +806,7 @@ final class AdminController
         $prefill = (int) Security::get('client', 10);
         $inner = '<div class="wb-grid-2">'
             . View::field(Lang::t('lbl_client'), View::input('client', $prefill ?: Security::post('client', 190), 'text', ['placeholder' => Lang::t('placeholder_client')]), Lang::t('help_client'))
-            . View::field(Lang::t('lbl_phone_override'), View::input('phone', '', 'tel', ['placeholder' => '+966500000000', 'maxlength' => '32']), Lang::t('help_phone_override'))
+            . View::field(Lang::t('lbl_phone_override'), View::input('phone', '', 'tel', ['placeholder' => '501234567', 'maxlength' => '32']), Lang::t('help_phone_override'))
             . '</div>'
             . View::field(Lang::t('lbl_message'), View::textarea('message', Security::postText('message'), 7, ['required' => true, 'dir' => 'auto', 'maxlength' => '4000']))
             . View::chips(['client_name', 'first_name', 'company', 'email', 'client_id', 'client_area_url', 'system_name'])

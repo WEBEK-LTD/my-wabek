@@ -37,7 +37,12 @@ final class Phone
      */
     public static function toE164(string $raw, string $countryIso = '', string $ccHint = ''): ?string
     {
-        $raw = trim($raw);
+        $raw = trim(strtr($raw, [
+            '٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4',
+            '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9',
+            '۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4',
+            '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9',
+        ]));
         if ($raw === '') {
             return null;
         }
@@ -195,5 +200,35 @@ final class Phone
             return $e164;
         }
         return substr($e164, 0, 4) . str_repeat('•', $len - 7) . substr($e164, -3);
+    }
+
+    /**
+     * Number from a form field that WHMCS decorates with its own country
+     * picker (intl-tel-input on type="tel" inputs). WHMCS posts the chosen
+     * calling code separately as "country-calling-code-<field>", and the field
+     * itself holds only the national number. A full number typed with "+" or
+     * "00" still wins over the picker.
+     */
+    public static function fromPost(string $field, string $countryIso = ''): ?string
+    {
+        $raw = Security::post($field, 32);
+        if ($raw === '') {
+            return null;
+        }
+        $cc = preg_replace('/\D/', '', Security::post('country-calling-code-' . $field, 6));
+        $trim = ltrim($raw);
+        if ($trim !== '' && ($trim[0] === '+' || strncmp(preg_replace('/\s/', '', $trim), '00', 2) === 0)) {
+            return self::toE164($raw, $countryIso);
+        }
+        if ($cc !== '') {
+            // National number with the picker's code; drop a trunk "0".
+            $national = ltrim((string) preg_replace('/\D/', '', strtr($raw, ['٠'=>'0','١'=>'1','٢'=>'2','٣'=>'3','٤'=>'4','٥'=>'5','٦'=>'6','٧'=>'7','٨'=>'8','٩'=>'9'])), '0');
+            // Typed the code again by habit (e.g. picker +966 and "9665…")?
+            if (strncmp($national, $cc, strlen($cc)) === 0 && strlen($national) >= 11) {
+                $national = substr($national, strlen($cc));
+            }
+            return self::toE164('+' . $cc . $national);
+        }
+        return self::toE164($raw, $countryIso);
     }
 }

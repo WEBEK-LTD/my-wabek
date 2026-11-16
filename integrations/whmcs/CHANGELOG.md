@@ -1,5 +1,12 @@
 # Changelog — WABEK WhatsApp for WHMCS
 
+## 4.2.1 — 2026-11-16
+
+### Fixed
+- **Phone fields in the admin area (Send test, Send message, client profile override)** now work with WHMCS's own country picker: the chosen calling code (`country-calling-code-<field>`) is combined with the national number, a trunk "0" or a re-typed country code is removed, and a full number starting with `+` or `00` still wins. Previously a number typed after the picker's default `+1` was rejected with "No valid WhatsApp number".
+- Arabic-Indic and Persian digits are accepted in phone numbers.
+- Clearer error message when a number is invalid.
+
 ## 4.2.0 — 2026-11-16
 
 The per-client "receive WhatsApp notifications" choice is now visible and editable natively in the admin area and on the client's own pages, in every theme (six, twenty-one, Nexus, Lagom 1, Lagom 2), without theme edits.
