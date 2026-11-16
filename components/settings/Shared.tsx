@@ -9,38 +9,42 @@ import { Button, Card, Skeleton, Tooltip, cn } from '@/components/ui'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import UpgradeWall from '@/components/UpgradeWall'
 import { usePlanGuard } from '@/hooks/usePlanFeature'
-import { copyText } from './format'
+import { useT, translate } from '@/lib/i18n-local'
+import common from '@/locales/dashboard/common-b'
+import { copyText, currentLang } from './format'
 
 /* ── Copy ─────────────────────────────────────────────────── */
 
-export function CopyButton({ text, label = 'نسخ', size = 'icon-sm', className, onCopied }: {
+export function CopyButton({ text, label, size = 'icon-sm', className, onCopied }: {
   text: string
   label?: string
   size?: 'icon-sm' | 'icon' | 'sm' | 'xs'
   className?: string
   onCopied?: () => void
 }) {
+  const { t } = useT(common)
+  label = label ?? t('copy')
   const [done, setDone] = useState(false)
   const copy = async () => {
     const ok = await copyText(text)
     if (ok) {
       setDone(true)
-      toast.success('تم النسخ')
+      toast.success(t('copied'))
       onCopied?.()
       setTimeout(() => setDone(false), 1800)
     } else {
-      toast.error('تعذّر النسخ، انسخ النص يدويًا')
+      toast.error(t('copyFailed'))
     }
   }
   if (size === 'sm' || size === 'xs') {
     return (
       <Button variant="secondary" size={size} icon={done ? CheckIcon : ClipboardDocumentIcon} onClick={copy} className={className}>
-        {done ? 'تم النسخ' : label}
+        {done ? t('copied') : label}
       </Button>
     )
   }
   return (
-    <Tooltip content={done ? 'تم النسخ' : label}>
+    <Tooltip content={done ? t('copied') : label}>
       <Button variant="ghost" size={size} icon={done ? CheckIcon : ClipboardDocumentIcon} onClick={copy} aria-label={label} className={cn(done && 'text-success', className)} />
     </Tooltip>
   )
@@ -56,6 +60,7 @@ export function CopyField({ value, label, secret, mono = true, className, copyab
   copyable?: boolean
   placeholder?: string
 }) {
+  const { t } = useT(common)
   const [shown, setShown] = useState(!secret)
   return (
     <div className={cn('flex min-w-0 items-center gap-2 rounded-field border border-line bg-surface-2 py-1.5 pe-1.5 ps-3', className)}>
@@ -64,7 +69,7 @@ export function CopyField({ value, label, secret, mono = true, className, copyab
         {value ? (shown ? value : '•'.repeat(Math.min(32, Math.max(12, value.length)))) : (placeholder || '—')}
       </code>
       {secret && value && (
-        <Button variant="ghost" size="icon-sm" icon={shown ? EyeSlashIcon : EyeIcon} onClick={() => setShown(v => !v)} aria-label={shown ? 'إخفاء' : 'إظهار'} />
+        <Button variant="ghost" size="icon-sm" icon={shown ? EyeSlashIcon : EyeIcon} onClick={() => setShown(v => !v)} aria-label={shown ? t('hide') : t('show')} />
       )}
       {copyable && value && <CopyButton text={value} />}
     </div>
@@ -73,11 +78,12 @@ export function CopyField({ value, label, secret, mono = true, className, copyab
 
 /** Code sample with a header label and a copy button. */
 export function CodeBlock({ code, label, className }: { code: string; label?: React.ReactNode; className?: string }) {
+  const { t } = useT(common)
   return (
     <div className={cn('overflow-hidden rounded-card border border-line bg-surface-2', className)}>
       <div className="flex items-center justify-between gap-2 border-b border-line-soft px-4 py-2">
         <span className="truncate text-xs font-medium text-muted" dir="ltr">{label}</span>
-        <CopyButton text={code} label="نسخ الكود" />
+        <CopyButton text={code} label={t('copyCode')} />
       </div>
       <pre dir="ltr" className="overflow-x-auto px-4 py-3 text-start font-mono text-[12.5px] leading-relaxed text-ink scrollbar-none">
         <code>{code}</code>
@@ -148,27 +154,29 @@ export function StepList({ steps, className }: { steps: Step[]; className?: stri
 
 /* ── States ───────────────────────────────────────────────── */
 
-export function ErrorState({ title = 'تعذّر تحميل البيانات', message, onRetry, className }: {
+export function ErrorState({ title, message, onRetry, className }: {
   title?: React.ReactNode
   message?: React.ReactNode
   onRetry?: () => void
   className?: string
 }) {
+  const { t } = useT(common)
   return (
     <div role="alert" className={cn('flex flex-col items-center justify-center gap-3 rounded-panel border border-danger/20 bg-danger-bg/50 px-6 py-10 text-center', className)}>
       <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-danger-bg text-danger">
         <ExclamationTriangleIcon className="h-6 w-6" aria-hidden="true" />
       </span>
-      <p className="font-semibold text-ink">{title}</p>
+      <p className="font-semibold text-ink">{title ?? t('loadError')}</p>
       {message && <p className="max-w-md text-sm text-muted">{message}</p>}
-      {onRetry && <Button variant="secondary" size="sm" icon={ArrowPathIcon} onClick={onRetry}>إعادة المحاولة</Button>}
+      {onRetry && <Button variant="secondary" size="sm" icon={ArrowPathIcon} onClick={onRetry}>{t('retry')}</Button>}
     </div>
   )
 }
 
 export function CardsSkeleton({ count = 3, className = 'h-40' }: { count?: number; className?: string }) {
+  const { t } = useT(common)
   return (
-    <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr))]" aria-busy="true" aria-label="جارٍ التحميل">
+    <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr))]" aria-busy="true" aria-label={t('loading')}>
       {Array.from({ length: count }, (_, i) => <Skeleton key={i} className={cn('rounded-panel', className)} />)}
     </div>
   )
@@ -263,12 +271,37 @@ export function SectionTitle({ icon: Icon, title, subtitle, action, className }:
   )
 }
 
-/** Axios error → message string. */
-export function apiError(e: unknown, fallback = 'حدث خطأ، حاول مرة أخرى'): string {
-  const err = e as { response?: { data?: { error?: string; message?: string } }; message?: string }
-  return err?.response?.data?.error || err?.response?.data?.message || fallback
+const KNOWN_ERROR_CODES = new Set([
+  'member_forbidden', 'plan_no_api', 'plan_limit', 'permission_denied',
+  'rate_limited', 'account_suspended', 'wix_not_configured', 'server_error',
+])
+
+/**
+ * Axios error → message string in the UI language. Known API error codes
+ * (member_forbidden, plan_no_api, plan_limit, …) map to translated text; any
+ * other server message is shown as-is, then the (translated) fallback.
+ */
+export function apiError(e: unknown, fallback?: string): string {
+  const err = e as { response?: { data?: { error?: string; message?: string; code?: string } }; message?: string }
+  const data = err?.response?.data
+  const lang = currentLang()
+  const raw = String(data?.code || '').toLowerCase()
+  const code = raw === 'internal' ? 'server_error' : raw
+  if (code && KNOWN_ERROR_CODES.has(code)) return translate(common, lang, `err_${code}` as keyof typeof common.en)
+  return data?.error || data?.message || fallback || translate(common, lang, 'genericError')
 }
 
 export function apiStatus(e: unknown): number | undefined {
   return (e as { response?: { status?: number } })?.response?.status
+}
+
+/**
+ * Fill `{name}` placeholders of a translated string with React nodes
+ * (links, <code>, <strong>) — `rich(t('key'), { link: <a …/> })`.
+ */
+export function rich(template: string, parts: Record<string, React.ReactNode>): React.ReactNode {
+  const out = template.split(/\{(\w+)\}/g)
+  return out.map((seg, i) => (i % 2 === 1
+    ? <React.Fragment key={i}>{seg in parts ? parts[seg] : `{${seg}}`}</React.Fragment>
+    : seg))
 }
