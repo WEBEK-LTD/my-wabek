@@ -22,10 +22,18 @@ builds.each { |b| puts "Build #{b.version} (#{b.app_version}) state=#{b.processi
 info = app.fetch_edit_app_info || app.fetch_live_app_info
 puts "AppInfo state=#{info&.app_store_state} age=#{info&.app_store_age_rating} category=#{(info.primary_category&.id rescue '?')}"
 (info.get_app_info_localizations rescue []).each { |l| puts "  info #{l.locale}: name=#{l.name} privacyUrl=#{l.privacy_policy_url.to_s.empty? ? 'MISSING' : 'ok'}" }
-%w[appPriceSchedule appAvailabilityV2].each do |rel|
-  r = (Spaceship::ConnectAPI.get("apps/#{app.id}/#{rel}") rescue $!)
-  puts "#{rel}: #{r.is_a?(Exception) ? "ERROR #{r.message[0,200]}" : (r.body['data'] ? 'set' : 'NOT SET')}"
+rc = Spaceship::ConnectAPI.client.tunes_request_client
+g = lambda do |path, params = {}|
+  r = rc.get(path, params); r.body
+rescue => e
+  { 'error' => e.message[0, 300] }
 end
-r = (Spaceship::ConnectAPI.get("reviewSubmissions", { filter: { app: app.id }, include: 'items' }) rescue $!)
-if r.is_a?(Exception) then puts "reviewSubmissions: ERROR #{r.message[0,200]}"
-else (r.body['data'] || []).each { |s| puts "ReviewSubmission #{s['id']} state=#{s.dig('attributes','state')} platform=#{s.dig('attributes','platform')} items=#{(s.dig('relationships','items','data')||[]).size}" } end
+show = ->(label, body) { puts "#{label}: #{body['error'] ? "ERROR #{body['error']}" : JSON.generate(body['data']).slice(0, 600)}" }
+show.call('priceSchedule', g.call("v1/apps/#{app.id}/appPriceSchedule"))
+show.call('manualPrices', g.call("v1/appPriceSchedules/#{app.id}/manualPrices", { include: 'appPricePoint' }))
+show.call('availabilityV2', g.call("v1/apps/#{app.id}/appAvailabilityV2"))
+show.call('privacyPublishState', g.call("v1/apps/#{app.id}/dataUsagePublishState"))
+show.call('ageRating', g.call("v1/appInfos/#{info.id}/ageRatingDeclaration"))
+show.call('contentRights', { 'data' => g.call("v1/apps/#{app.id}")['data']&.dig('attributes', 'contentRightsDeclaration') })
+subs = g.call('v1/reviewSubmissions', { 'filter[app]' => app.id, include: 'items' })
+show.call('reviewSubmissions', subs)
