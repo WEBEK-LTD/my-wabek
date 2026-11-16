@@ -71,7 +71,7 @@ export default function AISettingsPage() {
 
   return (
     <AdminLayout title={tr('إعدادات الذكاء الاصطناعي', 'AI settings')}>
-      <PageHeader
+      <PageHeader className="mb-6"
         eyebrow={tr('الذكاء الاصطناعي', 'AI')}
         title={tr('مراجعات الجودة بالذكاء الاصطناعي', 'AI quality reviews')}
         description={tr('اضبط مزوّد الذكاء الاصطناعي وإعدادات تحليل محادثات الفرق. لا يرى العملاء هذه الصفحة.', 'Configure the AI provider and how team conversations are analysed. Customers can’t see this page.')}

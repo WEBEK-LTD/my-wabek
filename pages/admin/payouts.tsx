@@ -97,7 +97,7 @@ export default function AdminPayoutsPage() {
 
   return (
     <AdminLayout title={tr('مدفوعات الموزّعين', 'Reseller payouts')}>
-      <PageHeader
+      <PageHeader className="mb-6"
         eyebrow={tr('الموزّعون', 'Resellers')}
         title={tr('مدفوعات الموزّعين', 'Reseller payouts')}
         description={tr('سجّل التحويلات التي أرسلتها للموزّعين؛ يُخصم المبلغ من رصيدهم المعلّق ويصلهم إشعار.', 'Record transfers you sent to resellers; the amount is deducted from their pending balance and they get notified.')}

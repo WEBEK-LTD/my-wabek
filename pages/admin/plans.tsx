@@ -81,7 +81,7 @@ export default function AdminPlansPage() {
 
   return (
     <AdminLayout title={tr('الباقات', 'Plans')}>
-      <PageHeader
+      <PageHeader className="mb-6"
         eyebrow={tr('الفوترة', 'Billing')}
         title={tr('الباقات ودعوات الهدايا', 'Plans & gift invites')}
         description={tr('حدّد الأسعار والحدود والميزات لكل باقة، ثم زامنها مع Stripe.', 'Set prices, limits and features for each plan, then sync them with Stripe.')}

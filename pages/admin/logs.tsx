@@ -82,7 +82,7 @@ export default function AdminLogsPage() {
 
   return (
     <AdminLayout title={tr('السجلات', 'Logs')}>
-      <PageHeader
+      <PageHeader className="mb-6"
         eyebrow={tr('المراقبة', 'Monitoring')}
         title={tr('سجلات النظام', 'System logs')}
         description={tr('كل إجراء مهم على المنصة، مع التفاصيل الكاملة بصيغة JSON.', 'Every significant action on the platform, with full JSON details.')}

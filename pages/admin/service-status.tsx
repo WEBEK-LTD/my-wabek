@@ -125,7 +125,7 @@ export default function ServiceStatusPage() {
 
   return (
     <AdminLayout title={tr('حالة الخدمة', 'Service status')}>
-      <PageHeader
+      <PageHeader className="mb-6"
         eyebrow={tr('المراقبة', 'Monitoring')}
         title={tr('حالة الخدمة', 'Service status')}
         description={tr('تحكّم فيما يراه الزوار على صفحة الحالة العامة.', 'Control what visitors see on the public status page.')}

@@ -87,7 +87,7 @@ export default function AdminResellersPage() {
 
   return (
     <AdminLayout title={tr('الموزّعون', 'Resellers')}>
-      <PageHeader
+      <PageHeader className="mb-6"
         eyebrow={tr('الموزّعون', 'Resellers')}
         title={tr('إدارة الموزّعين', 'Reseller management')}
         description={tr('راجع طلبات الانضمام، واعتمدها بنسبة عمولة، وعدّل العمولات للموزّعين المعتمدين.', 'Review applications, approve them with a commission rate, and adjust commissions for approved resellers.')}

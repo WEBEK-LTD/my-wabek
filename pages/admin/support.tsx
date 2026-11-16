@@ -109,7 +109,7 @@ export default function AdminSupportPage() {
 
   return (
     <AdminLayout title={tr('تذاكر الدعم', 'Support tickets')}>
-      <PageHeader
+      <PageHeader className="mb-6"
         eyebrow={tr('الدعم', 'Support')}
         title={tr('تذاكر الدعم', 'Support tickets')}
         description={tr('رد على العملاء من مكان واحد؛ يصلهم الرد بالبريد وواتساب.', 'Answer customers in one place; replies reach them by email and WhatsApp.')}
@@ -120,7 +120,7 @@ export default function AdminSupportPage() {
       />
 
       <Card padding="none" className="overflow-hidden">
-        <div className="grid lg:h-[calc(100vh-260px)] lg:min-h-[560px] lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_260px]">
+        <div className="grid lg:h-[calc(100vh-260px)] lg:min-h-[560px] lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)_260px]">
           {/* Queue */}
           <aside className={cn('flex min-h-0 flex-col border-line-soft lg:border-e', active && 'hidden lg:flex')} aria-label={tr('قائمة التذاكر', 'Ticket queue')}>
             <div className="space-y-3 border-b border-line-soft p-4">

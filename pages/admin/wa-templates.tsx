@@ -73,7 +73,7 @@ export default function WATemplatesPage() {
 
   return (
     <AdminLayout title={tr('قوالب واتساب', 'WhatsApp templates')}>
-      <PageHeader
+      <PageHeader className="mb-6"
         eyebrow={tr('المراسلة', 'Messaging')}
         title={tr('قوالب واتساب', 'WhatsApp templates')}
         description={tr('القوالب المعتمدة من Meta التي تُستخدم عند الإرسال خارج نافذة خدمة العملاء (24 ساعة).', 'Meta-approved templates used when sending outside the 24-hour customer service window.')}

@@ -84,7 +84,7 @@ export default function AdminSettingsPage() {
 
   return (
     <AdminLayout title={tr('إعدادات المنصة', 'Platform settings')}>
-      <PageHeader
+      <PageHeader className="mb-6"
         eyebrow={tr('الإعدادات', 'Settings')}
         title={tr('إعدادات المنصة', 'Platform settings')}
         description={tr('إعدادات عامة تنطبق على كل المستخدمين. القيم السرية تظهر مقنّعة ولا تُرسل إلا عند تغييرها.', 'Platform-wide settings for every user. Secrets are shown masked and only sent when you change them.')}

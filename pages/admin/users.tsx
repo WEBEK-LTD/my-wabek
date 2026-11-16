@@ -132,7 +132,7 @@ export default function AdminUsersPage() {
 
   return (
     <AdminLayout title={tr('المستخدمون', 'Users')}>
-      <PageHeader
+      <PageHeader className="mb-6"
         eyebrow={tr('الإدارة', 'Administration')}
         title={tr('المستخدمون', 'Users')}
         description={tr('ابحث عن أي حساب، وعيّن الباقات، وغيّر الأدوار، وأوقف الحسابات أو فعّلها.', 'Find any account, assign plans, change roles, and suspend or activate accounts.')}

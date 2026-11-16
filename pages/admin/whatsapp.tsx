@@ -113,7 +113,7 @@ export default function AdminWhatsAppPage() {
 
   return (
     <AdminLayout title={tr('واتساب النظام', 'System WhatsApp')}>
-      <PageHeader
+      <PageHeader className="mb-6"
         eyebrow={tr('الإعدادات', 'Settings')}
         title={tr('رقم واتساب المنصة', 'Platform WhatsApp number')}
         description={tr('الرقم الذي يرسل رموز التحقق للمستخدمين عند التسجيل والدخول — منفصل عن أرقام المستخدمين.', 'The number that sends verification codes when users sign up or sign in — separate from users’ own numbers.')}

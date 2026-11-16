@@ -24,7 +24,7 @@ export default function AdminDashboard() {
 
   return (
     <AdminLayout title={tr('لوحة الإدارة', 'Admin dashboard')}>
-      <PageHeader
+      <PageHeader className="mb-6"
         eyebrow={tr('نظرة عامة', 'Overview')}
         title={tr('لوحة الإدارة', 'Admin dashboard')}
         description={tr('صحة المنصة في لمحة: المستخدمون والاشتراكات والرسائل وأرقام واتساب.', 'Platform health at a glance: users, subscriptions, messages and WhatsApp numbers.')}

@@ -24,7 +24,7 @@ export default function AdminAnalyticsPage() {
 
   return (
     <AdminLayout title={tr('التحليلات', 'Analytics')}>
-      <PageHeader
+      <PageHeader className="mb-6"
         eyebrow={tr('نظرة عامة', 'Overview')}
         title={tr('تحليلات المنصة', 'Platform analytics')}
         description={tr('أرقام فعلية من قاعدة البيانات: النمو والإيراد والاستخدام.', 'Live figures from the database: growth, revenue and usage.')}

@@ -58,7 +58,7 @@ export default function SeoAdminPage() {
 
   return (
     <AdminLayout title={tr('إدارة SEO', 'SEO manager')}>
-      <PageHeader
+      <PageHeader className="mb-6"
         eyebrow="SEO"
         title={tr('إدارة SEO', 'SEO manager')}
         description={tr('حلّل صفحاتك، وحسّن الوسوم والمحتوى، وتابع ظهورك في Google من مكان واحد.', 'Analyze pages, improve tags and content, and track your Google presence in one place.')}
