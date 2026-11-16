@@ -46,6 +46,11 @@ export default function ContactDetailPage() {
     { onSuccess: () => qc.invalidateQueries(['contact', id]) }
   )
 
+  const optOutMut = useMutation(
+    (optedOut) => axios.put(`/api/contacts/${id}`, { opted_out: optedOut }),
+    { onSuccess: () => qc.invalidateQueries(['contact', id]), onError: (e) => toast.error(e?.response?.data?.error || 'Failed') }
+  )
+
   const sendMsg = async () => {
     if (!quickMsg.trim() || !connectedInstance) return
     setSendingMsg(true)
@@ -128,6 +133,9 @@ export default function ContactDetailPage() {
               <button onClick={() => blockMut.mutate(!contact.is_blocked)} className="btn-secondary w-full text-sm justify-start">
                 <NoSymbolIcon className="w-4 h-4" />
                 {contact.is_blocked ? 'Unblock Contact' : 'Block Contact'}
+              </button>
+              <button onClick={() => optOutMut.mutate(!contact.opted_out)} className="btn-secondary w-full text-sm justify-start">
+                {contact.opted_out ? '✅ Re-subscribe (opt in)' : '🚫 Mark as opted out'}
               </button>
               <button onClick={() => { if (confirm('Delete this contact?')) deleteMut.mutate() }} className="btn-danger w-full text-sm">
                 <TrashIcon className="w-4 h-4" /> Delete Contact

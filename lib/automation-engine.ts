@@ -52,9 +52,12 @@ export async function executeAutomationFlow(params: {
   from: string
   message: string
   flowId?: string
+  /** 'message' (default): an inbound message. 'opt_in': the contact (re)subscribed. */
+  trigger?: 'message' | 'opt_in'
 }) {
   const db = supabaseAdmin()
   const { userId, instanceId, from, message } = params
+  const trigger = params.trigger || 'message'
 
   // Instance must belong to this user
   const { data: instance } = await db.from('whatsapp_instances').select('*')
@@ -83,7 +86,8 @@ export async function executeAutomationFlow(params: {
 
   for (const flow of flows) {
     let triggered = false
-    if (flow.trigger_type === 'message_received') triggered = true
+    if (trigger === 'opt_in') triggered = flow.trigger_type === 'opt_in'
+    else if (flow.trigger_type === 'message_received') triggered = true
     else if (flow.trigger_type === 'keyword' && flow.trigger_value) {
       const keywords = String(flow.trigger_value).split(',').map((k: string) => k.trim().toLowerCase()).filter(Boolean)
       triggered = keywords.some((kw: string) => message.toLowerCase().includes(kw))
@@ -129,5 +133,29 @@ export async function executeAutomationFlow(params: {
       }
     }
     await db.from('automation_flows').update({ trigger_count: (flow.trigger_count || 0) + 1 }).eq('id', flow.id)
+  }
+}
+
+/**
+ * Run `opt_in` automation flows for a contact that subscribed / re-subscribed
+ * (START keyword, or the API/plugins recording opted_out:false). Without an
+ * instance id the account's default connected number is used. Never throws.
+ */
+export async function fireOptInAutomations(params: { userId: string; phone: string; instanceId?: string | null }): Promise<void> {
+  try {
+    const db = supabaseAdmin()
+    let instanceId = params.instanceId || null
+    if (!instanceId) {
+      const { data: rows } = await db.from('whatsapp_instances').select('id, is_default, status')
+        .eq('user_id', params.userId).eq('status', 'connected').order('created_at', { ascending: true }).limit(20)
+      instanceId = (rows?.find(r => r.is_default) || rows?.[0])?.id || null
+    }
+    if (!instanceId) return
+    const { count } = await db.from('automation_flows').select('id', { count: 'exact', head: true })
+      .eq('user_id', params.userId).eq('is_active', true).eq('trigger_type', 'opt_in')
+    if (!count) return
+    await executeAutomationFlow({ userId: params.userId, instanceId, from: params.phone, message: '', trigger: 'opt_in' })
+  } catch (e) {
+    console.error('[automation] opt_in trigger failed:', (e as Error)?.message)
   }
 }
