@@ -2,8 +2,9 @@ import React from 'react'
 import { ArrowPathIcon, ChatBubbleLeftRightIcon, DevicePhoneMobileIcon, FunnelIcon, InboxStackIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import { Avatar, Button, EmptyState, SearchInput, Skeleton, Tabs, Tooltip } from '@/components/ui'
 import { cn } from '@/components/ui/utils'
-import { useInboxCopy } from './copy'
-import type { InboxCopyKey } from './copy'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/inbox'
+import type { MessageKey as InboxCopyKey } from '@/locales/dashboard/inbox'
 import { formatTime, isAiMessage, previewText } from './utils'
 
 export type AssignFilter = 'all' | 'mine' | 'unassigned' | 'ai' | 'waiting'
@@ -14,11 +15,11 @@ const STATUS_DOT: Record<string, string> = { open: 'bg-brand-teal', pending: 'bg
 export function ConversationItem({ conv, active, unread, showInboxBadge, onClick }: {
   conv: any; active: boolean; unread: number; showInboxBadge: boolean; onClick: () => void
 }) {
-  const { c, lang } = useInboxCopy()
+  const { t, lang } = useT(messages)
   const contact = conv.contacts
   const last = conv.last_message
   const inbox = conv.whatsapp_instances
-  const name = contact?.name || contact?.phone || c('unknown')
+  const name = contact?.name || contact?.phone || t('unknown')
   const tags: string[] = Array.isArray(conv.tags) ? conv.tags : []
   const waiting = last?.direction === 'inbound'
 
@@ -38,7 +39,7 @@ export function ConversationItem({ conv, active, unread, showInboxBadge, onClick
         {unread > 0 && (
           <span className="tabular absolute -end-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-brand-gradient px-1 text-[10px] font-bold text-[#04282C] ring-2 ring-surface">
             {unread > 9 ? '9+' : unread}
-            <span className="sr-only"> · {c('unread_n', { n: unread })}</span>
+            <span className="sr-only"> · {t('unread_n', { n: unread })}</span>
           </span>
         )}
       </span>
@@ -46,29 +47,29 @@ export function ConversationItem({ conv, active, unread, showInboxBadge, onClick
         <span className="flex items-center justify-between gap-2">
           <span className={cn('truncate text-sm', unread > 0 ? 'font-bold text-ink' : 'font-semibold text-ink')} dir="auto">{name}</span>
           <time className={cn('tabular shrink-0 text-[11px]', unread > 0 ? 'font-semibold text-link' : 'text-muted')}>
-            {last ? formatTime(last.created_at, lang, c) : ''}
+            {last ? formatTime(last.created_at, lang, t) : ''}
           </time>
         </span>
         <span className={cn('flex items-center gap-1 truncate text-[13px]', unread > 0 || waiting ? 'text-body' : 'text-muted')}>
-          {last?.direction === 'outbound' && <span className="shrink-0 text-muted">{c('you')}:</span>}
-          {isAiMessage(last) && <SparklesIcon className="h-3.5 w-3.5 shrink-0 text-violet" aria-label={c('ai_badge')} />}
-          <span className="truncate" dir="auto">{previewText(last, c)}</span>
+          {last?.direction === 'outbound' && <span className="shrink-0 text-muted">{t('you')}:</span>}
+          {isAiMessage(last) && <SparklesIcon className="h-3.5 w-3.5 shrink-0 text-violet" aria-label={t('ai_badge')} />}
+          <span className="truncate" dir="auto">{previewText(last, t)}</span>
         </span>
         <span className="mt-1 flex flex-wrap items-center gap-1">
           <span className="inline-flex items-center gap-1 rounded-full bg-surface-3 px-2 py-0.5 text-[10.5px] font-medium text-muted">
             <span className={cn('h-1.5 w-1.5 rounded-full', STATUS_DOT[conv.status] || 'bg-muted')} aria-hidden="true" />
-            {STATUS_KEYS[conv.status] ? c(STATUS_KEYS[conv.status]) : conv.status}
+            {STATUS_KEYS[conv.status] ? t(STATUS_KEYS[conv.status]) : conv.status}
           </span>
           {(conv.priority === 'high' || conv.priority === 'urgent') && (
             <span className={cn('rounded-full px-2 py-0.5 text-[10.5px] font-semibold', conv.priority === 'urgent' ? 'bg-danger-bg text-danger' : 'bg-warning-bg text-warning')}>
-              {conv.priority === 'urgent' ? c('priority_urgent') : c('priority_high')}
+              {conv.priority === 'urgent' ? t('priority_urgent') : t('priority_high')}
             </span>
           )}
           {conv.assigned_user?.name && (
             <span className="rounded-full bg-violet-bg px-2 py-0.5 text-[10.5px] font-medium text-violet">@{conv.assigned_user.name.split(' ')[0]}</span>
           )}
-          {tags.slice(0, 2).map(t => (
-            <span key={t} className="max-w-[90px] truncate rounded-full bg-chip px-2 py-0.5 text-[10.5px] font-medium text-chip-ink">#{t}</span>
+          {tags.slice(0, 2).map(tag => (
+            <span key={tag} className="max-w-[90px] truncate rounded-full bg-chip px-2 py-0.5 text-[10.5px] font-medium text-chip-ink">#{tag}</span>
           ))}
           {tags.length > 2 && <span className="text-[10.5px] text-muted">+{tags.length - 2}</span>}
           {showInboxBadge && inbox && (
@@ -105,26 +106,26 @@ export interface ConversationListProps {
 }
 
 export function ConversationList(p: ConversationListProps) {
-  const { c } = useInboxCopy()
+  const { t } = useT(messages)
   const totalUnread = Object.values(p.unreadCounts).reduce((a, b) => a + (b || 0), 0)
   const filtersActive = !!p.searchQ || p.assignFilter !== 'all'
 
   return (
-    <section aria-label={c('title')} className={cn('flex min-h-0 flex-col bg-surface', p.className)}>
+    <section aria-label={t('title')} className={cn('flex min-h-0 flex-col bg-surface', p.className)}>
       {/* Header */}
       <div className="flex flex-col gap-3 border-b border-line-soft px-4 pb-3 pt-4">
         <div className="flex items-center justify-between gap-2">
           <h1 className="flex items-center gap-2 text-lg font-bold text-ink">
-            {c('title')}
+            {t('title')}
             {p.totalCount > 0 && <span className="tabular rounded-full bg-surface-3 px-2 py-0.5 text-xs font-semibold text-muted">{p.totalCount}</span>}
           </h1>
-          <Tooltip content={c('refresh')}>
-            <Button size="icon-sm" variant="ghost" icon={ArrowPathIcon} aria-label={c('refresh')} onClick={p.onRefresh} />
+          <Tooltip content={t('refresh')}>
+            <Button size="icon-sm" variant="ghost" icon={ArrowPathIcon} aria-label={t('refresh')} onClick={p.onRefresh} />
           </Tooltip>
         </div>
 
         {p.inboxes.length > 1 && (
-          <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5 scrollbar-none" role="group" aria-label={c('inboxes')}>
+          <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5 scrollbar-none" role="group" aria-label={t('inboxes')}>
             {p.canSeeAll && (
               <button
                 type="button"
@@ -134,7 +135,7 @@ export function ConversationList(p: ConversationListProps) {
                   p.selectedInbox === null ? 'border-transparent bg-[#04282C] text-[#EAF7F5] dark:bg-[#EAF7F5] dark:text-[#04282C]' : 'border-line text-body hover:border-line-strong hover:bg-surface-2')}
               >
                 <InboxStackIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                {c('all_inboxes')}
+                {t('all_inboxes')}
                 {totalUnread > 0 && p.selectedInbox !== null && (
                   <span className="tabular rounded-full bg-brand-gradient px-1.5 text-[10px] font-bold text-[#04282C]">{totalUnread}</span>
                 )}
@@ -157,15 +158,15 @@ export function ConversationList(p: ConversationListProps) {
           </div>
         )}
 
-        <SearchInput value={p.searchQ} onChange={p.onSearch} placeholder={c('search_ph')} size="sm" aria-label={c('search_ph')} />
+        <SearchInput value={p.searchQ} onChange={p.onSearch} placeholder={t('search_ph')} size="sm" aria-label={t('search_ph')} />
 
         <Tabs
           variant="segmented" size="sm" fullWidth value={p.statusFilter} onChange={p.onStatusFilter}
-          aria-label={c('status_filter')}
-          tabs={['open', 'pending', 'resolved', 'spam', 'all'].map(s => ({ id: s, label: c(STATUS_KEYS[s]) }))}
+          aria-label={t('status_filter')}
+          tabs={['open', 'pending', 'resolved', 'spam', 'all'].map(s => ({ id: s, label: t(STATUS_KEYS[s]) }))}
         />
 
-        <div className="-mx-4 flex items-center gap-1.5 overflow-x-auto px-4 scrollbar-none" role="group" aria-label={c('assign_filter')}>
+        <div className="-mx-4 flex items-center gap-1.5 overflow-x-auto px-4 scrollbar-none" role="group" aria-label={t('assign_filter')}>
           <FunnelIcon className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
           {(['all', 'mine', 'unassigned', 'ai', 'waiting'] as AssignFilter[]).map(f => (
             <button
@@ -176,7 +177,7 @@ export function ConversationList(p: ConversationListProps) {
               className={cn('shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition',
                 p.assignFilter === f ? 'bg-chip text-chip-ink' : 'text-muted hover:bg-surface-3 hover:text-ink')}
             >
-              {c(({ all: 'f_all', mine: 'f_mine', unassigned: 'f_unassigned', ai: 'f_ai', waiting: 'f_waiting' } as const)[f])}
+              {t(({ all: 'f_all', mine: 'f_mine', unassigned: 'f_unassigned', ai: 'f_ai', waiting: 'f_waiting' } as const)[f])}
             </button>
           ))}
         </div>
@@ -195,10 +196,10 @@ export function ConversationList(p: ConversationListProps) {
           </div>
         ) : p.conversations.length === 0 ? (
           filtersActive ? (
-            <EmptyState size="sm" icon={FunnelIcon} title={c('no_match')} description={c('no_match_d')} className="py-14"
-              action={<Button size="sm" variant="secondary" onClick={() => { p.onSearch(''); p.onAssignFilter('all') }}>{c('clear_filters')}</Button>} />
+            <EmptyState size="sm" icon={FunnelIcon} title={t('no_match')} description={t('no_match_d')} className="py-14"
+              action={<Button size="sm" variant="secondary" onClick={() => { p.onSearch(''); p.onAssignFilter('all') }}>{t('clear_filters')}</Button>} />
           ) : (
-            <EmptyState size="sm" icon={ChatBubbleLeftRightIcon} title={c('no_convs')} description={c('no_convs_d')} className="py-14" />
+            <EmptyState size="sm" icon={ChatBubbleLeftRightIcon} title={t('no_convs')} description={t('no_convs_d')} className="py-14" />
           )
         ) : (
           <ul className="divide-y divide-line-soft">

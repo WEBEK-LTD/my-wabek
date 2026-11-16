@@ -1,6 +1,6 @@
 import { isToday, isYesterday } from 'date-fns'
-import { localeTag } from '@/components/auth/makeCopy'
-import type { InboxCopyKey } from './copy'
+import { localeFor } from '@/lib/i18n-local'
+import type { MessageKey as InboxCopyKey } from '@/locales/dashboard/inbox'
 
 type C = (k: InboxCopyKey, v?: Record<string, string | number>) => string
 
@@ -11,13 +11,13 @@ export function formatTime(d: string | number | Date | null | undefined, lang: s
   if (!d) return ''
   const date = new Date(d)
   if (Number.isNaN(date.getTime())) return ''
-  if (isToday(date)) return new Intl.DateTimeFormat(localeTag(lang), { hour: '2-digit', minute: '2-digit', hour12: false }).format(date)
+  if (isToday(date)) return new Intl.DateTimeFormat(localeFor(lang), { hour: '2-digit', minute: '2-digit', hour12: false }).format(date)
   if (isYesterday(date)) return c('yesterday')
-  return new Intl.DateTimeFormat(localeTag(lang), { day: 'numeric', month: 'short' }).format(date)
+  return new Intl.DateTimeFormat(localeFor(lang), { day: 'numeric', month: 'short' }).format(date)
 }
 
 export function clockTime(d: string | Date, lang: string): string {
-  return new Intl.DateTimeFormat(localeTag(lang), { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(d))
+  return new Intl.DateTimeFormat(localeFor(lang), { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(d))
 }
 
 /** Day separator label. */
@@ -25,12 +25,12 @@ export function dayLabel(d: string | Date, lang: string, c: C): string {
   const date = new Date(d)
   if (isToday(date)) return c('today')
   if (isYesterday(date)) return c('yesterday')
-  return new Intl.DateTimeFormat(localeTag(lang), { weekday: 'long', day: 'numeric', month: 'long', year: date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }).format(date)
+  return new Intl.DateTimeFormat(localeFor(lang), { weekday: 'long', day: 'numeric', month: 'long', year: date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }).format(date)
 }
 
 export function dateTime(d: string | null | undefined, lang: string): string {
   if (!d) return '—'
-  return new Intl.DateTimeFormat(localeTag(lang), { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(d))
+  return new Intl.DateTimeFormat(localeFor(lang), { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(d))
 }
 
 export function formatBytes(bytes: number): string {
