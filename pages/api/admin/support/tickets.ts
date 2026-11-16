@@ -1,6 +1,9 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { requireAdmin } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { logAction, getClientIp } from '@/lib/middleware'
+
+const STATUSES = ['open', 'pending', 'resolved', 'closed']
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const admin = await requireAdmin(req, res)
@@ -23,13 +26,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'PUT') {
-    const { id, status } = req.body
-    if (!id) return res.status(400).json({ error: 'id required' })
-    await db.from('support_tickets').update({
+    const { id, status } = req.body || {}
+    if (typeof id !== 'string' || !id) return res.status(400).json({ error: 'id required' })
+    if (!STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status' })
+    const { error } = await db.from('support_tickets').update({
       status,
       updated_at: new Date().toISOString(),
       ...(status === 'resolved' ? { resolved_at: new Date().toISOString() } : {}),
     }).eq('id', id)
+    if (error) {
+      console.error('[admin tickets] update failed:', error.message)
+      return res.status(500).json({ error: 'Failed to update ticket' })
+    }
+    await logAction({ userId: admin.userId, action: 'admin_ticket_status', resource: 'support_ticket', resourceId: id, details: { status }, ipAddress: getClientIp(req) })
     return res.status(200).json({ success: true })
   }
 

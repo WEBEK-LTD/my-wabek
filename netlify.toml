@@ -11,9 +11,11 @@
 [functions]
   node_bundler = "nft"
 
-# Extended timeout for campaign sending (Netlify Pro: up to 26s, Background: 15min)
-[functions."api/campaigns/*"]
-  timeout = 26
+# Note: Next.js API routes are bundled by @netlify/plugin-nextjs into a single
+# server handler, so per-path [functions."api/..."] blocks do not apply to them.
+# Function timeouts for API routes are set in the Netlify UI (Site settings →
+# Functions). The scheduler fires campaign batches concurrently and only waits
+# ~2.5s on each, so it does not depend on a long timeout.
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"

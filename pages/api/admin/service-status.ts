@@ -29,7 +29,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       { key: KEY, value: services },
       { onConflict: 'key' }
     )
-    if (error) return res.status(500).json({ error: error.message })
+    if (error) {
+      console.error('[service-status] save failed:', error.message)
+      return res.status(500).json({ error: 'Failed to save' })
+    }
     return res.status(200).json({ success: true })
   }
 

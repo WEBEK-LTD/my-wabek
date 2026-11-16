@@ -15,23 +15,31 @@ async function buffer(readable: NextApiRequest) {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const sig = req.headers['stripe-signature'] as string
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
+  if (!webhookSecret) {
+    console.error('[stripe webhook] STRIPE_WEBHOOK_SECRET is not configured')
+    return res.status(500).json({ error: 'Webhook not configured' })
+  }
+
+  const sig = req.headers['stripe-signature']
+  if (typeof sig !== 'string') return res.status(400).json({ error: 'Invalid signature' })
 
   let event: Stripe.Event
   try {
     const buf = await buffer(req)
-    const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY || "", { apiVersion: "2023-10-16" })
+    const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY || '', { apiVersion: '2023-10-16' })
     event = stripeClient.webhooks.constructEvent(buf, sig, webhookSecret)
-  } catch (err: unknown) {
-    return res.status(400).json({ error: `Webhook Error: ${(err as Error).message}` })
+  } catch {
+    return res.status(400).json({ error: 'Invalid signature' })
   }
 
   try {
-    await handleWebhookEvent(event)
-    return res.status(200).json({ received: true })
+    const outcome = await handleWebhookEvent(event)
+    return res.status(200).json({ received: true, outcome })
   } catch (err) {
-    console.error('Stripe webhook processing error:', err)
+    // Transient failure (DB/Stripe unavailable): the event claim was released,
+    // so Stripe's bounded retry schedule can process it later.
+    console.error(`[stripe webhook] processing ${event.id} (${event.type}) failed:`, (err as Error)?.message)
     return res.status(500).json({ error: 'Webhook processing failed' })
   }
 }

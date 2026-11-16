@@ -49,7 +49,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       results.push({ id: inst.wix_instance_id, status: `api ${r.status}` })
     } catch (e: any) {
-      results.push({ id: inst.wix_instance_id, status: 'error', error: e?.message })
+      console.error('[wix-backfill] error:', e?.message)
+      results.push({ id: inst.wix_instance_id, status: 'error', error: 'failed' })
     }
   }
 

@@ -17,15 +17,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const otpInstanceId = await getSetting('otp_instance_id', '') as string
   let instance: any = null
 
-  if (otpInstanceId) {
-    const { data } = await db.from('whatsapp_instances').select('*').eq('id', otpInstanceId).eq('status', 'connected').single()
-    instance = data
+  // Only the configured platform OTP instance — never some other customer's
+  // connected instance.
+  if (!otpInstanceId) {
+    return res.status(400).json({ error: 'No OTP instance configured. Choose one in Settings → Security & OTP.' })
   }
-  if (!instance) {
-    const { data: instances } = await db.from('whatsapp_instances').select('*').eq('status', 'connected').limit(1)
-    instance = instances?.[0]
+  const { data } = await db.from('whatsapp_instances').select('*').eq('id', otpInstanceId).eq('status', 'connected').maybeSingle()
+  instance = data
+  if (!instance) return res.status(400).json({ error: 'The configured OTP instance is not connected' })
+
+  if (typeof phone !== 'string' || !/^\+?[0-9]{6,15}$/.test(phone.replace(/[\s-]/g, ''))) {
+    return res.status(400).json({ error: 'Invalid phone number' })
   }
-  if (!instance) return res.status(400).json({ error: 'No connected WhatsApp instance found' })
 
   const isCloudApi = (instance.instance_type || instance.type) === 'cloud_api'
   const otpTemplateName = await getSetting('otp_template_name', 'wabek_otp') as string
