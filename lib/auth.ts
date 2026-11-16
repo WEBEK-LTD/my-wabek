@@ -74,7 +74,10 @@ export async function comparePassword(password: string, hash: string | null | un
 export function getTokenFromRequest(req: NextApiRequest): string | null {
   const authHeader = req.headers.authorization
   if (authHeader?.startsWith('Bearer ')) {
-    return authHeader.slice(7)
+    const bearer = authHeader.slice(7).trim()
+    // A client with no in-memory token may still send "Bearer null"; fall
+    // back to the HttpOnly session cookie in that case.
+    if (bearer && bearer !== 'null' && bearer !== 'undefined') return bearer
   }
   const cookie = req.cookies?.['wabek_token']
   return cookie || null
