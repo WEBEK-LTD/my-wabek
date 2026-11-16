@@ -2,7 +2,7 @@ import React from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
 import {
-  ArrowLeftIcon, BoltIcon, ChartBarIcon, ChatBubbleLeftRightIcon, CodeBracketIcon, InboxStackIcon,
+  ArrowLeftIcon, BoltIcon, ChartBarIcon, ChatBubbleLeftRightIcon, InboxStackIcon,
   MegaphoneIcon, SparklesIcon,
 } from '@heroicons/react/24/outline'
 import { useWhiteLabel } from '@/hooks/useWhiteLabel'
@@ -11,6 +11,7 @@ import { MarketingPage, Section } from '@/components/marketing/MarketingPage'
 import { CtaBand, FaqList, FeatureRow, IconTile, LogoStrip, MiniUiCard, StatsBand } from '@/components/marketing/Blocks'
 import { ProductPreview } from '@/components/marketing/ProductPreview'
 import { PlanCards, usePublicPlans } from '@/components/marketing/plans'
+import { IntegrationLogo, IntegrationLogoKey } from '@/components/marketing/IntegrationLogo'
 import HeroIllustration from '@/components/HeroIllustration'
 import TestimonialsSection from '@/components/TestimonialsSection'
 import { useT } from '@/lib/i18n-local'
@@ -33,13 +34,13 @@ const FEATURES: { icon: React.ElementType; tk: Key; dk: Key; tone: 'brand' | 'vi
 const STEPS = [1, 2, 3, 4] as const
 const FAQ = [1, 2, 3, 4, 5, 6] as const
 
-const INTEGRATIONS: { mark: string | null; name: string; bk: Key; dk: Key }[] = [
-  { mark: 'Wx', name: 'Wix', bk: 'integ_official', dk: 'integ_wix_desc' },
-  { mark: 'WP', name: 'WordPress', bk: 'integ_plugin', dk: 'integ_wp_desc' },
-  { mark: 'Zp', name: 'Zapier', bk: 'integ_nocode', dk: 'integ_zapier_desc' },
-  { mark: 'WH', name: 'WHMCS', bk: 'integ_module', dk: 'integ_whmcs_desc' },
-  { mark: 'Me', name: 'Meta Cloud API', bk: 'integ_official_api', dk: 'integ_meta_desc' },
-  { mark: null, name: 'REST API', bk: 'integ_developer', dk: 'integ_api_desc' },
+const INTEGRATIONS: { logo: IntegrationLogoKey; name: string; bk: Key; dk: Key }[] = [
+  { logo: 'wix', name: 'Wix', bk: 'integ_official', dk: 'integ_wix_desc' },
+  { logo: 'wordpress', name: 'WordPress', bk: 'integ_plugin', dk: 'integ_wp_desc' },
+  { logo: 'zapier', name: 'Zapier', bk: 'integ_nocode', dk: 'integ_zapier_desc' },
+  { logo: 'whmcs', name: 'WHMCS', bk: 'integ_module', dk: 'integ_whmcs_desc' },
+  { logo: 'meta', name: 'Meta Cloud API', bk: 'integ_official_api', dk: 'integ_meta_desc' },
+  { logo: 'api', name: 'REST API', bk: 'integ_developer', dk: 'integ_api_desc' },
 ]
 
 export default function HomePage() {
@@ -210,9 +211,7 @@ export default function HomePage() {
             {INTEGRATIONS.map(i => (
               <li key={i.name} className="flex flex-col gap-4 rounded-card border border-line bg-surface p-6 shadow-card transition-[transform,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-card-hover">
                 <div className="flex items-center gap-3">
-                  <span aria-hidden="true" dir="ltr" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#04282C] text-base font-bold text-brand-green">
-                    {i.mark || <CodeBracketIcon className="h-6 w-6" />}
-                  </span>
+                  <IntegrationLogo logo={i.logo} />
                   <div className="min-w-0">
                     <span className="mb-1 inline-flex rounded-full bg-chip px-2.5 py-0.5 text-[11px] font-semibold text-chip-ink">{t(i.bk)}</span>
                     <h3 className="text-[17px] font-semibold text-ink" dir="ltr">{i.name}</h3>
