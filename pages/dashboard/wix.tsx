@@ -1,80 +1,88 @@
-// @ts-nocheck
 import { useState, useEffect } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { CheckCircleIcon, XCircleIcon, ArrowPathIcon, InformationCircleIcon } from '@heroicons/react/24/outline'
+import {
+  ShoppingBagIcon, BuildingStorefrontIcon, ChatBubbleLeftRightIcon, BookOpenIcon, PaperAirplaneIcon,
+  ArrowTopRightOnSquareIcon, TruckIcon, ShoppingCartIcon, LightBulbIcon, LinkSlashIcon,
+} from '@heroicons/react/24/outline'
+import {
+  Badge, Button, Card, CardHeader, ConfirmDialog, EmptyState, Field, Input, PageHeader, Select, Skeleton,
+  Switch, TabPanel, Tabs, Textarea, cn,
+} from '@/components/ui'
+import { ErrorState, HeroPanel, StepList, apiError } from '@/components/settings/Shared'
+import { fmtDate } from '@/components/settings/format'
 
+// Default message texts are the customer-facing messages; kept as before.
 const EVENTS = [
   {
     key: 'order_placed',
-    label: '🛒 Order Confirmed',
-    desc: 'Sent when a customer places a new order',
+    label: 'تأكيد الطلب',
+    desc: 'عند إنشاء العميل طلبًا جديدًا',
     vars: ['customer_name', 'order_id', 'total'],
     default: '🛒 Order Confirmed!\n\nHi {{customer_name}}, your order #{{order_id}} has been placed.\n💰 Total: {{total}}\n\nThank you! 🙏',
   },
   {
     key: 'order_paid',
-    label: '✅ Payment Received',
-    desc: 'Sent when payment is confirmed',
+    label: 'استلام الدفعة',
+    desc: 'عند تأكيد الدفع',
     vars: ['customer_name', 'order_id', 'total'],
     default: '✅ Payment Received!\n\nHi {{customer_name}}, payment for order #{{order_id}} confirmed.\n💰 {{total}}',
   },
   {
     key: 'order_shipped',
-    label: '🚚 Order Shipped',
-    desc: 'Sent when the order is fulfilled with tracking info',
+    label: 'شحن الطلب',
+    desc: 'عند تنفيذ الطلب مع رقم التتبع',
     vars: ['customer_name', 'order_id', 'tracking_number'],
     default: '🚚 Order Shipped!\n\nHi {{customer_name}}, order #{{order_id}} is on its way!\n📦 Track: {{tracking_number}}',
   },
   {
     key: 'order_cancelled',
-    label: '❌ Order Cancelled',
-    desc: 'Sent when an order is cancelled or refunded',
+    label: 'إلغاء الطلب',
+    desc: 'عند إلغاء الطلب أو استرداده',
     vars: ['customer_name', 'order_id'],
     default: '❌ Order Cancelled\n\nHi {{customer_name}}, order #{{order_id}} has been cancelled.\nContact us if you need help.',
   },
   {
     key: 'order_refunded',
-    label: '💰 Refund Processed',
-    desc: 'Sent when a refund is completed',
+    label: 'إتمام الاسترداد',
+    desc: 'عند اكتمال استرداد المبلغ',
     vars: ['customer_name', 'order_id'],
     default: '💰 Refund Processed\n\nHi {{customer_name}}, your refund for order #{{order_id}} has been processed.',
   },
   {
     key: 'abandoned_cart',
-    label: '🛒 Abandoned Cart',
-    desc: 'Sent when a customer leaves without completing checkout',
+    label: 'سلة متروكة',
+    desc: 'عند مغادرة العميل دون إتمام الشراء',
     vars: ['customer_name', 'checkout_url'],
     default: '🛒 You left something behind!\n\nHi {{customer_name}}, you have items waiting in your cart.\n\n💡 Complete your purchase now!\n\n🔗 {{checkout_url}}',
   },
   {
     key: 'cart_recovered',
-    label: '🎉 Cart Recovered',
-    desc: 'Sent when a customer returns and completes a previously abandoned checkout',
+    label: 'استعادة السلة',
+    desc: 'عند عودة العميل وإتمام سلة متروكة',
     vars: ['customer_name', 'order_id'],
     default: '🎉 Welcome back!\n\nHi {{customer_name}}, your order #{{order_id}} has been completed. Thank you for coming back! 🙏',
   },
   {
     key: 'back_in_stock',
-    label: '📦 Back In Stock',
-    desc: 'Sent when a requested product is back in stock',
+    label: 'عودة المنتج إلى المخزون',
+    desc: 'عند توفر منتج طلبه العميل',
     vars: ['customer_name'],
     default: '📦 Good news, {{customer_name}}!\n\nA product you were waiting for is back in stock. Order now before it sells out! 🛒',
   },
 ]
 
-function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${checked ? 'bg-green-500' : 'bg-slate-200'}`}
-    >
-      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${checked ? 'translate-x-5' : 'translate-x-1'}`} />
-    </button>
-  )
-}
+const VARIABLES = [
+  { var: '{{customer_name}}', desc: 'الاسم الأول للعميل' },
+  { var: '{{order_id}}', desc: 'رقم الطلب (مثل 1042)' },
+  { var: '{{total}}', desc: 'إجمالي الطلب مع العملة' },
+  { var: '{{tracking_number}}', desc: 'رابط التتبع أو رقمه' },
+  { var: '{{checkout_url}}', desc: 'رابط إكمال الشراء (السلة المتروكة)' },
+]
+
+const WIX_APP_URL = 'https://www.wix.com/app-market/48cfce94-1e3d-4d09-a34d-e5f41e5b0469'
 
 export default function WixPage() {
   const [tab, setTab] = useState<'stores' | 'templates' | 'guide'>('stores')
@@ -84,6 +92,7 @@ export default function WixPage() {
   const [testPhone, setTestPhone] = useState('')
   const [testEvent, setTestEvent] = useState('order_placed')
   const [sending, setSending] = useState(false)
+  const [toDisconnect, setToDisconnect] = useState<string | null>(null)
   const qc = useQueryClient()
 
   // Init defaults
@@ -95,34 +104,37 @@ export default function WixPage() {
     setEnabled(defEna)
   }, [])
 
-  const { data: connectData, isLoading } = useQuery('wix-connections',
+  const { data: connectData, isLoading, isError, error, refetch } = useQuery('wix-connections',
     () => axios.get('/api/wix/connect').then(r => r.data)
   )
   const connections = connectData?.connections || []
 
   const disconnectMutation = useMutation(
     (instanceId: string) => axios.delete('/api/wix/connect', { data: { wix_instance_id: instanceId } }),
-    { onSuccess: () => { qc.invalidateQueries('wix-connections'); toast.success('Disconnected') } }
+    {
+      onSuccess: () => { qc.invalidateQueries('wix-connections'); setToDisconnect(null); toast.success('تم فصل المتجر') },
+      onError: (e) => void toast.error(apiError(e, 'تعذّر فصل المتجر')),
+    }
   )
 
   const saveTemplates = async () => {
     setTplSaving(true)
     try {
       await axios.post('/api/settings/wix-templates', { templates, enabled })
-      toast.success('Templates saved!')
-    } catch { toast.error('Failed to save') }
+      toast.success('تم حفظ الرسائل')
+    } catch { toast.error('تعذّر الحفظ') }
     setTplSaving(false)
   }
 
   const sendTest = async () => {
-    if (!testPhone) return toast.error('Enter a phone number')
+    if (!testPhone) return toast.error('أدخل رقم الهاتف')
     setSending(true)
     try {
       const ev = EVENTS.find(e => e.key === testEvent)
       const instancesResp = await axios.get('/api/whatsapp/instances')
       const allInstances = instancesResp.data?.instances || []
       const inst = allInstances.find((i: any) => i.status === 'connected')
-      if (!inst) return toast.error('No connected WhatsApp instance')
+      if (!inst) return toast.error('لا يوجد رقم واتساب متصل')
 
       const msg = (templates[testEvent] || ev?.default || '')
         .replace(/{{customer_name}}/g, 'Ahmed Mohamed')
@@ -132,320 +144,207 @@ export default function WixPage() {
         .replace(/{{checkout_url}}/g, 'https://yourstore.com/checkout')
 
       await axios.post('/api/whatsapp/send', { instance_id: inst.id, to: testPhone, type: 'text', text: msg })
-      toast.success('✅ Test message sent!')
+      toast.success('أُرسلت الرسالة التجريبية')
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || 'Failed')
+      toast.error(e?.response?.data?.error || 'تعذّر الإرسال')
+    } finally {
+      setSending(false)
     }
-    setSending(false)
   }
+
+  const enabledCount = EVENTS.filter(e => enabled[e.key] !== false).length
 
   return (
     <DashboardLayout>
-      <div className="max-w-3xl mx-auto space-y-5 pb-12">
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="التكاملات"
+          title="Wix"
+          description="أرسل إشعارات واتساب تلقائية لعملاء متجرك على Wix عند كل طلب ودفع وشحن."
+          actions={<Button variant="secondary" icon={BookOpenIcon} href="/docs/integrations/wix">دليل Wix</Button>}
+        />
 
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <img src="https://cdn.simpleicons.org/wix/000000" alt="Wix" className="w-10 h-10 flex-shrink-0" />
-          <div>
-            <h1 className="text-2xl font-display font-bold text-slate-900">Wix Integration</h1>
-            <p className="text-slate-400 text-sm">Send automatic WhatsApp notifications for your Wix store events.</p>
-          </div>
-        </div>
+        <Tabs idPrefix="wix" aria-label="أقسام Wix" value={tab} onChange={v => setTab(v as typeof tab)} tabs={[
+          { id: 'stores', label: 'متاجري', icon: BuildingStorefrontIcon, count: connections.length || undefined },
+          { id: 'templates', label: 'الرسائل', icon: ChatBubbleLeftRightIcon, count: `${enabledCount}/${EVENTS.length}` },
+          { id: 'guide', label: 'طريقة الاستخدام', icon: BookOpenIcon },
+        ]} />
 
-        {/* Tabs */}
-        <div className="flex gap-1 bg-[#F8FAFC] rounded-xl p-1">
-          {[
-            { id: 'stores', label: '🏪 My Stores' },
-            { id: 'templates', label: '📝 Messages' },
-            { id: 'guide', label: '📖 How to Use' },
-          ].map(t => (
-            <button key={t.id} onClick={() => setTab(t.id as any)}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t.id ? 'bg-[#F8FAFC] text-slate-900' : 'text-slate-400 hover:text-slate-900'}`}>
-              {t.label}
-            </button>
-          ))}
-        </div>
+        {/* ── Stores ───────────────────────────────── */}
+        <TabPanel idPrefix="wix" id="stores" active={tab}>
+          <div className="space-y-5">
+            <HeroPanel
+              icon={ShoppingBagIcon}
+              eyebrow="Wix App Market"
+              title="اربط متجرًا على Wix"
+              description="ثبّت تطبيق WABEK على متجرك لترسل إشعارات واتساب تلقائيًا دون أي إعداد يدوي."
+              actions={<Button variant="on-deep" iconEnd={ArrowTopRightOnSquareIcon} href={WIX_APP_URL} external>التثبيت على Wix</Button>}
+            />
 
-        {/* ── STORES ─────────────────────────────────────────── */}
-        {tab === 'stores' && (
-          <div className="space-y-4">
-            {/* Install */}
-            <div className="card border-blue-900/40 bg-blue-900/10">
-              <div className="flex items-start gap-4">
-                <img src="https://cdn.simpleicons.org/wix/000000" alt="Wix" className="w-8 h-8 flex-shrink-0" />
-                <div className="flex-1">
-                  <h2 className="font-semibold text-slate-900 mb-1">Connect a Wix Store</h2>
-                  <p className="text-slate-400 text-sm mb-4">Install WABEK on your Wix store to automatically send WhatsApp notifications with zero manual setup.</p>
-                  <a href={`https://www.wix.com/app-market/48cfce94-1e3d-4d09-a34d-e5f41e5b0469`} target="_blank" rel="noopener" className="btn-primary inline-flex items-center gap-2">
-                    Install on Wix →
-                  </a>
-                </div>
-              </div>
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
+              <Card padding="none">
+                <CardHeader icon={BuildingStorefrontIcon} title="المتاجر المرتبطة" subtitle={connections.length ? `${connections.length} متجر` : undefined} divider />
+                {isLoading ? (
+                  <div className="space-y-3 p-5">{[0, 1].map(i => <Skeleton key={i} className="h-16 w-full" />)}</div>
+                ) : isError ? (
+                  <ErrorState className="m-5" message={apiError(error)} onRetry={() => refetch()} />
+                ) : connections.length === 0 ? (
+                  <EmptyState size="sm" icon={BuildingStorefrontIcon} title="لا توجد متاجر مرتبطة بعد"
+                    description="ثبّت WABEK على متجرك من Wix App Market باستخدام الزر أعلاه."
+                    action={<Button size="sm" iconEnd={ArrowTopRightOnSquareIcon} href={WIX_APP_URL} external>التثبيت على Wix</Button>} />
+                ) : (
+                  <ul className="divide-y divide-line-soft">
+                    {connections.map((conn: any) => (
+                      <li key={conn.wix_instance_id} className="flex flex-wrap items-center gap-3 px-5 py-4">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-chip text-brand-ink">
+                          <ShoppingBagIcon className="h-5 w-5" aria-hidden="true" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium text-ink">{conn.wix_installations?.site_name || 'متجر Wix'}</p>
+                          <p className="truncate font-mono text-xs text-muted" dir="ltr">{conn.wix_instance_id}</p>
+                          {conn.connected_at && <p className="mt-0.5 text-xs text-muted">مرتبط منذ {fmtDate(conn.connected_at)}</p>}
+                        </div>
+                        <Button size="sm" variant="danger-soft" icon={LinkSlashIcon} onClick={() => setToDisconnect(conn.wix_instance_id)}>فصل</Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
+
+              <Card>
+                <h2 className="text-[17px] font-semibold text-ink">رسالة تجريبية</h2>
+                <p className="mt-1 text-sm text-muted">تأكد من أن رقم واتساب يرسل رسائل المتجر بشكل صحيح.</p>
+                <form className="mt-4 space-y-4" onSubmit={e => { e.preventDefault(); sendTest() }}>
+                  <Field label="رقم الهاتف مع رمز الدولة" required>
+                    <Input type="tel" value={testPhone} onChange={e => setTestPhone(e.target.value)} placeholder="+201234567890" dir="ltr" />
+                  </Field>
+                  <Field label="الحدث">
+                    <Select value={testEvent} onChange={e => setTestEvent(e.target.value)} options={EVENTS.map(e => ({ value: e.key, label: e.label }))} />
+                  </Field>
+                  <Button type="submit" icon={PaperAirplaneIcon} loading={sending} fullWidth>إرسال رسالة تجريبية</Button>
+                </form>
+              </Card>
             </div>
+          </div>
+        </TabPanel>
 
-            {/* Connected stores */}
-            <div className="card">
-              <h2 className="font-semibold text-slate-900 mb-3">Connected Stores</h2>
-              {isLoading ? (
-                <div className="flex items-center gap-2 text-slate-500 text-sm py-4"><ArrowPathIcon className="w-4 h-4 animate-spin" />Loading...</div>
-              ) : connections.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-slate-500 text-sm">No Wix stores connected yet.</p>
-                  <p className="text-slate-600 text-xs mt-1">Install WABEK on your Wix store using the button above.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {connections.map((conn: any) => (
-                    <div key={conn.wix_instance_id} className="flex items-center justify-between p-3 bg-[#F8FAFC] rounded-xl">
-                      <div className="flex items-center gap-3">
-                        <img src="https://cdn.simpleicons.org/wix/000000" alt="Wix" className="w-5 h-5 flex-shrink-0" />
-                        <div>
-                          <p className="text-slate-900 text-sm font-medium">
-                            {conn.wix_installations?.site_name
-                              ? conn.wix_installations.site_name
-                              : <span className="text-slate-500">Wix Store</span>}
-                          </p>
-                          <p className="text-slate-400 text-xs font-mono">{conn.wix_instance_id}</p>
-                          <p className="text-slate-400 text-xs mt-0.5">
-                            Connected {conn.connected_at ? new Date(conn.connected_at).toLocaleDateString() : ''}
-                          </p>
+        {/* ── Templates ─────────────────────────────── */}
+        <TabPanel idPrefix="wix" id="templates" active={tab}>
+          <div className="space-y-4">
+            <p className="rounded-card bg-chip/60 px-4 py-3 text-sm text-chip-ink">
+              فعّل كل إشعار أو أوقفه، وخصّص نصه باستخدام متغيرات مثل <code dir="ltr" className="font-mono">{'{{customer_name}}'}</code>. اضغط المتغير لإضافته إلى نهاية النص.
+            </p>
+            <div className="grid gap-4 xl:grid-cols-2">
+              {EVENTS.map(ev => {
+                const isOn = enabled[ev.key] !== false
+                return (
+                  <Card key={ev.key} padding="sm" className={cn('transition-colors', isOn ? 'border-brand-teal/30' : 'opacity-80')}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-ink">{ev.label}</h3>
+                          <Badge tone={isOn ? 'success' : 'neutral'} size="sm">{isOn ? 'مفعّل' : 'متوقف'}</Badge>
+                        </div>
+                        <p className="mt-0.5 text-xs text-muted">{ev.desc}</p>
+                      </div>
+                      <Switch checked={isOn} onChange={v => setEnabled(e => ({ ...e, [ev.key]: v }))} aria-label={`تفعيل إشعار ${ev.label}`} />
+                    </div>
+                    {isOn && (
+                      <div className="mt-3 space-y-2">
+                        <Textarea
+                          rows={5}
+                          dir="auto"
+                          aria-label={`نص إشعار ${ev.label}`}
+                          className="font-mono text-[13px] leading-relaxed"
+                          value={templates[ev.key] || ev.default}
+                          onChange={e => setTemplates(t => ({ ...t, [ev.key]: e.target.value }))}
+                        />
+                        <div className="flex flex-wrap gap-1.5" dir="ltr">
+                          {ev.vars.map(v => (
+                            <button
+                              key={v}
+                              type="button"
+                              onClick={() => {
+                                const cur = templates[ev.key] || ev.default
+                                setTemplates(t => ({ ...t, [ev.key]: cur + `{{${v}}}` }))
+                              }}
+                              className="rounded-md border border-brand-teal/25 bg-chip px-2 py-0.5 font-mono text-xs text-chip-ink transition hover:border-brand-teal/60"
+                              title="اضغط للإضافة"
+                            >
+                              {`{{${v}}}`}
+                            </button>
+                          ))}
                         </div>
                       </div>
-                      <button onClick={() => disconnectMutation.mutate(conn.wix_instance_id)}
-                        className="text-xs text-red-400 hover:text-red-300 border border-red-900/40 px-3 py-1.5 rounded-lg">
-                        Disconnect
-                      </button>
-                    </div>
+                    )}
+                  </Card>
+                )
+              })}
+            </div>
+            <div className="sticky bottom-4 z-10 flex justify-end">
+              <Button size="lg" loading={tplSaving} onClick={saveTemplates} className="shadow-hero">حفظ جميع الرسائل</Button>
+            </div>
+          </div>
+        </TabPanel>
+
+        {/* ── Guide ─────────────────────────────────── */}
+        <TabPanel idPrefix="wix" id="guide" active={tab}>
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <Card>
+              <h2 className="mb-5 text-[17px] font-semibold text-ink">إعداد WABEK لمتجرك على Wix</h2>
+              <StepList steps={[
+                { title: 'ثبّت التطبيق', body: 'من تبويب «متاجري» اضغط «التثبيت على Wix» لتنتقل إلى Wix App Market، ثم اضغط Add to Site.' },
+                { title: 'افتح WABEK من Wix', body: 'من لوحة تحكم Wix افتح Apps ← WABEK WhatsApp. يُنشأ حسابك تلقائيًا دون تسجيل.' },
+                { title: 'اربط واتساب', body: 'اضغط «Open Full Dashboard» داخل التطبيق، ثم افتح «أرقام واتساب» واربط رقمك برمز QR أو عبر Meta Cloud API.' },
+                { title: 'خصّص الرسائل', body: 'من تبويب «الرسائل» هنا عدّل نص كل حدث، وفعّل الأحداث التي تريدها أو أوقفها.' },
+                { title: 'اختبر', body: 'أرسل رسالة تجريبية من تبويب «متاجري» للتأكد من أن كل شيء يعمل.' },
+                { title: 'أصبحت جاهزًا', body: 'ضع طلبًا تجريبيًا في متجرك، وسيصل للعميل إشعار واتساب تلقائيًا.' },
+              ]} />
+            </Card>
+            <div className="space-y-4">
+              <Card padding="sm">
+                <p className="flex items-center gap-2 font-semibold text-ink"><TruckIcon className="h-5 w-5 text-brand-ink" aria-hidden="true" />تتبع الشحن</p>
+                <p className="mt-1.5 text-sm leading-relaxed text-muted">عند تنفيذ الطلب في Wix وإضافة رقم تتبع، يُضاف رابط التتبع تلقائيًا إلى رسالة العميل.</p>
+              </Card>
+              <Card padding="sm">
+                <p className="flex items-center gap-2 font-semibold text-ink"><ShoppingCartIcon className="h-5 w-5 text-brand-ink" aria-hidden="true" />استعادة السلال المتروكة</p>
+                <p className="mt-1.5 text-sm leading-relaxed text-muted">ترسل WABEK تذكيرًا عندما يبدأ العميل الدفع ولا يكمله، مع رابط مباشر إلى سلته.</p>
+              </Card>
+              <Card padding="sm">
+                <p className="flex items-center gap-2 font-semibold text-ink"><LightBulbIcon className="h-5 w-5 text-brand-ink" aria-hidden="true" />نصائح</p>
+                <ul className="mt-1.5 list-disc space-y-1 ps-5 text-sm text-muted">
+                  <li>اجعل الرسائل قصيرة وواضحة.</li>
+                  <li>استخدم <code dir="ltr" className="font-mono">{'{{customer_name}}'}</code> لتخصيص كل رسالة.</li>
+                  <li>اختبر كل حدث قبل التشغيل الفعلي.</li>
+                  <li>تأكد من بقاء رقم واتساب متصلًا.</li>
+                </ul>
+              </Card>
+              <Card padding="sm">
+                <p className="font-semibold text-ink">المتغيرات المتاحة</p>
+                <ul className="mt-2 space-y-2">
+                  {VARIABLES.map(v => (
+                    <li key={v.var} className="flex items-center gap-3 text-sm">
+                      <code dir="ltr" className="shrink-0 rounded-md bg-chip px-2 py-0.5 font-mono text-xs text-chip-ink">{v.var}</code>
+                      <span className="text-muted">{v.desc}</span>
+                    </li>
                   ))}
-                </div>
-              )}
-            </div>
-
-            {/* Test */}
-            <div className="card">
-              <h2 className="font-semibold text-slate-900 mb-1">Test Message</h2>
-              <p className="text-slate-400 text-sm mb-4">Send a test to verify your WhatsApp is working.</p>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs text-slate-400 block mb-1.5">Phone (with country code)</label>
-                  <input type="tel" value={testPhone} onChange={e => setTestPhone(e.target.value)} placeholder="+201234567890"
-                    className="w-full bg-[#F8FAFC] border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-900 placeholder-gray-600 focus:outline-none focus:border-brand-600" />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-400 block mb-1.5">Event</label>
-                  <select value={testEvent} onChange={e => setTestEvent(e.target.value)}
-                    className="w-full bg-[#F8FAFC] border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-600">
-                    {EVENTS.map(e => <option key={e.key} value={e.key}>{e.label}</option>)}
-                  </select>
-                </div>
-                <button onClick={sendTest} disabled={sending} className="btn-primary w-full disabled:opacity-50">
-                  {sending ? 'Sending...' : '📤 Send Test'}
-                </button>
-              </div>
+                </ul>
+              </Card>
             </div>
           </div>
-        )}
-
-        {/* ── TEMPLATES ───────────────────────────────────────── */}
-        {tab === 'templates' && (
-          <div style={{display:'flex',flexDirection:'column',gap:16}}>
-
-            {/* Info bar */}
-            <div style={{background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:10,padding:'12px 16px'}}>
-              <p style={{color:'#4338ca',fontSize:13,margin:0}}>
-                Toggle each notification on/off. When enabled, customize the message text using variables like{' '}
-                <code style={{background:'rgba(99,102,241,0.12)',color:'#4338ca',padding:'1px 6px',borderRadius:4,fontSize:12}}>{'{{customer_name}}'}</code>
-              </p>
-            </div>
-
-            {EVENTS.map(ev => {
-              const isOn = enabled[ev.key] !== false
-              return (
-                <div key={ev.key} style={{background:'#fff',border:`1px solid ${isOn ? 'rgba(34,197,94,0.2)' : '#e2e8f0'}`,borderRadius:12,padding:16,transition:'border-color 0.2s'}}>
-
-                  {/* Header row */}
-                  <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12,marginBottom: isOn ? 12 : 0}}>
-                    <div style={{flex:1}}>
-                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
-                        <span style={{color:'#0f172a',fontWeight:600,fontSize:14}}>{ev.label}</span>
-                        {isOn && <span style={{fontSize:10,background:'rgba(34,197,94,0.15)',color:'#4ade80',padding:'2px 8px',borderRadius:20,fontWeight:600}}>ON</span>}
-                        {!isOn && <span style={{fontSize:10,background:'#F1F5F9',color:'#64748b',padding:'2px 8px',borderRadius:20,fontWeight:600}}>OFF</span>}
-                      </div>
-                      <p style={{color:'#64748b',fontSize:12,margin:0}}>{ev.desc}</p>
-                    </div>
-                    {/* Toggle */}
-                    <button
-                      onClick={() => setEnabled(e => ({ ...e, [ev.key]: !isOn }))}
-                      style={{
-                        position:'relative',width:44,height:24,borderRadius:12,border:'none',cursor:'pointer',
-                        background: isOn ? '#22c55e' : '#cbd5e1',
-                        transition:'background 0.2s',flexShrink:0,
-                      }}
-                    >
-                      <span style={{
-                        position:'absolute',top:3,left: isOn ? 23 : 3,
-                        width:18,height:18,borderRadius:'50%',background:'#fff',
-                        transition:'left 0.2s',display:'block',
-                      }}/>
-                    </button>
-                  </div>
-
-                  {/* Textarea + vars — only when ON */}
-                  {isOn && (
-                    <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                      <textarea
-                        rows={4}
-                        value={templates[ev.key] || ev.default}
-                        onChange={e => setTemplates((t:any) => ({ ...t, [ev.key]: e.target.value }))}
-                        style={{
-                          width:'100%',
-                          background:'#fff',
-                          border:'1.5px solid #cbd5e1',
-                          borderRadius:8,
-                          padding:'10px 12px',
-                          fontSize:13,
-                          color:'#0f172a',
-                          fontFamily:'monospace',
-                          resize:'vertical',
-                          outline:'none',
-                          lineHeight:1.7,
-                          boxSizing:'border-box',
-                          display:'block',
-                        }}
-                        onFocus={e => { e.target.style.borderColor = '#6366f1' }}
-                        onBlur={e => { e.target.style.borderColor = '#cbd5e1' }}
-                      />
-                      {/* Variables */}
-                      <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-                        {ev.vars.map(v => (
-                          <span
-                            key={v}
-                            onClick={() => {
-                              const cur = templates[ev.key] || ev.default
-                              setTemplates((t:any) => ({ ...t, [ev.key]: cur + `{{${v}}}` }))
-                            }}
-                            style={{
-                              fontSize:11,background:'rgba(99,102,241,0.1)',color:'#4338ca',
-                              border:'1px solid rgba(99,102,241,0.25)',padding:'2px 8px',
-                              borderRadius:4,fontFamily:'monospace',cursor:'pointer',
-                            }}
-                            title="Click to insert"
-                          >
-                            {`{{${v}}}`}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-
-            <button
-              onClick={saveTemplates}
-              disabled={tplSaving}
-              className="btn-primary w-full disabled:opacity-50"
-            >
-              {tplSaving ? 'Saving...' : '💾 Save All Templates'}
-            </button>
-          </div>
-        )}
-
-        {/* ── GUIDE ───────────────────────────────────────────── */}
-        {tab === 'guide' && (
-          <div className="space-y-4">
-            <div className="card">
-              <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                <InformationCircleIcon className="w-5 h-5 text-blue-600" />
-                How to Set Up WABEK for Your Wix Store
-              </h2>
-
-              {[
-                {
-                  step: '1',
-                  title: 'Install the App',
-                  desc: 'Go to My Stores tab and click "Install on Wix". You\'ll be redirected to the Wix App Market. Click Add to Site.',
-                },
-                {
-                  step: '2',
-                  title: 'Open WABEK from Wix',
-                  desc: 'In your Wix Dashboard, go to Apps → WABEK WhatsApp. Your account will be created automatically — no registration needed.',
-                },
-                {
-                  step: '3',
-                  title: 'Connect WhatsApp',
-                  desc: 'Click "Open Full Dashboard" inside the Wix app. Go to WhatsApp Accounts and connect your number using QR Code or Meta Cloud API.',
-                },
-                {
-                  step: '4',
-                  title: 'Customize Messages',
-                  desc: 'Go to the Messages tab here to customize the WhatsApp notification text for each event. Toggle events on/off as needed.',
-                },
-                {
-                  step: '5',
-                  title: 'Test It',
-                  desc: 'Use the Test Message section in My Stores tab to send a test notification and verify everything is working.',
-                },
-                {
-                  step: '6',
-                  title: 'You\'re Live!',
-                  desc: 'Place a test order in your Wix store. Your customer will automatically receive a WhatsApp notification.',
-                },
-              ].map(s => (
-                <div key={s.step} className="flex gap-4 pb-5 border-b border-slate-200/30 last:border-0 last:pb-0 mb-5 last:mb-0">
-                  <div className="w-8 h-8 rounded-full bg-brand-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                    {s.step}
-                  </div>
-                  <div>
-                    <p className="text-slate-900 font-semibold text-sm mb-1">{s.title}</p>
-                    <p className="text-slate-400 text-sm leading-relaxed">{s.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="card border-yellow-900/30 bg-yellow-900/10">
-              <h3 className="text-yellow-400 font-semibold text-sm mb-2">📦 Shipping Tracking</h3>
-              <p className="text-slate-400 text-sm">When you mark an order as fulfilled in Wix and add a tracking number, the tracking link is automatically included in the WhatsApp message sent to your customer.</p>
-            </div>
-
-            <div className="card border-blue-900/30 bg-blue-900/10">
-              <h3 className="text-blue-400 font-semibold text-sm mb-2">🛒 Abandoned Cart Recovery</h3>
-              <p className="text-slate-400 text-sm">WABEK automatically sends a WhatsApp reminder when a customer starts checkout but doesn't complete it. The message includes a direct link back to their cart.</p>
-            </div>
-
-            <div className="card border-green-900/30 bg-green-900/10">
-              <h3 className="text-green-400 font-semibold text-sm mb-2">💡 Tips</h3>
-              <ul className="text-slate-400 text-sm space-y-1.5">
-                <li>• Keep messages short and clear — WhatsApp users prefer concise messages</li>
-                <li>• Add emojis to make messages feel friendly and personal</li>
-                <li>• Use <code className="text-green-400 text-xs">{'{{customer_name}}'}</code> to personalize every message</li>
-                <li>• Test each event type before going live</li>
-                <li>• Make sure your WhatsApp number stays connected</li>
-              </ul>
-            </div>
-
-            <div className="card">
-              <h3 className="text-slate-900 font-semibold text-sm mb-3">Available Variables</h3>
-              <div className="space-y-2">
-                {[
-                  { var: '{{customer_name}}', desc: 'Customer\'s first name' },
-                  { var: '{{order_id}}', desc: 'Order number (e.g., 1042)' },
-                  { var: '{{total}}', desc: 'Order total with currency' },
-                  { var: '{{tracking_number}}', desc: 'Tracking link or number' },
-                  { var: '{{checkout_url}}', desc: 'Link to complete checkout (abandoned cart)' },
-                ].map(v => (
-                  <div key={v.var} className="flex items-center gap-3 text-sm">
-                    <code className="text-blue-600 bg-blue-50/20 px-2 py-0.5 rounded text-xs font-mono flex-shrink-0">{v.var}</code>
-                    <span className="text-slate-500">{v.desc}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
+        </TabPanel>
       </div>
+
+      <ConfirmDialog
+        destructive
+        open={!!toDisconnect}
+        onClose={() => setToDisconnect(null)}
+        onConfirm={() => { if (toDisconnect) disconnectMutation.mutate(toDisconnect) }}
+        loading={disconnectMutation.isLoading}
+        title="فصل هذا المتجر؟"
+        description="ستتوقف إشعارات واتساب لطلبات هذا المتجر حتى تعيد تثبيت التطبيق."
+        confirmLabel="فصل المتجر"
+      />
     </DashboardLayout>
   )
 }
