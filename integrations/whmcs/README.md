@@ -1,4 +1,4 @@
-# WABEK WhatsApp for WHMCS — v4.1.0
+# WABEK WhatsApp for WHMCS — v4.2.0
 
 <div dir="rtl" lang="ar">
 
@@ -55,6 +55,23 @@
 - ملف الأنماط `assets/client.css` محصور في `.wabek-ca` و`.wabek-co`، ولا يُحمَّل إلا في صفحات الوحدة وصفحة إتمام الطلب.
 - مربع الموافقة عند إتمام الطلب يُعرض عبر `ShoppingCartCheckoutOutput`، فيعمل مع standard_cart ونماذج المقارنة والمنزلق والصناديق وLagom وLagom One Step وNexus. فعّله من **الإعدادات ← الخصوصية والموافقة**.
 - النصوص متوفرة بالعربية والإنجليزية كاملة، وبالفرنسية والألمانية والإسبانية والتركية لمنطقة العملاء.
+
+### أين يظهر اختيار «استقبال إشعارات واتساب» (4.2.0)
+
+| المكان | ما يظهر |
+| --- | --- |
+| لوحة الإدارة ← ملخص العميل | لوحة «إشعارات واتساب»: الرقم المستخدم ومصدره، الحالة (مفعّلة/موقوفة ونوع الاختيار)، شارة التوثيق، آخر رسالة (الوقت والحالة)، وأزرار «إيقاف/تفعيل إشعارات واتساب» و«إرسال رسالة» و«السجل» |
+| لوحة الإدارة ← روابط الإجراءات | «إرسال رسالة واتساب» و«سجل واتساب» |
+| لوحة الإدارة ← الملف الشخصي | الحقل المخصص «استقبال إشعارات واتساب» (أو قائمة نعم/لا إن لم يكن الحقل مفعّلًا) وحقل اختياري «رقم واتساب» يتقدّم على رقم الهاتف |
+| التسجيل وإتمام الطلب لحساب جديد وصفحة بيانات الحساب | الحقل المخصص «استقبال إشعارات واتساب» تعرضه جميع القوالب تلقائيًا |
+| الصفحة الرئيسية لمنطقة العملاء | لوحة «إشعارات واتساب» بالحالة والرقم وزر تفعيل/إيقاف بنقرة واحدة وزر «إدارة التفضيلات» |
+| صفحات الحساب | عنصر «إشعارات واتساب» مع شارة الحالة في لوحة «حسابي» الجانبية |
+
+- يُنشأ الحقل المخصص مرة واحدة عند التفعيل أو الترقية (الإعدادات ← الخصوصية والموافقة ← «إظهار حقل استقبال إشعارات واتساب للعملاء»، مفعّل افتراضيًا)، ويبقى متزامنًا في الاتجاهين مع سجل الموافقة: تغييره من صفحة البيانات أو من لوحة الإدارة يُسجَّل ويُزامَن مع منصة WABEK، وأي تغيير من صفحة التفضيلات أو زر الإدارة أو مربع إتمام الطلب يحدّث الحقل.
+- إذا كان لديك حقل إلغاء اشتراك من الإصدار 4.0 / 4.1 (المربع المحدَّد = لا واتساب) فسيُستخدم كما هو دون إنشاء حقل ثانٍ.
+- في نمط «الإرسال ما لم يُلغَ الاشتراك» يظهر المربع محدَّدًا مسبقًا في نموذج التسجيل؛ ويمكن للعميل إلغاء تحديده.
+- إيقاف الخيار يُخفي الحقل عن العملاء مع الاحتفاظ بقيمه.
+- لا تستقبل الوحدة ردود «STOP» الواردة (لا يوجد مسار وارد من المنصة)، ولا يُنقل إلغاء الاشتراك الذي يتم على منصة WABEK نفسها إلى WHMCS.
 
 ### ملاحظات
 
@@ -118,9 +135,26 @@ A WHMCS addon module that sends WhatsApp notifications to your clients and alert
 - Texts: English and Arabic in full; French, German, Spanish and Turkish for the client area.
 - WHMCS loads `templates/preferences.tpl` / `templates/verify.tpl` as before; they are thin shims that include the theme's variant from an absolute path (Bootstrap 4 set when unknown). Uploading 4.1.0 over 4.0.0 replaces them.
 
+### Where the "Receive WhatsApp notifications" choice appears (4.2.0)
+
+| Place | What you get |
+| --- | --- |
+| Admin → client summary | *WhatsApp notifications* box: number used and its source, on/off with the recorded state, verified badge, last message (time + status), buttons *Turn off / Turn on WhatsApp notifications*, *Send message*, *Log* |
+| Admin → summary action links | *Send WhatsApp message*, *WhatsApp log* |
+| Admin → client profile | the native *Receive WhatsApp notifications* field (or a Yes/No select when that field is off) and an optional *WhatsApp number* override |
+| Registration, checkout of new accounts, Account details | the native *Receive WhatsApp notifications* custom field, printed by every theme |
+| Client-area homepage | *WhatsApp notifications* panel: state, number, one-click on/off, *Manage preferences* |
+| Account pages | *WhatsApp notifications* item with an On/Off badge in the *My Account* sidebar panel |
+
+- The custom field is created once on activate / upgrade (**Settings → Privacy & consent → Show a native "Receive WhatsApp notifications" field to clients**, on by default) and kept in two-way sync with the consent table: a change on Account details or the admin profile is recorded and mirrored to WABEK (`contacts-opt-out`); a change on the preferences page, the admin toggle, the homepage panel or the checkout box updates the field.
+- An opt-out field configured in 4.0 / 4.1 (*ticked = no WhatsApp*) is reused as is; no second field is created.
+- In opt-out mode the box starts ticked on the registration / checkout form; the client can untick it.
+- Turning the setting off hides the field from clients; its values are kept.
+- Inbound "STOP" replies are not received by the addon (there is no inbound path from the platform); an opt-out made on WABEK itself is not written back to WHMCS.
+
 ### Tables
 
-`mod_wabek_config`, `mod_wabek_events`, `mod_wabek_outbox` (queue + send log), `mod_wabek_consent`, `mod_wabek_otp_requests`, `mod_wabek_bulk`.
+`mod_wabek_config`, `mod_wabek_events`, `mod_wabek_outbox` (queue + send log), `mod_wabek_consent` (choices, verified number, admin number override), `mod_wabek_otp_requests`, `mod_wabek_bulk`. Plus one WHMCS client custom field (tickbox) for the consent.
 
 ### WABEK API used
 
@@ -150,5 +184,5 @@ integrations/whmcs/build.sh   # writes public/downloads/wabek-whmcs-addon.zip
 ### Theme tests
 
 ```bash
-integrations/whmcs/tests/run.sh /tmp/wabek-theme-test   # render checks + Playwright screenshots (outside the repo)
+integrations/whmcs/tests/run.sh /tmp/wabek-theme-test   # consent sync (SQLite), render checks + Playwright screenshots (outside the repo)
 ```
