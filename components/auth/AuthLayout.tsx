@@ -1,4 +1,5 @@
-import React from 'react'
+import React, { useEffect } from 'react'
+import axios from 'axios'
 import Head from 'next/head'
 import Link from 'next/link'
 import {
@@ -8,6 +9,7 @@ import { Logo } from '@/components/ui'
 import { cn } from '@/components/ui/utils'
 import { LanguageMenu, ThemeToggle } from '@/components/layout/AppShell'
 import { useWhiteLabel } from '@/hooks/useWhiteLabel'
+import { useAuthStore } from '@/lib/store'
 import { setStoredLang } from '@/lib/i18n'
 import { useTranslation } from '@/hooks/useTranslation'
 import { useT } from '@/lib/i18n-local'
@@ -38,10 +40,25 @@ export function AuthLayout({ title, children, width = 'sm' }: AuthLayoutProps) {
   const { brandName, customLogo } = useWhiteLabel()
   const brand = brandName || 'WABEK'
 
+  // A signed-in visitor's profile language wins over the device choice, so
+  // the switcher updates the profile too (same as the dashboard switcher).
+  const user = useAuthStore(s => s.user)
+  const setUser = useAuthStore(s => s.setUser)
   const changeLang = (code: string) => {
     setStoredLang(code)
     window.dispatchEvent(new CustomEvent('langchange', { detail: code }))
+    if (user) {
+      setUser({ ...user, language: code })
+      axios.put('/api/settings/profile', { language: code }).catch(() => {})
+    }
   }
+
+  // Keep <html lang/dir> on the effective language (profile → device).
+  useEffect(() => {
+    const root = document.documentElement
+    root.lang = lang
+    root.dir = dir
+  }, [lang, dir])
 
   return (
     <>
