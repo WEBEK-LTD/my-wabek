@@ -66,7 +66,7 @@ tick *upload*. Android goes to Play internal testing, iOS to TestFlight; the
 `.aab` / `.apk` / `.ipa` are also attached to the run. Pull requests that touch
 `mobile/` are checked and an Android APK is built automatically.
 
-Store checklist: app name **WABEK — Business Inbox** (no "WhatsApp" in the
+Store checklist: app name **WABEK** (no "WhatsApp" in the
 name or icon), privacy policy `https://waabek.com/privacy`, a demo account for
 the reviewers, Data safety / Privacy labels (email, name, phone, messages,
 device id for push), in-app account deletion (Account → Delete account).
