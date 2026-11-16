@@ -14,7 +14,8 @@ function readTheme(): Theme {
     const stored = localStorage.getItem(THEME_STORAGE_KEY)
     if (stored === 'dark' || stored === 'light') return stored
   } catch {}
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  // Light by default: dark mode is an explicit choice (toggle in the top bar).
+  return 'light'
 }
 
 /** Apply a theme to <html>: `.dark` class + data-theme + theme-color meta. */
@@ -32,7 +33,7 @@ export function applyTheme(theme: Theme) {
  * Inline script for _document: sets the theme before first paint so there is
  * no light flash for dark-mode users.
  */
-export const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('${THEME_STORAGE_KEY}');if(t!=='dark'&&t!=='light'){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}var r=document.documentElement;if(t==='dark'){r.classList.add('dark')}r.setAttribute('data-theme',t);r.style.colorScheme=t}catch(e){}})();`
+export const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('${THEME_STORAGE_KEY}');if(t!=='dark'){t='light'}var r=document.documentElement;if(t==='dark'){r.classList.add('dark')}r.setAttribute('data-theme',t);r.style.colorScheme=t;var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',t==='dark'?'${THEME_COLORS.dark}':'${THEME_COLORS.light}')}catch(e){}})();`
 
 export function useTheme() {
   // Start as 'light' on the server and first client render to avoid a
