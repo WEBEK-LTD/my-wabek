@@ -1,184 +1,328 @@
-// @ts-nocheck
-import { useState, useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import axios from 'axios'
 import toast from 'react-hot-toast'
+import {
+  EnvelopeIcon, UserIcon, PhoneIcon, TicketIcon, ShieldCheckIcon, ArrowLeftIcon, GiftIcon, ChevronDownIcon,
+} from '@heroicons/react/24/outline'
+import { Button, Field, Input, Checkbox, Badge, Spinner } from '@/components/ui'
+import { cn } from '@/components/ui/utils'
 import { useAuthStore } from '@/lib/store'
 import { useWhiteLabel } from '@/hooks/useWhiteLabel'
-import { ArrowRightIcon, ShieldCheckIcon } from '@heroicons/react/24/outline'
+import { AuthLayout, AuthHeading } from '@/components/auth/AuthLayout'
+import {
+  AuthDivider, AuthErrorAlert, OAuthButtons, OtpCodeInput, PasswordInput, PasswordStrength, useCooldown,
+} from '@/components/auth/AuthParts'
+import { useAuthCopy } from '@/components/auth/copy'
+import type { AuthCopyKey } from '@/components/auth/copy'
+import { describeAuthError, getDeviceFingerprint, safeRedirect, validateEmail } from '@/components/auth/session'
+import type { AuthErrorView } from '@/components/auth/session'
+
+const PHONE_RE = /^\+?[0-9 ()-]{6,24}$/
+const CODE_RE = /^[A-Za-z0-9-]{1,64}$/
+
+interface InviteInfo {
+  code: string
+  reseller_name?: string | null
+  reseller_logo?: string | null
+  trial_days?: number
+  discount_pct?: number | null
+  plan?: { custom_name?: string | null; base_plan?: { name?: string } | null } | null
+}
+
+type FieldKey = 'name' | 'email' | 'password' | 'phone'
 
 export default function RegisterPage() {
   const router = useRouter()
-  const { brandName, brandColor, brandLogo } = useWhiteLabel()
-  const { code: inviteCodeParam } = router.query
-  const [inviteCode, setInviteCode] = useState((inviteCodeParam as string) || '')
-  const [inviteInfo, setInviteInfo] = useState(null)
-  
-  useEffect(() => {
-    if (inviteCodeParam) {
-      axios.get(`/api/reseller/validate-code?code=${inviteCodeParam}`)
-        .then(r => setInviteInfo(r.data.invite))
-        .catch(() => {})
-    }
-  }, [inviteCodeParam])
+  const { brandName } = useWhiteLabel()
+  const brand = brandName || 'WABEK'
+  const { c, lang } = useAuthCopy()
   const { setUser, setToken } = useAuthStore()
+  const redirectTo = safeRedirect(router.query.redirect)
+
   const [form, setForm] = useState({ name: '', email: '', password: '', phone: '' })
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldKey, AuthCopyKey>>>({})
+  const [error, setError] = useState<{ view: AuthErrorView; exists?: boolean } | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Reseller invite code (?code=…)
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [inviteCode, setInviteCode] = useState('')
+  const [inviteInfo, setInviteInfo] = useState<InviteInfo | null>(null)
+  const [inviteState, setInviteState] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle')
+  const checkedCode = useRef('')
+
+  // OTP step
   const [step, setStep] = useState<'form' | 'otp'>('form')
   const [pendingUserId, setPendingUserId] = useState('')
   const [otp, setOtp] = useState('')
+  const [otpError, setOtpError] = useState<AuthErrorView | null>(null)
   const [trustDevice, setTrustDevice] = useState(true)
+  const [resendLeft, setResendLeft] = useCooldown(0)
 
-  const handleRegister = async (e) => {
-    e.preventDefault()
+  const validateInvite = (code: string) => {
+    const v = code.trim()
+    if (!v || !CODE_RE.test(v)) { setInviteInfo(null); setInviteState(v ? 'invalid' : 'idle'); checkedCode.current = v; return }
+    if (checkedCode.current === v) return
+    checkedCode.current = v
+    setInviteState('checking')
+    axios.get(`/api/reseller/validate-code?code=${encodeURIComponent(v)}`)
+      .then(r => { if (checkedCode.current === v) { setInviteInfo(r.data.invite); setInviteState('valid') } })
+      .catch(() => { if (checkedCode.current === v) { setInviteInfo(null); setInviteState('invalid') } })
+  }
+
+  useEffect(() => {
+    if (!router.isReady) return
+    const param = router.query.code
+    if (typeof param === 'string' && param) {
+      setInviteCode(param)
+      setInviteOpen(true)
+      validateInvite(param)
+    }
+  }, [router.isReady, router.query.code])
+
+  const update = (k: FieldKey, v: string) => {
+    setForm(d => ({ ...d, [k]: v }))
+    setFieldErrors(f => ({ ...f, [k]: undefined }))
+    setError(null)
+  }
+
+  const finish = (data: any, welcome: string) => {
+    setUser(data.user)
+    setToken(data.token || null)
+    router.push(redirectTo)
+    toast.success(welcome)
+    useAuthStore.getState().fetchMe().catch(() => {})
+  }
+
+  const handleRegister = async () => {
+    const errs: typeof fieldErrors = {}
+    if (form.name.trim().length < 2) errs.name = 'err_name'
+    const e1 = validateEmail(form.email)
+    if (e1) errs.email = e1
+    if (form.password.length < 8) errs.password = 'err_password_short'
+    if (form.phone.trim() && !PHONE_RE.test(form.phone.trim())) errs.phone = 'err_phone'
+    setFieldErrors(errs)
+    if (Object.keys(errs).length) return
+
     setLoading(true)
+    setError(null)
     try {
-      const { data } = await axios.post('/api/auth/register', form)
+      const code = inviteCode.trim()
+      const { data } = await axios.post('/api/auth/register', {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        password: form.password,
+        phone: form.phone.trim(),
+        ...(code ? { invite_code: code } : {}),
+      })
       if (data.requiresVerification) {
         setPendingUserId(data.userId)
+        setOtp('')
         setStep('otp')
-        toast.success('Verification code sent to your WhatsApp! 📱')
+        setResendLeft(30)
+        toast.success(c('otp_sent_whatsapp'))
       } else {
-        setUser(data.user)
-        setToken(data.token)
-        router.push('/dashboard')
-        toast.success('Welcome to WABEK! 🎉')
+        finish(data, c('welcome_new', { brand }))
       }
-    } catch (e) {
-      toast.error(e?.response?.data?.error || 'Registration failed')
+    } catch (e: any) {
+      const status = e?.response?.status
+      const d = e?.response?.data
+      if (status === 409) setError({ view: { body: 'reg_err_exists', tone: 'danger' }, exists: true })
+      else if (status === 403) setError({ view: { body: 'reg_err_disabled', tone: 'warning' } })
+      else if (status === 429) setError({ view: { title: 'err_rate_t', body: 'reg_err_rate', tone: 'warning' } })
+      else if (status === 400 && Array.isArray(d?.details)) {
+        const map: Partial<Record<FieldKey, AuthCopyKey>> = {}
+        for (const it of d.details) {
+          const p = it?.path?.[0]
+          if (p === 'name') map.name = 'err_name'
+          if (p === 'email') map.email = 'err_email_invalid'
+          if (p === 'password') map.password = 'err_password_short'
+          if (p === 'phone') map.phone = 'err_phone'
+        }
+        setFieldErrors(map)
+        if (!Object.keys(map).length) setError({ view: { body: 'reg_err_generic', tone: 'danger' } })
+      } else if (!e?.response) setError({ view: { body: 'err_network', tone: 'danger' } })
+      else setError({ view: { body: 'reg_err_generic', tone: 'danger' } })
     } finally { setLoading(false) }
   }
 
-  const handleVerifyOtp = async (e) => {
-    e.preventDefault()
-    if (otp.length !== 6) { toast.error('Enter 6-digit code'); return }
+  const verifyOtp = async (code = otp) => {
+    if (loading) return
+    if (code.length !== 6) { setOtpError({ body: 'err_otp_length', tone: 'danger' }); return }
     setLoading(true)
+    setOtpError(null)
     try {
       const { data } = await axios.post('/api/auth/verify-otp', {
         userId: pendingUserId,
-        otp,
+        otp: code,
         purpose: 'registration',
         trustDevice,
-        deviceFingerprint: navigator.userAgent.slice(0, 32),
+        deviceFingerprint: getDeviceFingerprint(),
       })
-      setUser(data.user)
-      setToken(data.token)
-      router.push('/dashboard')
-      toast.success('Account verified! Welcome 🎉')
-    } catch (e) {
-      toast.error(e?.response?.data?.error || 'Invalid code')
+      finish(data, c('verified_welcome'))
+    } catch (e: any) {
+      setOtpError(describeAuthError(e))
+      setOtp('')
     } finally { setLoading(false) }
   }
 
+  // The account now exists (unverified): signing in with it re-sends the
+  // registration code (403 requiresVerification). Re-posting /register would
+  // only answer 409 "already registered".
   const resendOtp = async () => {
+    setLoading(true)
+    setOtpError(null)
     try {
-      await axios.post('/api/auth/register', form)
-      toast.success('New code sent!')
-    } catch {}
+      const { data } = await axios.post('/api/auth/login', { email: form.email.trim(), password: form.password, deviceFingerprint: getDeviceFingerprint() })
+      if (data?.success) { finish(data, c('welcome_new', { brand })); return }
+      toast.success(c('code_resent'))
+      setResendLeft(30)
+    } catch (e: any) {
+      if (e?.response?.data?.requiresVerification) { toast.success(c('code_resent')); setResendLeft(30) }
+      else setOtpError(describeAuthError(e))
+    } finally { setLoading(false) }
+  }
+
+  const planName = inviteInfo?.plan?.custom_name || inviteInfo?.plan?.base_plan?.name
+
+  if (step === 'otp') {
+    return (
+      <AuthLayout title={c('otp_title_verify')}>
+        <AuthHeading
+          icon={ShieldCheckIcon}
+          title={c('otp_title_verify')}
+          subtitle={form.phone
+            ? <>{c('otp_sent_whatsapp')} <bdi dir="ltr" className="font-semibold text-ink">{form.phone}</bdi></>
+            : c('otp_sent_generic')}
+        />
+        <form onSubmit={e => { e.preventDefault(); verifyOtp() }} className="flex flex-col gap-5">
+          <OtpCodeInput value={otp} onChange={v => { setOtp(v); setOtpError(null) }} onComplete={v => verifyOtp(v)} invalid={!!otpError} disabled={loading} autoFocus />
+          <AuthErrorAlert error={otpError} />
+          <Checkbox label={c('trust_device')} description={c('trust_device_d')} checked={trustDevice} onChange={e => setTrustDevice(e.target.checked)} />
+          <Button type="submit" size="lg" fullWidth loading={loading} disabled={otp.length !== 6}>
+            {loading ? c('verifying') : c('verify_account')}
+          </Button>
+        </form>
+        <div className="mt-6 flex flex-col items-center gap-3 text-sm">
+          <p className="text-muted">
+            {c('didnt_receive')}{' '}
+            {resendLeft > 0
+              ? <span className="tabular">{c('resend_in', { s: resendLeft })}</span>
+              : <button type="button" onClick={resendOtp} disabled={loading} className="font-semibold text-link hover:text-link-hover disabled:opacity-60">{c('resend')}</button>}
+          </p>
+          <button type="button" onClick={() => { setStep('form'); setOtp(''); setOtpError(null) }} className="inline-flex items-center gap-1.5 text-muted hover:text-ink">
+            <ArrowLeftIcon className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+            {c('go_back')}
+          </button>
+        </div>
+      </AuthLayout>
+    )
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-brand-500 rounded-2xl mb-4 glow-green">
-            <svg viewBox="0 0 24 24" className="w-8 h-8 fill-white">
-              <path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.96 9.96 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2z"/>
-            </svg>
+    <AuthLayout title={c('reg_title')} width="md">
+      <AuthHeading title={c('reg_title')} subtitle={c('reg_subtitle', { brand })} />
+
+      {inviteState === 'valid' && inviteInfo && (
+        <div className="mb-6 flex items-start gap-3 overflow-hidden rounded-2xl bg-brand-gradient-soft p-4 text-[#04282C]">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#04282C]/10">
+            <GiftIcon className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <p className="font-semibold">{inviteInfo.reseller_name ? c('invite_from', { name: inviteInfo.reseller_name }) : c('invite_code')}</p>
+            <div className="flex flex-wrap gap-1.5 text-xs font-medium">
+              {!!inviteInfo.trial_days && <span className="rounded-full bg-[#04282C]/10 px-2.5 py-1">{c('invite_trial', { days: inviteInfo.trial_days })}</span>}
+              {!!inviteInfo.discount_pct && <span className="rounded-full bg-[#04282C]/10 px-2.5 py-1">{c('invite_discount', { pct: inviteInfo.discount_pct })}</span>}
+              {planName && <span className="rounded-full bg-[#04282C]/10 px-2.5 py-1">{c('invite_plan', { plan: planName })}</span>}
+            </div>
           </div>
-          <h1 className="font-display text-3xl font-bold text-slate-900">Join WABEK</h1>
-          <p className="text-slate-400 mt-2">WhatsApp automation platform</p>
         </div>
+      )}
 
-        <div className="card">
-          {step === 'form' ? (
-            <form onSubmit={handleRegister} className="space-y-4">
-              <div>
-                {/* OAuth */}
-          <div className="space-y-2 mb-4">
-            <a href="/api/auth/oauth/google"
-              className="flex items-center justify-center gap-3 w-full py-2.5 px-4 bg-white hover:bg-[#F8FAFC] text-slate-800 rounded-xl font-medium text-sm transition-colors border border-gray-200">
-              <svg viewBox="0 0 24 24" className="w-5 h-5"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-              Sign up with Google
-            </a>
-            <a href="/api/auth/oauth/facebook"
-              className="flex items-center justify-center gap-3 w-full py-2.5 px-4 text-slate-900 rounded-xl font-medium text-sm transition-colors" style={{ backgroundColor: "#1877F2" }}>
-              <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-              Sign up with Facebook
-            </a>
-            <a href="/api/auth/oauth/github"
-              className="flex items-center justify-center gap-3 w-full py-2.5 px-4 bg-[#F8FAFC] hover:bg-slate-100 text-slate-900 rounded-xl font-medium text-sm transition-colors border border-gray-700">
-              <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
-              Sign up with GitHub
-            </a>
-          </div>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="flex-1 h-px bg-wabek-border" />
-            <span className="text-xs text-slate-500">or sign up with email</span>
-            <div className="flex-1 h-px bg-wabek-border" />
-          </div>
+      <OAuthButtons providers={['google', 'facebook', 'github']} />
+      <AuthDivider>{c('or_email')}</AuthDivider>
 
-          <label className="label">Full Name</label>
-                <input value={form.name} onChange={e => setForm(d => ({...d, name: e.target.value}))}
-                  placeholder="John Doe" className="input" required />
-              </div>
-              <div>
-                <label className="label">Email</label>
-                <input type="email" value={form.email} onChange={e => setForm(d => ({...d, email: e.target.value}))}
-                  placeholder="john@example.com" className="input" required />
-              </div>
-              <div>
-                <label className="label">Password</label>
-                <input type="password" value={form.password} onChange={e => setForm(d => ({...d, password: e.target.value}))}
-                  placeholder="Min 8 characters" className="input" required minLength={8} />
-              </div>
-              <div>
-                <label className="label">WhatsApp Number <span className="text-slate-500 font-normal">(for OTP verification)</span></label>
-                <input type="tel" value={form.phone} onChange={e => setForm(d => ({...d, phone: e.target.value}))}
-                  placeholder="+201234567890" className="input" />
-                <p className="text-xs text-slate-500 mt-1">Include country code. Required if OTP verification is enabled.</p>
-              </div>
-              <button type="submit" disabled={loading} className="btn-primary w-full justify-center py-3 text-base">
-                {loading ? 'Creating account...' : <><ArrowRightIcon className="w-4 h-4" /> Create Account</>}
-              </button>
-              <p className="text-center text-sm text-slate-400">
-                Already have an account?{' '}
-                <Link href="/auth/login" className="text-blue-600 hover:text-blue-500">Sign in</Link>
-              </p>
-            </form>
-          ) : (
-            <div className="space-y-4">
-              <div className="text-center">
-                <ShieldCheckIcon className="w-12 h-12 text-blue-600 mx-auto mb-3" />
-                <h2 className="font-display font-bold text-xl text-slate-900">Verify Your Account</h2>
-                <p className="text-slate-400 text-sm mt-1">Enter the 6-digit code sent to your WhatsApp</p>
-                <p className="text-blue-600 text-sm font-medium mt-1">{form.phone}</p>
-              </div>
-              <form onSubmit={handleVerifyOtp} className="space-y-4">
-                <div>
-                  <input value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="000000" className="input text-center text-2xl tracking-[0.5em] font-bold"
-                    maxLength={6} required />
-                </div>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={trustDevice} onChange={e => setTrustDevice(e.target.checked)} className="rounded" />
-                  <span className="text-sm text-slate-300">Trust this device for 30 days</span>
-                </label>
-                <button type="submit" disabled={loading || otp.length !== 6} className="btn-primary w-full justify-center py-3">
-                  {loading ? 'Verifying...' : '✅ Verify Account'}
-                </button>
-                <button type="button" onClick={resendOtp} className="text-sm text-blue-600 hover:text-blue-500 w-full text-center">
-                  Didn't receive code? Resend
-                </button>
-                <button type="button" onClick={() => setStep('form')} className="text-sm text-slate-500 hover:text-slate-400 w-full text-center">
-                  ← Go back
-                </button>
-              </form>
+      <form onSubmit={e => { e.preventDefault(); handleRegister() }} noValidate className="flex flex-col gap-4">
+        <Field label={c('full_name')} error={fieldErrors.name ? c(fieldErrors.name) : undefined}>
+          <Input icon={UserIcon} autoComplete="name" placeholder={c('name_ph')} value={form.name} onChange={e => update('name', e.target.value)} />
+        </Field>
+        <Field label={c('email')} error={fieldErrors.email ? c(fieldErrors.email) : undefined}>
+          <Input type="email" inputMode="email" autoComplete="email" dir="ltr" className="text-start" icon={EnvelopeIcon} placeholder={c('email_ph')} value={form.email} onChange={e => update('email', e.target.value)} />
+        </Field>
+        <Field label={c('password')} hint={form.password ? undefined : c('password_hint')} error={fieldErrors.password ? c(fieldErrors.password) : undefined}>
+          <PasswordInput autoComplete="new-password" placeholder={c('password_hint')} value={form.password} onChange={e => update('password', e.target.value)} />
+        </Field>
+        <PasswordStrength password={form.password} />
+        <Field
+          label={<>{c('phone')} <span className="font-normal text-muted">({c('optional')})</span></>}
+          hint={c('phone_hint')}
+          error={fieldErrors.phone ? c(fieldErrors.phone) : undefined}
+        >
+          <Input type="tel" inputMode="tel" autoComplete="tel" dir="ltr" className="text-start" icon={PhoneIcon} placeholder="+201234567890" value={form.phone} onChange={e => update('phone', e.target.value)} />
+        </Field>
+
+        {/* Invite code */}
+        <div className="rounded-2xl border border-line bg-surface-2/60">
+          <button
+            type="button"
+            onClick={() => setInviteOpen(o => !o)}
+            aria-expanded={inviteOpen}
+            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-ink"
+          >
+            <span className="flex items-center gap-2"><TicketIcon className="h-[18px] w-[18px] text-brand-ink" aria-hidden="true" />{c('invite_have')}</span>
+            <span className="flex items-center gap-2">
+              {inviteState === 'valid' && <Badge tone="success" size="sm">{inviteCode.trim().toUpperCase()}</Badge>}
+              <ChevronDownIcon className={cn('h-4 w-4 text-muted transition-transform', inviteOpen && 'rotate-180')} aria-hidden="true" />
+            </span>
+          </button>
+          {inviteOpen && (
+            <div className="border-t border-line-soft px-4 pb-4 pt-3">
+              <Field
+                label={c('invite_code')}
+                hint={inviteState === 'invalid' ? undefined : c('invite_hint')}
+                error={inviteState === 'invalid' ? c('invite_invalid') : undefined}
+              >
+                <Input
+                  dir="ltr" className="text-start uppercase tracking-wider" placeholder={c('invite_ph')}
+                  value={inviteCode}
+                  onChange={e => { setInviteCode(e.target.value); if (inviteState !== 'idle') setInviteState('idle'); checkedCode.current = '' }}
+                  onBlur={() => validateInvite(inviteCode)}
+                  endAdornment={inviteState === 'checking' ? <Spinner label={c('invite_checking')} /> : undefined}
+                />
+              </Field>
             </div>
           )}
         </div>
-      </div>
-    </div>
+
+        {error && (
+          <AuthErrorAlert error={error.view} />
+        )}
+        {error?.exists && (
+          <p className="-mt-2 text-sm">
+            <Link href="/auth/login" className="font-semibold text-link hover:text-link-hover">{c('sign_in_link')}</Link>
+            <span className="text-muted"> · </span>
+            <Link href="/auth/forgot-password" className="font-medium text-link hover:text-link-hover">{c('forgot')}</Link>
+          </p>
+        )}
+
+        <Button type="submit" size="lg" fullWidth loading={loading} className="mt-1">
+          {loading ? c('creating') : c('create_account')}
+        </Button>
+
+        <p className="text-center text-xs leading-relaxed text-muted">
+          {c('terms_prefix')}{' '}
+          <Link href="/legal/terms" className="text-link hover:text-link-hover">{c('terms')}</Link>{' '}
+          {c('and')}{lang === 'ar' ? '' : ' '}
+          <Link href="/legal/privacy" className="text-link hover:text-link-hover">{c('privacy')}</Link>.
+        </p>
+      </form>
+
+      <p className="mt-7 text-center text-sm text-muted">
+        {c('have_account')}{' '}
+        <Link href="/auth/login" className="font-semibold text-link hover:text-link-hover">{c('sign_in_link')}</Link>
+      </p>
+    </AuthLayout>
   )
 }

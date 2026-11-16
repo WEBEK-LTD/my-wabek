@@ -1,13 +1,16 @@
-// @ts-nocheck
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
-import { useAuthStore } from '@/lib/store'
 import axios from 'axios'
+import { useAuthStore } from '@/lib/store'
+import { AuthStatusScreen } from '@/components/auth/AuthParts'
+import { useAuthCopy } from '@/components/auth/copy'
+import type { AuthCopyKey } from '@/components/auth/copy'
 
 export default function OAuthCallbackPage() {
   const router = useRouter()
   const { setUser, setToken } = useAuthStore()
-  const [status, setStatus] = useState('Completing sign in...')
+  const { c } = useAuthCopy()
+  const [status, setStatus] = useState<AuthCopyKey>('st_completing')
 
   useEffect(() => {
     const hash = window.location.hash.substring(1)
@@ -28,7 +31,7 @@ export default function OAuthCallbackPage() {
       if (code) {
         // PKCE / code flow: the server-side callback exchanges the code, sets
         // the httpOnly session cookie and redirects to /auth/oauth-success.
-        setStatus('Exchanging code...')
+        setStatus('st_exchanging')
         window.location.replace(`/api/auth/oauth/callback?code=${encodeURIComponent(code)}`)
         return
       }
@@ -38,11 +41,11 @@ export default function OAuthCallbackPage() {
 
     // Drop the provider token from the address bar / history.
     try { window.history.replaceState(null, '', window.location.pathname) } catch {}
-    setStatus('Verifying your account...')
+    setStatus('st_verifying')
     axios.post('/api/auth/oauth/exchange', { access_token: accessToken })
       .then(({ data }) => {
         if (data.token) {
-          localStorage.setItem('wabek_token', data.token)
+          // The exchange set the HttpOnly session cookie; the token is kept in memory only.
           setToken(data.token)
           setUser(data.user)
           router.replace('/dashboard')
@@ -58,12 +61,5 @@ export default function OAuthCallbackPage() {
       })
   }, [])
 
-  return (
-    <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-12 h-12 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-slate-400 text-sm">{status}</p>
-      </div>
-    </div>
-  )
+  return <AuthStatusScreen title={c(status)} subtitle={c('st_wait')} />
 }
