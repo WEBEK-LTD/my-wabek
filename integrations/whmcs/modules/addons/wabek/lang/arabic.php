@@ -357,4 +357,7 @@ $_ADDONLANG = [
     'client_verified_badge' => 'موثّق',
     'client_back' => 'رجوع',
     'client_logout' => 'تسجيل الخروج',
+    'client_nav_prefs' => 'التفضيلات',
+    'client_state_on' => 'مفعّلة',
+    'client_state_off' => 'متوقفة',
 ];

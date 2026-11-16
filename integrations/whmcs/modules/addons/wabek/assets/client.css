@@ -1,0 +1,129 @@
+/*
+ * WABEK — client area and checkout styles.
+ *
+ * Loaded only on index.php?m=wabek and on the cart checkout step (see
+ * hooks.php, ClientAreaHeadOutput). Every rule is scoped to .wabek-ca (client
+ * pages) or .wabek-co (checkout box); nothing here restyles the theme. Layout,
+ * colours, buttons, panels/cards and form controls come from the theme
+ * itself; this file only adds spacing, LTR phone numbers / codes inside RTL
+ * text and RTL fixes for Bootstrap's left-anchored checkboxes.
+ *
+ * Accent colour: Lagom 2 (--brand-primary), Bootstrap 4/5 (--primary,
+ * --bs-primary), otherwise the inherited text colour.
+ */
+
+.wabek-ca,
+.wabek-co {
+  --wabek-accent: var(--brand-primary, var(--primary, var(--bs-primary, currentColor)));
+  /* Bootstrap 4 sets body{text-align:left}; inside our boxes follow the text direction. */
+  text-align: start;
+}
+
+/* ── Client pages ─────────────────────────────────────────────────────── */
+
+.wabek-ca {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.wabek-ca .wabek-intro {
+  margin-block: 0 1rem;
+}
+
+.wabek-ca .wabek-block {
+  margin-block-end: 1.25rem;
+}
+
+.wabek-ca .wabek-block:last-child {
+  margin-block-end: 0;
+}
+
+.wabek-ca .wabek-title {
+  margin-block: 0 .75rem;
+}
+
+.wabek-ca .wabek-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+  margin-block: 0 .75rem;
+}
+
+.wabek-ca .wabek-state .wabek-state-text {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.wabek-ca .wabek-state .label,
+.wabek-ca .wabek-state .badge {
+  display: inline-block;
+  font-size: .8em;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* Phone numbers and codes stay left-to-right inside Arabic text. */
+.wabek-ca .wabek-phone,
+.wabek-co .wabek-phone {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.wabek-ca .wabek-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  align-items: center;
+  margin: 0;
+}
+
+.wabek-ca .wabek-actions .btn {
+  white-space: normal;
+  max-width: 100%;
+}
+
+.wabek-ca .wabek-help {
+  margin-block: .25rem .75rem;
+}
+
+/* Verification page: a narrow column, like the themes' own login box. */
+.wabek-ca.wabek-narrow {
+  max-width: 540px;
+  margin-inline: auto;
+}
+
+.wabek-ca .wabek-code {
+  direction: ltr;
+  text-align: center;
+  font-size: 1.5rem;
+  letter-spacing: .35em;
+  font-variant-numeric: tabular-nums;
+  height: auto;
+}
+
+.wabek-ca .wabek-code:focus {
+  border-color: var(--wabek-accent);
+}
+
+.wabek-ca .wabek-or {
+  margin-block: 1rem;
+}
+
+.wabek-ca .wabek-center {
+  text-align: center;
+}
+
+/* Bootstrap 3 has no flex-gap utilities: keep the form inline next to other actions. */
+.wabek-ca .wabek-actions form {
+  display: inline-block;
+  margin: 0;
+}
+
+/* Lagom 2 sections: keep our sections apart like Lagom's own pages. */
+.wabek-ca.wabek-v-lagom2 .section {
+  margin-block-end: 1.5rem;
+}
