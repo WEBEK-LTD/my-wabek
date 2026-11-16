@@ -1,5 +1,4 @@
 import { Platform } from 'react-native'
-import Constants from 'expo-constants'
 import * as Device from 'expo-device'
 import * as Notifications from 'expo-notifications'
 import { api } from './api'
@@ -18,17 +17,11 @@ if (Platform.OS !== 'web') {
   })
 }
 
-function projectId(): string | undefined {
-  const extra = Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined
-  const id = extra?.eas?.projectId || (Constants as unknown as { easConfig?: { projectId?: string } }).easConfig?.projectId
-  return id || undefined
-}
-
 async function currentLang(): Promise<'en' | 'ar'> {
   return (await getItem(KEYS.lang)) === 'ar' ? 'ar' : 'en'
 }
 
-/** Ask for permission (once), get the Expo push token and register it with WABEK. */
+/** Ask for permission (once), get this device's APNs / FCM token and register it with WABEK. */
 export async function registerPush(): Promise<'granted' | 'denied' | 'unavailable'> {
   if (Platform.OS === 'web' || !Device.isDevice) return 'unavailable'
   try {
@@ -47,12 +40,12 @@ export async function registerPush(): Promise<'granted' | 'denied' | 'unavailabl
     let { status } = await Notifications.getPermissionsAsync()
     if (status !== 'granted') status = (await Notifications.requestPermissionsAsync()).status
     if (status !== 'granted') return 'denied'
-    const pid = projectId()
-    if (!pid) return 'unavailable' // set expo.extra.eas.projectId (eas init) for push to work
-    const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId: pid })
+    // Native device token: APNs on iPhone, FCM on Android. WABEK's server sends to Apple / Google directly.
+    const { type, data } = await Notifications.getDevicePushTokenAsync()
+    const token = String(data)
     await api('/api/mobile/push-token', {
       method: 'POST',
-      body: { token, platform: Platform.OS, locale: await currentLang() },
+      body: { token, provider: type === 'ios' ? 'apns' : 'fcm', platform: Platform.OS, locale: await currentLang() },
     })
     await setItem(KEYS.pushToken, token)
     return 'granted'

@@ -34,49 +34,37 @@ The API address is `expo.extra.apiUrl` in `app.json` (default
 
 ## Publish to the stores
 
-Builds run on Expo's servers (EAS) — no Mac needed. GitHub starts them; the
-signing keys stay with EAS, never in this repository.
+Everything runs on **GitHub Actions** — no Mac and no third-party build
+service. Signing keys live in GitHub secrets; push keys in Netlify.
 
 **One-time setup**
 
-1. **Expo** — create an account on expo.dev, then from `mobile/`:
-   `npx eas-cli@latest login` and `npx eas-cli@latest init`. Copy the project id
-   it prints into `expo.extra.eas.projectId` in `app.json` (or set
-   `EAS_PROJECT_ID`). Push notifications need it.
-2. **GitHub** — expo.dev → Account settings → Access tokens → create one, then
-   GitHub → Settings → Secrets and variables → Actions → new secret
-   `EXPO_TOKEN`.
-3. **Apple** (company account, needs a D-U-N-S number):
-   - App Store Connect → Apps → new app, bundle id `com.webek.wabek`.
-   - Users and Access → Integrations → App Store Connect API → new key
-     (role *App Manager*). Then `npx eas-cli@latest credentials -p ios` →
-     add the API key (.p8, Key ID, Issuer ID). EAS creates the signing
-     certificate and the **push notification key (APNs)** with it.
-4. **Google** (organization account):
-   - Play Console → create app, package `com.webek.wabek`. The very first
-     upload must be done by hand: run the build (step below, Android,
-     *production*), download the `.aab` from expo.dev and upload it to an
-     internal-testing release.
-   - Google Cloud → service account with access to the Play Console app →
-     JSON key → `npx eas-cli@latest credentials -p android` → *Google Service
-     Account Key for Play Store submissions*.
-   - **Push on Android**: Firebase → add an Android app `com.webek.wabek` →
-     download `google-services.json` → on expo.dev → Project → Environment
-     variables → new **file** variable `GOOGLE_SERVICES_JSON` (production).
-     Firebase → Project settings → Service accounts → new private key →
-     `npx eas-cli@latest credentials -p android` → *FCM V1 service account key*.
-5. **Netlify** (optional) — Expo → Project → Push notifications → *Enhanced
-   security for push*; put the access token in Netlify as `EXPO_ACCESS_TOKEN`.
-   Without it pushes still work. Netlify already skips site builds when a push
-   only changes `mobile/`.
+1. **Android upload key** — GitHub → Actions → *Mobile app — create Android
+   upload key* → Run. Download the artifact, add each `.txt` as a repository
+   secret with the same name, keep `upload.keystore` + password in a password
+   manager, delete the artifact.
+2. **Google Play** — Play Console → create the app, package `com.webek.wabek`.
+   Google Cloud → service account with access to the app → JSON key → secret
+   `PLAY_SERVICE_ACCOUNT_JSON`. The very first `.aab` must be uploaded by hand
+   (download it from the workflow run) to an internal-testing release.
+3. **Firebase (Android push)** — add an Android app `com.webek.wabek`, download
+   `google-services.json` → secret `GOOGLE_SERVICES_JSON`. Project settings →
+   Service accounts → new private key → Netlify env `FCM_SERVICE_ACCOUNT`.
+4. **Apple** — App Store Connect → Apps → new app, bundle id `com.webek.wabek`.
+   Users and Access → Integrations → App Store Connect API → new key with role
+   **Admin** → secrets `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` (the .p8
+   contents) and `APPLE_TEAM_ID`. Xcode signs automatically with this key.
+5. **Apple push** — Certificates, IDs & Profiles → Keys → new key with *Apple
+   Push Notifications service* → Netlify env `APNS_KEY_ID`, `APNS_TEAM_ID`,
+   `APNS_KEY` (the .p8 contents). Optional `APNS_BUNDLE_ID` (default
+   `com.webek.wabek`).
 
 **Every release**
 
 GitHub → Actions → *Mobile app — build & publish* → Run workflow → platform,
-`production`, tick *submit*. The build appears on expo.dev; with *submit* it
-goes to TestFlight / Play internal testing, from where you release it.
-Pull requests that touch `mobile/` are checked automatically (*Mobile app —
-checks*).
+tick *upload*. Android goes to Play internal testing, iOS to TestFlight; the
+`.aab` / `.apk` / `.ipa` are also attached to the run. Pull requests that touch
+`mobile/` are checked and an Android APK is built automatically.
 
 Store checklist: app name **WABEK — Business Inbox** (no "WhatsApp" in the
 name or icon), privacy policy `https://waabek.com/privacy`, a demo account for
@@ -88,7 +76,7 @@ No purchases happen in the app: plans are managed on the website.
 
 The app uses the existing web API plus:
 
-- `POST/PUT/DELETE /api/mobile/push-token` — Expo push tokens (table `mobile_push_tokens`, migration 036)
+- `POST/PUT/DELETE /api/mobile/push-token` — APNs / FCM device tokens (table `mobile_push_tokens`, migration 036); `lib/mobile-push.ts` sends to Apple and Google directly
 - `POST /api/mobile/session` — refresh the 7-day session token
 - `POST /api/mobile/delete-account` — in-app account deletion
 - `POST /api/whatsapp/wa-web {action:"pair", phone}` — WhatsApp pairing code (QR server route `POST /instance/:id/pair`)

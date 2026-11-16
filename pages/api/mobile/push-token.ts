@@ -1,11 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuth } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
-import { isExpoPushToken } from '@/lib/mobile-push'
+import { isDevicePushToken } from '@/lib/mobile-push'
 import { isMissingDbObject } from '@/lib/db-compat'
 
 // Mobile app push token.
-//   POST   {token, platform, locale, prefs?}  → register / refresh (after sign-in, on app start)
+//   POST   {token, provider: apns|fcm, platform, locale, prefs?}  → register / refresh (after sign-in, on app start)
 //   PUT    {token, locale?, prefs?}           → language or notification switches changed
 //   DELETE {token}                            → sign-out
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -14,7 +14,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const db = supabaseAdmin()
   const body = (req.body || {}) as Record<string, unknown>
   const token = body.token
-  if (!isExpoPushToken(token)) return res.status(400).json({ error: 'Invalid push token' })
+  // POST names the provider; PUT / DELETE only identify an already-registered token.
+  const provider = body.provider === 'apns' ? 'apns' : body.provider === 'fcm' ? 'fcm' : null
+  const valid = req.method === 'POST'
+    ? isDevicePushToken(token, provider)
+    : typeof token === 'string' && (isDevicePushToken(token, 'apns') || isDevicePushToken(token, 'fcm'))
+  if (!valid) return res.status(400).json({ error: 'Invalid push token' })
 
   const locale = body.locale === 'ar' ? 'ar' : 'en'
   const prefs: Record<string, boolean> = {}
@@ -30,6 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const platform = body.platform === 'ios' || body.platform === 'android' ? body.platform : 'unknown'
       const { error } = await db.from('mobile_push_tokens').upsert({
         token,
+        provider,
         user_id: user.userId,
         actual_user_id: user.actualUserId || null,
         platform,

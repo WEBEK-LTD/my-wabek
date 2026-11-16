@@ -1,12 +1,13 @@
 -- 036: Push tokens of the mobile app (additive, idempotent — safe to re-run).
 --
--- The iOS / Android app registers its Expo push token after sign-in
--- (POST /api/mobile/push-token) and removes it on sign-out. lib/mobile-push.ts
--- sends new-message, number-disconnected and campaign notifications to every
--- token of the account owner, in the language the app reported.
+-- The iOS / Android app registers its device push token after sign-in
+-- (POST /api/mobile/push-token) and removes it on sign-out: an APNs token on
+-- iPhone, an FCM token on Android. lib/mobile-push.ts sends notifications to
+-- Apple / Google directly, in the language the app reported.
 
 CREATE TABLE IF NOT EXISTS public.mobile_push_tokens (
-  token          text        PRIMARY KEY,                     -- ExponentPushToken[...]
+  token          text        PRIMARY KEY,                     -- APNs device token (hex) or FCM registration token
+  provider       text        NOT NULL DEFAULT 'fcm',          -- 'apns' | 'fcm'
   user_id        uuid        NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,  -- account owner
   actual_user_id uuid        REFERENCES public.users(id) ON DELETE CASCADE,           -- team member who signed in, if any
   platform       text        NOT NULL DEFAULT 'unknown',      -- 'ios' | 'android'
@@ -15,6 +16,8 @@ CREATE TABLE IF NOT EXISTS public.mobile_push_tokens (
   created_at     timestamptz NOT NULL DEFAULT now(),
   last_seen_at   timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE public.mobile_push_tokens ADD COLUMN IF NOT EXISTS provider text NOT NULL DEFAULT 'fcm';
 
 CREATE INDEX IF NOT EXISTS mobile_push_tokens_user_idx ON public.mobile_push_tokens (user_id);
 
