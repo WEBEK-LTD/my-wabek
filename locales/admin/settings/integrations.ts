@@ -56,6 +56,8 @@ export default defineMessages({
     subscriberCount_one: '{n} subscriber',
     subscriberCount_other: '{n} subscribers',
     trackingCode: 'tracking code',
+    googleAnalyticsId: 'Google Analytics ID',
+    facebookPixelId: 'Facebook Pixel ID',
   },
   ar: {
     ...common.ar,
@@ -111,6 +113,8 @@ export default defineMessages({
     subscriberCount_one: '{n} مشترك',
     subscriberCount_other: '{n} مشترك',
     trackingCode: 'كود التتبّع',
+    googleAnalyticsId: 'معرّف Google Analytics',
+    facebookPixelId: 'معرّف Facebook Pixel',
   },
   fr: {
     ...common.fr,
@@ -166,6 +170,8 @@ export default defineMessages({
     subscriberCount_one: '{n} abonné',
     subscriberCount_other: '{n} abonnés',
     trackingCode: 'code de suivi',
+    googleAnalyticsId: 'ID Google Analytics',
+    facebookPixelId: 'ID du pixel Facebook',
   },
   tr: {
     ...common.tr,
@@ -221,5 +227,7 @@ export default defineMessages({
     subscriberCount_one: '{n} abone',
     subscriberCount_other: '{n} abone',
     trackingCode: 'izleme kodu',
+    googleAnalyticsId: 'Google Analytics kimliği',
+    facebookPixelId: 'Facebook Pixel kimliği',
   },
 })

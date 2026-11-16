@@ -188,7 +188,7 @@ export function UserDrawer({ user, plans, onClose, onSave, saving, error, isSelf
         </div>
       </Drawer>
 
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         open={confirm === 'suspend'}
         destructive
         onClose={() => setConfirm(null)}
@@ -198,7 +198,7 @@ export function UserDrawer({ user, plans, onClose, onSave, saving, error, isSelf
         confirmLabel={t('suspend2')}
         onConfirm={() => onSave(user.id, { is_active: false }, t('userSuspended')).then(() => setConfirm(null), () => setConfirm(null))}
       />
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         open={confirm === 'activate'}
         onClose={() => setConfirm(null)}
         loading={saving}
@@ -206,7 +206,7 @@ export function UserDrawer({ user, plans, onClose, onSave, saving, error, isSelf
         confirmLabel={t('activate2')}
         onConfirm={() => onSave(user.id, { is_active: true }, t('userActivated')).then(() => setConfirm(null), () => setConfirm(null))}
       />
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         open={confirm === 'role'}
         destructive={role === 'admin'}
         onClose={() => setConfirm(null)}
@@ -218,7 +218,7 @@ export function UserDrawer({ user, plans, onClose, onSave, saving, error, isSelf
         confirmLabel={t('confirm')}
         onConfirm={() => onSave(user.id, { role }, t('roleChanged')).then(() => setConfirm(null), () => setConfirm(null))}
       />
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         open={confirm === 'removePlan'}
         destructive
         onClose={() => setConfirm(null)}

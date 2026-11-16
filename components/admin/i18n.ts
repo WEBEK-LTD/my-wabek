@@ -43,11 +43,19 @@ export function useAdminT<M extends Messages>(messages: LocaleDict<M>) {
     return isNaN(d.getTime()) ? '—' : f.format(d)
   }
 
-  /** Plural-aware lookup: picks `${base}_one` when the language's rule says "one", else `${base}_other`. */
+  /**
+   * Plural-aware lookup. Uses the language's plural category when the
+   * dictionary has that form (e.g. Arabic `_two` / `_few` / `_many`),
+   * otherwise `${base}_one` for "one" and `${base}_other` for the rest.
+   */
+  const { lang } = base
   const tn = useCallback((key: PluralBase<M>, n: number, vars?: Vars) => {
-    const form = fmt.plural.select(n) === 'one' ? 'one' : 'other'
-    return t(`${String(key)}_${form}` as keyof M, vars)
-  }, [fmt, t])
+    const cat = fmt.plural.select(n)
+    const table = ((messages as unknown as Record<string, Record<string, string> | undefined>)[lang]) || {}
+    const exact = `${String(key)}_${cat}`
+    if (cat !== 'one' && cat !== 'other' && exact in table) return t(exact as keyof M, vars)
+    return t(`${String(key)}_${cat === 'one' ? 'one' : 'other'}` as keyof M, vars)
+  }, [fmt, t, lang, messages])
 
   return {
     ...base,

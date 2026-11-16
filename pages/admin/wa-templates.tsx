@@ -126,7 +126,7 @@ export default function WATemplatesPage() {
                           <Input size="sm" dir="ltr" className="font-mono" wrapperClassName="flex-1 sm:max-w-sm" value={custom} placeholder={tpl.name}
                             aria-label={t('overrideMetaTemplateName', { key: tpl.key })}
                             onChange={e => setConfig(c => ({ ...c, [tpl.key]: e.target.value }))} />
-                          {custom && <Button size="icon-sm" variant="ghost" icon={ArrowUturnLeftIcon} aria-label={t('resetDefault')} onClick={() => setConfig(c => ({ ...c, [tpl.key]: '' }))} />}
+                          {custom && <Button size="icon-sm" variant="ghost" icon={ArrowUturnLeftIcon} className="rtl:[&_svg]:-scale-x-100" aria-label={t('resetDefault')} onClick={() => setConfig(c => ({ ...c, [tpl.key]: '' }))} />}
                         </div>
                       </li>
                     )

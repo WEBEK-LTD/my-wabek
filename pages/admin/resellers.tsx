@@ -168,7 +168,7 @@ export default function AdminResellersPage() {
         </div>
       )}
 
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         open={!!confirm}
         destructive
         onClose={() => setConfirm(null)}

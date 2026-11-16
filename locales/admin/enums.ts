@@ -5,6 +5,10 @@ import { defineMessages } from '@/lib/i18n-local'
 
 export default defineMessages({
   en: {
+    'changefreq.daily': 'Daily',
+    'changefreq.weekly': 'Weekly',
+    'changefreq.monthly': 'Monthly',
+    'changefreq.yearly': 'Yearly',
     'instance.connected': 'Connected',
     'instance.disconnected': 'Disconnected',
     'instance.connecting': 'Connecting',
@@ -82,6 +86,10 @@ export default defineMessages({
     'resource.whatsapp_instance': 'WhatsApp number',
   },
   ar: {
+    'changefreq.daily': 'يوميًا',
+    'changefreq.weekly': 'أسبوعيًا',
+    'changefreq.monthly': 'شهريًا',
+    'changefreq.yearly': 'سنويًا',
     'instance.connected': 'متصل',
     'instance.disconnected': 'غير متصل',
     'instance.connecting': 'جارٍ الاتصال',
@@ -159,6 +167,10 @@ export default defineMessages({
     'resource.whatsapp_instance': 'رقم واتساب',
   },
   fr: {
+    'changefreq.daily': 'Quotidienne',
+    'changefreq.weekly': 'Hebdomadaire',
+    'changefreq.monthly': 'Mensuelle',
+    'changefreq.yearly': 'Annuelle',
     'instance.connected': 'Connecté',
     'instance.disconnected': 'Déconnecté',
     'instance.connecting': 'Connexion en cours',
@@ -236,6 +248,10 @@ export default defineMessages({
     'resource.whatsapp_instance': 'Numéro WhatsApp',
   },
   tr: {
+    'changefreq.daily': 'Günlük',
+    'changefreq.weekly': 'Haftalık',
+    'changefreq.monthly': 'Aylık',
+    'changefreq.yearly': 'Yıllık',
     'instance.connected': 'Bağlı',
     'instance.disconnected': 'Bağlı değil',
     'instance.connecting': 'Bağlanıyor',

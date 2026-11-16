@@ -178,7 +178,7 @@ export default function AdminPayoutsPage() {
         </div>
       )}
 
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         loading={payMut.isLoading}

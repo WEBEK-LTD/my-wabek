@@ -26,7 +26,7 @@ export function KeywordsTab({ s }: { s: SeoState }) {
           <TBody>
             {KEYWORD_DATA.map(k => (
               <TR key={k.kw}>
-                <TD><span dir="ltr" className="text-ink">{k.kw}</span></TD>
+                <TD><span dir="ltr" lang="en" className="text-ink">{k.kw}</span></TD>
                 <TD align="end"><span className="tabular font-mono text-xs text-success">{fmtNumber(k.vol)}</span></TD>
                 <TD align="end"><Badge size="sm" tone={k.diff < 25 ? 'success' : k.diff < 40 ? 'warning' : 'danger'}>{k.diff}</Badge></TD>
                 <TD><span dir="ltr" className="font-mono text-xs text-muted">{k.page}</span></TD>
@@ -39,7 +39,7 @@ export function KeywordsTab({ s }: { s: SeoState }) {
       </SeoCard>
       <SeoCard className="xl:col-span-2" icon={LightBulbIcon} title={t('longTailOpportunities')}>
         <ul className="space-y-1.5">
-          {LONGTAIL.map(kw => <li key={kw}><ListRow end={<CopyButton text={kw} />}><span dir="ltr" className="block text-start text-xs text-ink">{kw}</span></ListRow></li>)}
+          {LONGTAIL.map(kw => <li key={kw}><ListRow end={<CopyButton text={kw} />}><span dir="ltr" lang="en" className="block text-start text-xs text-ink">{kw}</span></ListRow></li>)}
         </ul>
       </SeoCard>
     </div>
@@ -84,7 +84,7 @@ export function RankTab({ s }: { s: SeoState }) {
                       <Button size="icon-sm" variant="ghost" icon={TrashIcon} aria-label={t('remove', { kw: k.kw })} onClick={() => s.setTrackingKws(prev => prev.filter((_, j) => j !== i))} />
                     </div>
                   }>
-                    <p dir="ltr" className="text-start text-sm text-ink">{k.kw}</p>
+                    <p dir="ltr" lang="en" className="text-start text-sm text-ink">{k.kw}</p>
                     <p dir="ltr" className="text-start font-mono text-2xs text-muted">{k.target}</p>
                   </ListRow>
                 </li>
@@ -113,7 +113,7 @@ export function RankTab({ s }: { s: SeoState }) {
                     const trend = first && last ? first - last : 0
                     return (
                       <TR key={k.kw}>
-                        <TD><span dir="ltr" className="block max-w-[160px] truncate text-xs text-ink">{k.kw}</span></TD>
+                        <TD><span dir="ltr" lang="en" className="block max-w-[160px] truncate text-xs text-ink">{k.kw}</span></TD>
                         {rs.map((r, i) => <TD key={i} align="end"><span className={cn('tabular font-mono text-xs', rankTone(r))} dir="ltr">{r ? '#' + r : '—'}</span></TD>)}
                         <TD align="end"><span className={cn('tabular font-mono text-xs', trend > 0 ? 'text-success' : trend < 0 ? 'text-danger' : 'text-muted')} dir="ltr">{trend === 0 ? '—' : (trend > 0 ? '▲' : '▼') + Math.abs(trend)}</span></TD>
                       </TR>

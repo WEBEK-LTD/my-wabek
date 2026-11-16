@@ -29,6 +29,9 @@ export default defineMessages({
     usersAlt: 'Users',
     userCount_one: '{n} user',
     userCount_other: '{n} users',
+    userCount_two: '{n} users',
+    userCount_few: '{n} users',
+    userCount_many: '{n} users',
   },
   ar: {
     ...common.ar,
@@ -55,8 +58,11 @@ export default defineMessages({
     suspend2: 'إيقاف',
     activate2: 'تفعيل',
     usersAlt: 'المستخدمون',
-    userCount_one: '{n} مستخدم',
+    userCount_one: 'مستخدم واحد',
     userCount_other: '{n} مستخدم',
+    userCount_two: 'مستخدمان',
+    userCount_few: '{n} مستخدمين',
+    userCount_many: '{n} مستخدمًا',
   },
   fr: {
     ...common.fr,
@@ -85,6 +91,9 @@ export default defineMessages({
     usersAlt: 'Utilisateurs',
     userCount_one: '{n} utilisateur',
     userCount_other: '{n} utilisateurs',
+    userCount_two: '{n} utilisateurs',
+    userCount_few: '{n} utilisateurs',
+    userCount_many: '{n} utilisateurs',
   },
   tr: {
     ...common.tr,
@@ -113,5 +122,8 @@ export default defineMessages({
     usersAlt: 'Kullanıcılar',
     userCount_one: '{n} kullanıcı',
     userCount_other: '{n} kullanıcı',
+    userCount_two: '{n} kullanıcı',
+    userCount_few: '{n} kullanıcı',
+    userCount_many: '{n} kullanıcı',
   },
 })

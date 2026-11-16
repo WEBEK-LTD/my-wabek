@@ -293,7 +293,7 @@ export default function ServiceStatusPage() {
         )}
       </Modal>
 
-      <ConfirmDialog open={!!toDelete} destructive onClose={() => setToDelete(null)} loading={deleting} onConfirm={deleteIncident}
+      <ConfirmDialog cancelLabel={t('cancel')} open={!!toDelete} destructive onClose={() => setToDelete(null)} loading={deleting} onConfirm={deleteIncident}
         title={t('deleteIncident')} description={toDelete?.title} confirmLabel={t('delete')} />
     </AdminLayout>
   )

@@ -226,7 +226,7 @@ export default function AdminWhatsAppPage() {
         </div>
       </div>
 
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         open={!!toDisconnect}
         destructive
         onClose={() => setToDisconnect(null)}

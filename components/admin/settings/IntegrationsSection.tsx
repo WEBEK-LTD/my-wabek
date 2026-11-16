@@ -68,8 +68,8 @@ export function IntegrationsSection({ seo, webmaster, push, onSaved }: { seo: Ob
         </Field>
         <Field label={t('shareImageOg')} hint="1200×630"><Input dir="ltr" value={sv('og_image')} onChange={e => setSeoForm(f => ({ ...f, og_image: e.target.value }))} placeholder="https://cdn.example.com/og-image.png" /></Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Google Analytics ID"><Input dir="ltr" className="font-mono" value={sv('ga_id')} onChange={e => setSeoForm(f => ({ ...f, ga_id: e.target.value }))} placeholder="G-XXXXXXXXXX" /></Field>
-          <Field label="Facebook Pixel ID"><Input dir="ltr" className="font-mono" value={sv('fb_pixel')} onChange={e => setSeoForm(f => ({ ...f, fb_pixel: e.target.value }))} placeholder="123456789012345" /></Field>
+          <Field label={t('googleAnalyticsId')}><Input dir="ltr" className="font-mono" value={sv('ga_id')} onChange={e => setSeoForm(f => ({ ...f, ga_id: e.target.value }))} placeholder="G-XXXXXXXXXX" /></Field>
+          <Field label={t('facebookPixelId')}><Input dir="ltr" className="font-mono" value={sv('fb_pixel')} onChange={e => setSeoForm(f => ({ ...f, fb_pixel: e.target.value }))} placeholder="123456789012345" /></Field>
         </div>
         <Field label={t('customHeadCode')} hint={t('injectedEveryPageUse')}>
           <Textarea rows={4} dir="ltr" className="font-mono text-xs" value={sv('custom_head_code')} onChange={e => setSeoForm(f => ({ ...f, custom_head_code: e.target.value }))} placeholder={`<!-- ${t('trackingCode')} -->`} />

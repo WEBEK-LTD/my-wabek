@@ -189,7 +189,7 @@ export default function AdminUsersPage() {
         isSelf={!!selected && selected.id === me?.id}
       />
 
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         open={!!quick}
         destructive={quick?.action === 'suspend'}
         onClose={() => setQuick(null)}

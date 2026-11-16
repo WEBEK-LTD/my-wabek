@@ -31,6 +31,9 @@ export default defineMessages({
     campaignsAlt: 'Campaigns',
     userCount_one: '{n} user',
     userCount_other: '{n} users',
+    userCount_two: '{n} users',
+    userCount_few: '{n} users',
+    userCount_many: '{n} users',
   },
   ar: {
     ...common.ar,
@@ -59,8 +62,11 @@ export default defineMessages({
     connectedAlt: '{v}% نسبة الاتصال',
     contactsAlt: 'جهات اتصال',
     campaignsAlt: 'حملات',
-    userCount_one: '{n} مستخدم',
+    userCount_one: 'مستخدم واحد',
     userCount_other: '{n} مستخدم',
+    userCount_two: 'مستخدمان',
+    userCount_few: '{n} مستخدمين',
+    userCount_many: '{n} مستخدمًا',
   },
   fr: {
     ...common.fr,
@@ -91,6 +97,9 @@ export default defineMessages({
     campaignsAlt: 'Campagnes',
     userCount_one: '{n} utilisateur',
     userCount_other: '{n} utilisateurs',
+    userCount_two: '{n} utilisateurs',
+    userCount_few: '{n} utilisateurs',
+    userCount_many: '{n} utilisateurs',
   },
   tr: {
     ...common.tr,
@@ -121,5 +130,8 @@ export default defineMessages({
     campaignsAlt: 'Kampanyalar',
     userCount_one: '{n} kullanıcı',
     userCount_other: '{n} kullanıcı',
+    userCount_two: '{n} kullanıcı',
+    userCount_few: '{n} kullanıcı',
+    userCount_many: '{n} kullanıcı',
   },
 })

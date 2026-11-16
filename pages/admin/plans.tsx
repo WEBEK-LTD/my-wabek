@@ -210,7 +210,7 @@ export default function AdminPlansPage() {
       )}
 
       <PlanEditor open={editor.open} plan={editor.plan} onClose={() => setEditor({ open: false, plan: null })} saving={saveMut.isLoading} onSave={b => saveMut.mutate(b)} />
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         open={!!toDeactivate}
         destructive
         onClose={() => setToDeactivate(null)}
