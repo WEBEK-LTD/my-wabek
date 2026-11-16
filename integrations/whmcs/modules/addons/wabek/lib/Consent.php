@@ -9,8 +9,9 @@ if (!defined('WHMCS')) {
 }
 
 /**
- * WhatsApp consent per client (mod_wabek_consent), optionally mirrored to a
- * client "tickbox" custom field where ticked means "opted out".
+ * WhatsApp consent per client (mod_wabek_consent), mirrored to the client
+ * "tickbox" custom field managed by ConsentField (the native "Receive
+ * WhatsApp notifications" field, or an opt-out field from 4.0 / 4.1).
  *
  * consent_mode = opt_out: non-critical messages are sent unless the client opted out.
  * consent_mode = opt_in:  non-critical messages need an explicit opt-in.
@@ -28,18 +29,29 @@ final class Consent
         if ($clientId <= 0) {
             return false;
         }
-        $state = self::state($clientId);
-        if ($state['opted_out']) {
-            return false;
-        }
-        if (Config::get('consent_mode') === 'opt_in') {
-            return $state['opted_in'];
-        }
-        return true;
+        return self::subscribed($clientId);
     }
 
-    /** @return array{opted_in:bool, opted_out:bool, verified_phone:string, verified_at:string, updated_at:string} */
-    public static function state(int $clientId): array
+    /** Whether non-critical WhatsApp messages go to this client (recorded choice + consent mode). */
+    public static function subscribed(int $clientId, bool $withField = true): bool
+    {
+        if ($clientId <= 0) {
+            return false;
+        }
+        return self::isSubscribed(self::state($clientId, $withField));
+    }
+
+    /** @param array{opted_in:bool, opted_out:bool} $state */
+    public static function isSubscribed(array $state): bool
+    {
+        return !$state['opted_out'] && (Config::get('consent_mode') !== 'opt_in' || $state['opted_in']);
+    }
+
+    /**
+     * @param bool $withField apply an opt-out field of 4.0 / 4.1 (ticked = opted out) on top of the table
+     * @return array{opted_in:bool, opted_out:bool, verified_phone:string, verified_at:string, updated_at:string, source:string}
+     */
+    public static function state(int $clientId, bool $withField = true): array
     {
         $row = Capsule::table(self::TABLE)->where('client_id', $clientId)->first();
         $state = [
@@ -48,12 +60,12 @@ final class Consent
             'verified_phone' => $row ? (string) $row->verified_phone : '',
             'verified_at'    => $row ? (string) $row->verified_at : '',
             'updated_at'     => $row ? (string) $row->updated_at : '',
+            'source'         => $row ? (string) $row->source : '',
         ];
-        $fieldId = Config::int('consent_field_id');
-        if ($fieldId > 0) {
-            $v = strtolower((string) Capsule::table('tblcustomfieldsvalues')
-                ->where('fieldid', $fieldId)->where('relid', $clientId)->value('value'));
-            if (in_array($v, ['on', 'yes', '1'], true)) {
+        // The "receive" field is a mirror kept in sync by hooks; an opt-out field keeps its 4.x override.
+        if ($withField && ConsentField::meaning() === ConsentField::OPT_OUT) {
+            $v = ConsentField::stored($clientId);
+            if ($v !== null && !ConsentField::subscribedFromValue($v)) {
                 $state['opted_out'] = true;
                 $state['opted_in'] = false;
             }
@@ -77,12 +89,12 @@ final class Consent
         $data[$subscribe ? 'opted_in_at' : 'opted_out_at'] = $now;
         Capsule::table(self::TABLE)->updateOrInsert(['client_id' => $clientId], $data);
 
-        $fieldId = Config::int('consent_field_id');
-        if ($fieldId > 0) {
-            Capsule::table('tblcustomfieldsvalues')->updateOrInsert(
-                ['fieldid' => $fieldId, 'relid' => $clientId],
-                ['value' => $subscribe ? '' : 'on']
-            );
+        try {
+            ConsentField::write($clientId, $subscribe);
+        } catch (\Throwable $e) {
+            if (function_exists('logActivity')) {
+                logActivity('WABEK: could not update the WhatsApp custom field of client #' . $clientId . ': ' . substr($e->getMessage(), 0, 200));
+            }
         }
 
         if (!$subscribe) {
@@ -90,6 +102,14 @@ final class Consent
             Outbox::cancelNonCriticalFor($clientId);
         }
         self::syncToPlatform($clientId, !$subscribe);
+    }
+
+    /** Re-send the current choice to WABEK (e.g. after the client's WhatsApp number changed). */
+    public static function resyncPlatform(int $clientId): void
+    {
+        if ($clientId > 0) {
+            self::syncToPlatform($clientId, !self::subscribed($clientId));
+        }
     }
 
     /** Mirror the choice to WABEK contacts so the platform's own send guard honours it too. */

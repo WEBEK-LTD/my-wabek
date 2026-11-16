@@ -1,5 +1,30 @@
 # Changelog — WABEK WhatsApp for WHMCS
 
+## 4.2.0 — 2026-11-16
+
+The per-client "receive WhatsApp notifications" choice is now visible and editable natively in the admin area and on the client's own pages, in every theme (six, twenty-one, Nexus, Lagom 1, Lagom 2), without theme edits.
+
+### Added
+- **Native client custom field "Receive WhatsApp notifications"** (tickbox; name from the lang files, e.g. `استقبال إشعارات واتساب / Receive WhatsApp notifications`, plus per-language translations for WHMCS *Enable Translations*). Created once on activate / upgrade / settings save (setting *Show a native "Receive WhatsApp notifications" field to clients*, default on), shown on the registration form, the checkout of new accounts, *Account details* and the admin client profile — themes print client custom fields themselves. Kept in **two-way sync** with `mod_wabek_consent`:
+  - field → consent: `ClientAdd` and `ClientEdit` read the submitted value (or the stored one, e.g. API `UpdateClient`) and record a changed choice through the same path as the preferences page (queue clean-up + `contacts-opt-out` sync);
+  - consent → field: every change elsewhere (preferences page, homepage panel, admin toggle, profile tab, consent tab, checkout box) writes the field.
+  - Values are backfilled when the field is created and rewritten when the consent mode changes. In opt-out mode the box starts ticked on the registration / checkout forms (WHMCS tickboxes have no default), never on a re-displayed form.
+  - An opt-out field configured in 4.0 / 4.1 (*ticked = no WhatsApp*) is reused with that meaning — no second field is created. New setting *A ticked box means* (receive / opt-out).
+- **Admin client summary:** the `AdminAreaClientSummaryPage` box is now a compact Bootstrap 3 admin panel with the WhatsApp number (and where it comes from), on/off with the recorded state, the verified badge, the last message (time, status / delivery status, event) and buttons *Turn off / Turn on WhatsApp notifications* (POST + CSRF token to the addon, back to `clientssummary.php?userid=…` with a confirmation), *Send message* and *Log*.
+- **Admin action links** (`AdminAreaClientSummaryActionLinks`): *Send WhatsApp message*, *WhatsApp log*.
+- **Admin profile tab** (`AdminClientProfileTabFields` / `…Save`): *Receive WhatsApp notifications* (Yes/No select when no consent custom field is active; otherwise the status and a pointer to the native field, so two controls never overwrite each other) and an optional *WhatsApp number* override (stored in `mod_wabek_consent.phone_override`, used before the profile phone; not shown when a phone custom field is configured).
+- **Client-area homepage panel** (`ClientAreaHomepagePanels`, menu API): on/off state, the number messages go to, a one-click on/off button (POST + token) and *Manage preferences*; markup per theme family, RTL-aware.
+- **Account sidebar:** *WhatsApp notifications* with an On/Off badge in the *My Account* panel of the account pages.
+- `tests/consent-sync.php` (SQLite through illuminate/database) and homepage-panel / admin-summary checks and screenshots in `tests/render-check.php`.
+
+### Changed
+- Preferences page copy: "WhatsApp notifications are on / off for your account — messages are sent to +…" with a single toggle button.
+- The checkout consent box is not printed for new accounts when the native field is already on the order form.
+- Arabic: "Off" is now «موقوفة».
+
+### Fixed
+- The client summary box could disappear silently: any failure returned an empty string. Each part is now guarded and logged (`WABEK: client summary box (…) failed`) and the box always renders (with a minimal fallback).
+
 ## 4.1.0 — 2026-11-16
 
 ### Added

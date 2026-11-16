@@ -90,6 +90,23 @@
   margin-block: .25rem .75rem;
 }
 
+.wabek-ca .wabek-sent-to {
+  margin-block: 0 .5rem;
+}
+
+/* Homepage panel body (the theme prints the panel, its heading and footer button). */
+.wabek-ca.wabek-hp .wabek-state {
+  margin-block-end: .5rem;
+}
+
+.wabek-ca.wabek-hp .wabek-sent-to {
+  margin-block: 0 .75rem;
+}
+
+.wabek-ca.wabek-hp .alert {
+  margin-block-end: .75rem;
+}
+
 /* Verification page: a narrow column, like the themes' own login box. */
 .wabek-ca.wabek-narrow {
   max-width: 540px;

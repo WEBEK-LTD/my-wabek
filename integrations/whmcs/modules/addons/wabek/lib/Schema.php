@@ -93,6 +93,7 @@ final class Schema
                 $t->dateTime('verified_at')->nullable();
                 $t->string('updated_ip', 45)->default('');
                 $t->string('source', 16)->default('');
+                $t->string('phone_override', 20)->default('');
                 $t->dateTime('updated_at')->nullable();
             });
         }
@@ -147,6 +148,12 @@ final class Schema
                 $t->string('delivery_status', 12)->default('');
             });
         }
+        // 4.2.0: WhatsApp number set by an admin on the client profile tab.
+        if ($schema->hasTable('mod_wabek_consent') && !$schema->hasColumn('mod_wabek_consent', 'phone_override')) {
+            $schema->table('mod_wabek_consent', function (Blueprint $t) {
+                $t->string('phone_override', 20)->default('');
+            });
+        }
     }
 
     /**
@@ -161,12 +168,27 @@ final class Schema
             self::importLegacy();
         }
 
-        // Future migrations go here, e.g.:
-        // if (version_compare($fromVersion, '4.1.0', '<')) { ... hasColumn() guarded ... }
-
         // Always make sure new columns and new events exist.
         self::ensureColumns();
         Events::seed();
+
+        // 4.2.0: native "Receive WhatsApp notifications" client field (idempotent; an existing 4.x field is reused).
+        self::ensureConsentField();
+    }
+
+    /** Create / re-attach the native consent custom field when the setting is on. Never fatal. */
+    public static function ensureConsentField(): void
+    {
+        try {
+            Config::flush();
+            if (Config::bool('consent_field_auto')) {
+                ConsentField::ensure();
+            }
+        } catch (\Throwable $e) {
+            if (function_exists('logActivity')) {
+                logActivity('WABEK: could not set up the WhatsApp consent custom field: ' . substr($e->getMessage(), 0, 300));
+            }
+        }
     }
 
     public static function uninstall(): void

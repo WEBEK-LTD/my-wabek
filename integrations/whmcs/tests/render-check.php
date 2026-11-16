@@ -11,12 +11,14 @@
  *    client-area languages), client.css fully scoped and RTL-safe.
  * 2. Theme detection (six, twenty-one, nexus, Lagom 1, Lagom 2, child themes
  *    via theme.yaml, sniffed Bootstrap version, unknown, cycles).
- * 3. Checkout consent markup per variant.
+ * 3. Checkout consent markup per variant; homepage panel body per variant
+ *    (bs3 / bs4 / lagom2, LTR / RTL); admin client summary box (LTR / RTL).
  * 4. Renders every template (real Smarty when --smarty is given, otherwise a
  *    small built-in renderer for the constructs the templates use) into full
  *    pages that simulate six, Lagom 1, twenty-one and Lagom 2 (light/dark),
- *    LTR and RTL, with the real Bootstrap CSS; writes manifest.json for
- *    tests/screenshot.mjs.
+ *    LTR and RTL, with the real Bootstrap CSS — plus the homepage with the
+ *    WhatsApp panel in every theme and the admin client summary (Bootstrap 3
+ *    admin) in LTR / RTL; writes manifest.json for tests/screenshot.mjs.
  *
  * Exit code 0 when every check passes.
  */
@@ -29,8 +31,10 @@ define('WHMCS', true);
 $MOD = realpath(__DIR__ . '/../modules/addons/wabek');
 require $MOD . '/bootstrap.php';
 
+use WABEK\Admin\ClientSummary;
 use WABEK\Checkout;
 use WABEK\Client\ClientController;
+use WABEK\Client\HomePanel;
 use WABEK\Lang;
 use WABEK\Theme;
 
@@ -130,7 +134,8 @@ foreach ($rules as $r) {
 
 // Hooks: only the menu API for navigation, stylesheet only on our pages / checkout.
 $hooks = (string) file_get_contents($MOD . '/hooks.php');
-foreach (['ClientAreaSecondaryNavbar', 'ClientAreaPrimarySidebar', 'ClientAreaHeadOutput', 'ShoppingCartCheckoutOutput', 'ShoppingCartValidateCheckout', 'PreShoppingCartCheckout', 'AfterShoppingCartCheckout', 'ClientAreaPage'] as $h) {
+foreach (['ClientAreaSecondaryNavbar', 'ClientAreaPrimarySidebar', 'ClientAreaHeadOutput', 'ShoppingCartCheckoutOutput', 'ShoppingCartValidateCheckout', 'PreShoppingCartCheckout', 'AfterShoppingCartCheckout', 'ClientAreaPage',
+    'ClientAreaHomepagePanels', 'ClientAreaFooterOutput', 'ClientAdd', 'ClientEdit', 'AdminAreaClientSummaryPage', 'AdminAreaClientSummaryActionLinks', 'AdminClientProfileTabFields', 'AdminClientProfileTabFieldsSave'] as $h) {
     check(strpos($hooks, "add_hook('$h'") !== false, "hooks.php registers $h");
 }
 check(strpos($hooks, "Theme::brandIcon('whatsapp')") !== false, 'menu items use the theme-aware icon class');
@@ -215,6 +220,109 @@ foreach ($VARIANTS as $v) {
         check(strpos($h, $v === 'bs3' ? 'class="checkbox' : 'class="form-check') !== false, "checkout $v: native checkbox markup");
     }
     check(strpos(Checkout::markup($v, true, true, ['label' => 'a', 'help' => '']), 'dir="rtl"') !== false, "checkout $v: RTL wrapper");
+}
+
+
+// ── 3b. Homepage panel and admin client summary box ────────────────────
+
+$CLIENT_KEYS_NEW = ['client_state_line_on', 'client_state_line_off', 'client_sent_to', 'client_hp_manage', 'client_no_phone', 'client_btn_subscribe',
+    'client_btn_unsubscribe', 'client_verified_badge', 'client_state_on', 'client_state_off', 'cf_consent_name', 'cf_consent_desc'];
+foreach ($CLIENT_KEYS_NEW as $k) {
+    foreach ($langs as $l => $strings) {
+        check(isset($strings[$k]) && trim((string) $strings[$k]) !== '', "lang/$l.php has '$k'");
+    }
+}
+$ADMIN_KEYS_NEW = ['cs_title', 'cs_on', 'cs_off', 'cs_state_opted_in', 'cs_state_opted_out', 'cs_state_default_on', 'cs_state_default_off', 'cs_number',
+    'cs_not_verified', 'cs_source_field', 'cs_source_override', 'cs_source_profile', 'cs_consent', 'cs_last_message', 'cs_none', 'cs_btn_turn_off',
+    'cs_btn_turn_on', 'cs_btn_send', 'cs_btn_log', 'cs_unavailable', 'cs_ok_on', 'cs_ok_off', 'al_send', 'al_log', 'pf_yes', 'pf_no', 'pf_phone',
+    'pf_phone_help', 'pf_phone_field_note', 'pf_consent_field_note', 'set_consent_field_auto', 'help_consent_field_auto', 'set_consent_field_meaning',
+    'consent_field_receive', 'consent_field_opt_out', 'ok_consent_field_created', 'err_consent_field'];
+foreach ($ADMIN_KEYS_NEW as $k) {
+    foreach (['english', 'arabic'] as $l) {
+        check(isset($langs[$l][$k]) && trim((string) $langs[$l][$k]) !== '', "lang/$l.php has admin key '$k'");
+    }
+}
+check($langs['arabic']['cs_btn_turn_off'] === 'إيقاف إشعارات واتساب' && $langs['arabic']['cs_btn_turn_on'] === 'تفعيل إشعارات واتساب', 'Arabic toggle labels');
+check($langs['arabic']['cf_consent_name'] === 'استقبال إشعارات واتساب', 'Arabic custom field name');
+check($langs['arabic']['client_state_line_on'] === 'إشعارات واتساب مفعّلة لحسابك' && $langs['arabic']['client_state_line_off'] === 'إشعارات واتساب موقوفة لحسابك', 'Arabic account state lines');
+
+/** Static checks shared by generated HTML fragments. */
+function fragmentChecks(string $h, string $what): void
+{
+    check(!preg_match('/\b(?:pull|float|text)-(?:left|right)\b|\b[mp][lr]-(?:\d|auto)\b/', $h), "$what: no physical left/right classes");
+    preg_match_all('/<form\b[^>]*>(.*?)<\/form>/si', $h, $forms, PREG_SET_ORDER);
+    foreach ($forms as $f) {
+        if (preg_match('/method="post"/i', $f[0])) {
+            check(preg_match('/<input type="hidden" name="token" value="[^"]+">/', $f[1]) === 1, "$what: POST form carries the token");
+        }
+    }
+    check(strpos($h, '<script') === false, "$what: hostile values escaped");
+}
+
+$hpBase = ['subscribed' => true, 'has_phone' => true, 'phone_masked' => '+966•••••567', 'verified' => true, 'token' => 'tok"en', 'url_self' => 'index.php?m=wabek', 'flash' => ''];
+foreach (['english' => false, 'arabic' => true] as $l => $rtl) {
+    Lang::init([], $l);
+    $wl = Lang::all();
+    foreach ($VARIANTS as $v) {
+        foreach ([true, false] as $on) {
+            $h = HomePanel::markup($v, ['subscribed' => $on] + $hpBase, $wl, $rtl);
+            $what = "homepage panel $v " . ($on ? 'on' : 'off') . " $l";
+            check(strpos($h, 'class="wabek-ca wabek-hp wabek-v-' . $v . '" dir="' . ($rtl ? 'rtl' : 'ltr') . '"') !== false, "$what: scoped root + dir");
+            check(strpos($h, '<form method="post" action="index.php?m=wabek"') !== false, "$what: posts to the preferences page");
+            check(strpos($h, 'name="token" value="tok&quot;en"') !== false, "$what: token escaped");
+            check(strpos($h, 'name="wb_action" value="' . ($on ? 'unsubscribe' : 'subscribe') . '"') !== false, "$what: toggle action");
+            check(strpos($h, 'name="return" value="home"') !== false, "$what: returns to the homepage");
+            check(strpos($h, Security_e($wl[$on ? 'client_state_line_on' : 'client_state_line_off'])) !== false, "$what: account state line");
+            check(strpos($h, Security_e($wl[$on ? 'client_btn_unsubscribe' : 'client_btn_subscribe'])) !== false, "$what: single toggle button");
+            check(substr_count($h, '<button') === 1, "$what: exactly one button");
+            check(strpos($h, '<bdi class="wabek-phone" dir="ltr">') !== false, "$what: LTR phone");
+            $native = ['bs3' => $on ? 'label label-success' : 'label label-default', 'bs4' => $on ? 'badge badge-success' : 'badge badge-secondary',
+                'lagom2' => $on ? 'label label-success badge badge-success' : 'label label-default badge badge-secondary'][$v];
+            check(strpos($h, 'class="' . $native) !== false, "$what: theme-native badge ($native)");
+            check(strpos($h, $on ? ($v === 'bs3' ? 'btn btn-default btn-sm' : 'btn btn-sm btn-outline-danger') : 'btn btn-primary btn-sm') !== false, "$what: theme-native button");
+            check(!preg_match('/\sstyle="/', $h), "$what: no inline styles");
+            fragmentChecks($h, $what);
+        }
+        $h = HomePanel::markup($v, ['has_phone' => false, 'phone_masked' => '', 'flash' => 'OK <b>'] + $hpBase, $wl, $rtl);
+        check(strpos($h, Security_e($wl['client_no_phone'])) !== false && strpos($h, 'wabek-phone') === false, "homepage panel $v $l: no phone");
+        check(strpos($h, 'OK &lt;b&gt;') !== false, "homepage panel $v $l: flash escaped");
+        $h = HomePanel::markup($v, ['phone_masked' => '<script>x</script>', 'token' => '"><script>'] + $hpBase, $wl, $rtl);
+        fragmentChecks($h, "homepage panel $v $l (hostile)");
+    }
+
+    $cs = ['client_id' => 42, 'phone' => '+966501234567', 'phone_source' => 'profile', 'state' => 'default_on', 'subscribed' => true, 'verified' => true,
+        'last' => ['when' => '2026-11-16 10:20:30', 'status' => 'sent', 'delivery' => 'read', 'event' => 'invoice_created'], 'token' => 'tok"en', 'flash' => '', 'partial' => false];
+    $t = ClientSummary::texts();
+    foreach ([true, false] as $on) {
+        $h = ClientSummary::markup(['subscribed' => $on, 'state' => $on ? 'opted_in' : 'opted_out'] + $cs, $t, $rtl);
+        $what = 'admin summary ' . ($on ? 'on' : 'off') . " $l";
+        check(strpos($h, '<div class="panel panel-default wabek-cs" id="wabekClientSummary" dir="' . ($rtl ? 'rtl' : 'ltr') . '"') !== false, "$what: Bootstrap 3 admin panel + dir");
+        check(strpos($h, 'action="addonmodules.php?module=wabek&amp;page=consent"') !== false, "$what: toggle posts to the addon");
+        check(strpos($h, 'name="wb_action" value="client_toggle"') !== false && strpos($h, 'name="client" value="42"') !== false, "$what: toggle fields");
+        check(strpos($h, 'name="consent" value="' . ($on ? 'out' : 'in') . '"') !== false && strpos($h, 'name="return" value="summary"') !== false, "$what: toggle target");
+        check(strpos($h, 'name="token" value="tok&quot;en"') !== false, "$what: token escaped");
+        check(strpos($h, Security_e($t[$on ? 'cs_btn_turn_off' : 'cs_btn_turn_on'])) !== false, "$what: toggle label");
+        check(strpos($h, 'href="addonmodules.php?module=wabek&amp;page=send&amp;client=42"') !== false, "$what: send button");
+        check(strpos($h, 'href="addonmodules.php?module=wabek&amp;page=log&amp;client=42"') !== false, "$what: log button");
+        check(strpos($h, '<bdi dir="ltr">+966501234567</bdi>') !== false, "$what: full number for admins, LTR");
+        check(strpos($h, Security_e($t['client_verified_badge'])) !== false, "$what: verified badge");
+        check(strpos($h, '2026-11-16 10:20') !== false && strpos($h, Security_e($t['delivery_read'])) !== false && strpos($h, Security_e($t['event_invoice_created'])) !== false, "$what: last message time, status, event");
+        check(strpos($h, Security_e($t['cs_state_' . ($on ? 'opted_in' : 'opted_out')])) !== false, "$what: recorded state");
+        fragmentChecks($h, $what);
+    }
+    $h = ClientSummary::markup(['phone' => null, 'phone_source' => '', 'verified' => false, 'last' => null, 'partial' => true, 'flash' => 'cs_ok_off'] + $cs, $t, $rtl);
+    check(strpos($h, Security_e($t['err_phone'])) !== false && strpos($h, Security_e($t['cs_none'])) !== false, "admin summary $l: no phone, no message");
+    check(strpos($h, Security_e($t['cs_unavailable'])) !== false && strpos($h, Security_e($t['cs_ok_off'])) !== false, "admin summary $l: partial warning + flash");
+    $h = ClientSummary::markup(['subscribed' => null, 'state' => ''] + $cs, $t, $rtl);
+    check(strpos($h, '<form') === false && strpos($h, 'page=send') !== false, "admin summary $l: consent unknown → no toggle, links kept");
+    $h = ClientSummary::markup(['phone' => '<script>', 'last' => ['when' => '<script>', 'status' => '<script>', 'delivery' => '', 'event' => '<script>']] + $cs, $t, $rtl);
+    fragmentChecks($h, "admin summary $l (hostile)");
+}
+Lang::init([], 'english');
+
+function Security_e(string $s): string
+{
+    return htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
 // ── 4. Render pages ────────────────────────────────────────────────────
@@ -399,6 +507,49 @@ function shell(string $shell, array $cfg, string $dir, string $lang, string $tit
         . $body . '</body></html>';
 }
 
+/** Homepage panels as each theme prints them (heading with icon, body, footer / header button from 'extras'). */
+function homeContent(array $cfg, array $wl, string $body): string
+{
+    $e = function ($s) {
+        return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
+    };
+    $label = $e($wl['client_nav']);
+    $btn = $e($wl['client_hp_manage']);
+    $other = $cfg['css'] === 'bs3'
+        ? '<div class="panel panel-default"><div class="panel-heading"><h3 class="panel-title">Your Active Products/Services</h3></div><div class="list-group"><a class="list-group-item" href="#">Shared Hosting — example.com</a></div></div>'
+        : '<div class="card"><div class="card-header"><h3 class="card-title m-0">Your Active Products/Services</h3></div><div class="list-group list-group-flush"><a class="list-group-item" href="#">Shared Hosting — example.com</a></div></div>';
+    if ($cfg['css'] === 'bs3') {
+        $panel = '<div class="panel panel-default panel-accent-green"><div class="panel-heading"><h3 class="panel-title"><i class="fa fa-whatsapp"></i> ' . $label . '</h3></div>'
+            . '<div class="panel-body">' . $body . '</div><div class="panel-footer"><a class="btn btn-default btn-xs" href="#"><i class="fa fa-cog"></i> ' . $btn . '</a></div></div>';
+        return '<div class="row"><div class="col-sm-6">' . $panel . '</div><div class="col-sm-6">' . $other . '</div></div>';
+    }
+    $panel = $cfg['variant'] === 'lagom2'
+        ? '<div class="panel panel-default"><div class="panel-heading"><h3 class="panel-title"><i class="fab fa-whatsapp"></i> ' . $label . '</h3></div>'
+          . '<div class="panel-body">' . $body . '</div><div class="panel-footer"><a class="btn btn-default btn-sm" href="#">' . $btn . '</a></div></div>'
+        : '<div class="card card-accent-green mb-3"><div class="card-header"><h3 class="card-title m-0"><i class="fab fa-whatsapp"></i> ' . $label . '</h3></div>'
+          . '<div class="card-body">' . $body . '</div><div class="card-footer"><a class="btn btn-default btn-sm" href="#"><i class="fas fa-cog"></i> ' . $btn . '</a></div></div>';
+    return '<div class="row"><div class="col-md-6">' . $panel . '</div><div class="col-md-6">' . $other . '</div></div>';
+}
+
+/** WHMCS admin client summary page (blend, Bootstrap 3): our box above the theme's summary boxes. */
+function adminShell(string $dir, string $lang, string $box): string
+{
+    global $bsCss;
+    $e = function ($s) {
+        return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
+    };
+    $css = $bsCss['bs3'] !== '' ? '<link rel="stylesheet" href="file://' . $e($bsCss['bs3']) . '">' : '';
+    return '<!doctype html><html lang="' . $e($lang) . '" dir="' . $e($dir) . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+        . '<title>Client summary — admin</title>' . $css
+        . '<style>body{background:#f3f3f3;font-size:13px}#header{background:#1a4d80;color:#fff;padding:10px 15px}.contentarea{padding:15px}.clientssummarybox{background:#fff;border:1px solid #ddd;padding:10px;margin-bottom:15px}.clientssummarybox .title{font-weight:bold;margin-bottom:6px}</style>'
+        . '</head><body><div id="header"><strong>WHMCS</strong> · Clients</div><div class="contentarea"><h1>Client Profile</h1>'
+        . $box
+        . '<div class="row"><div class="col-sm-4"><div class="clientssummarybox"><div class="title">Clients Information</div>Jane Doe<br>jane@example.com</div></div>'
+        . '<div class="col-sm-4"><div class="clientssummarybox"><div class="title">Invoices/Billing</div>Paid: 3</div></div>'
+        . '<div class="col-sm-4"><div class="clientssummarybox"><div class="title">Other Actions</div><a href="#">Send WhatsApp message</a></div></div></div>'
+        . '</div></body></html>';
+}
+
 /** standard_cart / Lagom checkout simulation around the ShoppingCartCheckoutOutput box. */
 function checkoutContent(string $shell, string $variant, bool $rtl, array $strings): string
 {
@@ -455,6 +606,24 @@ foreach (['ltr' => 'english', 'rtl' => 'arabic'] as $dir => $lang) {
         $name = "$shell-checkout-$dir.html";
         file_put_contents("$OUT/$name", shell($shell, $cfg, $dir, $lang === 'arabic' ? 'ar' : 'en', 'Checkout', checkoutContent($shell, $cfg['variant'], $dir === 'rtl', $wl), $wl, false));
         $manifest[] = ['file' => $name, 'shell' => $shell, 'variant' => $cfg['variant'], 'dir' => $dir, 'state' => 'checkout', 'kind' => 'checkout'];
+
+        // Client-area homepage with the WhatsApp panel, framed the way each theme prints homepage panels.
+        foreach ([true, false] as $on) {
+            $body = HomePanel::markup($cfg['variant'], ['subscribed' => $on, 'has_phone' => true, 'phone_masked' => '+966•••••567', 'verified' => $on,
+                'token' => 't', 'url_self' => 'index.php?m=wabek', 'flash' => $on ? $wl['client_ok_subscribed'] : ''], $wl, $dir === 'rtl');
+            $name = "$shell-home-" . ($on ? 'on' : 'off') . "-$dir.html";
+            file_put_contents("$OUT/$name", shell($shell, $cfg, $dir, $lang === 'arabic' ? 'ar' : 'en', 'Portal Home', homeContent($cfg, $wl, $body), $wl, false));
+            $manifest[] = ['file' => $name, 'shell' => $shell, 'variant' => $cfg['variant'], 'dir' => $dir, 'state' => 'home-' . ($on ? 'on' : 'off'), 'kind' => 'home'];
+        }
+    }
+    // Admin client summary (WHMCS admin "blend" is Bootstrap 3).
+    foreach ([true, false] as $on) {
+        $box = ClientSummary::markup(['client_id' => 42, 'phone' => '+966501234567', 'phone_source' => 'profile', 'state' => $on ? 'default_on' : 'opted_out',
+            'subscribed' => $on, 'verified' => $on, 'last' => ['when' => '2026-11-16 10:20:30', 'status' => $on ? 'sent' : 'failed', 'delivery' => $on ? 'read' : '',
+            'event' => 'invoice_created'], 'token' => 't', 'flash' => $on ? 'cs_ok_on' : '', 'partial' => false], ClientSummary::texts(), $dir === 'rtl');
+        $name = 'admin-summary-' . ($on ? 'on' : 'off') . "-$dir.html";
+        file_put_contents("$OUT/$name", adminShell($dir, $lang === 'arabic' ? 'ar' : 'en', $box));
+        $manifest[] = ['file' => $name, 'shell' => 'admin', 'variant' => 'bs3', 'dir' => $dir, 'state' => 'admin-' . ($on ? 'on' : 'off'), 'kind' => 'admin'];
     }
 }
 Lang::init([], 'english');

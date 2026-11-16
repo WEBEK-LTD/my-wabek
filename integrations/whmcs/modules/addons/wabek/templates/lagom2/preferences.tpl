@@ -18,12 +18,15 @@
           <p class="wabek-state">
             {if $wabek.subscribed}
               <span class="label label-success badge badge-success">{$wl.client_state_on|escape:'html'}</span>
-              <span class="wabek-state-text">{$wl.client_subscribed|escape:'html'}</span>
+              <strong class="wabek-state-text">{$wl.client_state_line_on|escape:'html'}</strong>
             {else}
               <span class="label label-default badge badge-secondary">{$wl.client_state_off|escape:'html'}</span>
-              <span class="wabek-state-text">{$wl.client_unsubscribed|escape:'html'}</span>
+              <strong class="wabek-state-text">{$wl.client_state_line_off|escape:'html'}</strong>
             {/if}
           </p>
+          {if $wabek.has_phone}
+            <p class="wabek-sent-to">{$wl.client_sent_to|escape:'html'} <bdi class="wabek-phone" dir="ltr">{$wabek.phone_masked|escape:'html'}</bdi></p>
+          {/if}
           <p class="text-muted small wabek-help">{$wl.client_critical_note|escape:'html'}</p>
           <form method="post" action="{$wabek.url_self|escape:'html'}" class="wabek-actions">
             <input type="hidden" name="token" value="{$wabek.token|escape:'html'}">
