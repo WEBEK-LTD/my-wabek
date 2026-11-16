@@ -33,6 +33,20 @@ export default async () => {
   } catch (e: unknown) {
     console.error('Campaign runner error:', (e as Error).message)
   }
+
+  // Every 5 minutes: mark QR numbers whose session is gone as disconnected
+  if (new Date().getUTCMinutes() % 5 === 0) {
+    try {
+      const r = await fetch(`${baseUrl}/api/whatsapp/wa-web-reconcile`, {
+        method: 'POST',
+        headers: { 'x-cron-secret': secret },
+      })
+      const data = await r.json().catch(() => ({}))
+      console.log('QR status reconcile:', r.status, JSON.stringify(data))
+    } catch (e: unknown) {
+      console.error('QR status reconcile error:', (e as Error).message)
+    }
+  }
 }
 
 export const config: Config = {

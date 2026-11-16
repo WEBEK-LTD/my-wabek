@@ -75,7 +75,22 @@ const SUPABASE_KEY        = process.env.SUPABASE_SERVICE_KEY
 
 const logger       = pino({ level: 'silent' })
 const sessions     = new Map()
-const SESSIONS_DIR = path.join(__dirname, 'sessions')
+// Where QR sessions live on disk. Railway's container disk is wiped on every
+// deploy/restart, so a Volume must be attached for sessions to survive:
+// set SESSIONS_DIR, or attach a Railway Volume (RAILWAY_VOLUME_MOUNT_PATH is
+// set automatically). Without either, the Supabase backup below is the only
+// thing that keeps numbers connected across deploys.
+const DEFAULT_SESSIONS_DIR = path.join(__dirname, 'sessions')
+function resolveSessionsDir() {
+  if (process.env.SESSIONS_DIR) return process.env.SESSIONS_DIR
+  const mount = process.env.RAILWAY_VOLUME_MOUNT_PATH
+  if (mount) return path.resolve(mount) === path.resolve(DEFAULT_SESSIONS_DIR) ? DEFAULT_SESSIONS_DIR : path.join(mount, 'wa-sessions')
+  return DEFAULT_SESSIONS_DIR
+}
+const SESSIONS_DIR = resolveSessionsDir()
+const SESSIONS_PERSISTENT = !!(process.env.SESSIONS_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH)
+const STARTED_AT = Date.now()
+let RESTORE_DONE = false
 fs.mkdirSync(SESSIONS_DIR, { recursive: true })
 
 // ─── Auth middleware ───────────────────────────────────────
@@ -181,26 +196,42 @@ async function notifyWabek(event, instanceId, data) {
   } catch (e) { console.error(`[${instanceId}] notify error:`, e.message) }
 }
 
-// ─── Supabase session backup (fire-and-forget) ─────────────
-async function backupToSupabase(instanceId) {
+// ─── Supabase session backup ──────────────────────────────
+// Mirrors the whole auth folder (creds.json + every key file) to wa_sessions.
+// Triggered on creds.update AND on every signal-key write (keys.set), debounced
+// so bursts of key updates produce one upload. Failures are logged — the old
+// version ignored the response, which is how backups silently never happened.
+const backupTimers = new Map()
+let lastBackupError = ''
+function scheduleBackup(instanceId, delayMs = 2000) {
   if (!SUPABASE_URL || !SUPABASE_KEY) return
+  clearTimeout(backupTimers.get(instanceId))
+  backupTimers.set(instanceId, setTimeout(() => {
+    backupTimers.delete(instanceId)
+    backupToSupabase(instanceId)
+  }, delayMs))
+}
+
+async function backupToSupabase(instanceId) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return false
   try {
     const authDir = path.join(SESSIONS_DIR, instanceId)
     const files = {}
     if (fs.existsSync(authDir)) {
       for (const f of fs.readdirSync(authDir)) {
-        files[f] = fs.readFileSync(path.join(authDir, f), 'utf8')
+        const full = path.join(authDir, f)
+        if (fs.statSync(full).isFile()) files[f] = fs.readFileSync(full, 'utf8')
       }
     }
-    if (!Object.keys(files).length) return
+    if (!files['creds.json']) return false
 
-    await fetch(`${SUPABASE_URL}/rest/v1/wa_sessions`, {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/wa_sessions?on_conflict=instance_id`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'apikey': SUPABASE_KEY,
         'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Prefer': 'resolution=merge-duplicates',
+        'Prefer': 'resolution=merge-duplicates,return=minimal',
       },
       body: JSON.stringify({
         instance_id: instanceId,
@@ -209,8 +240,18 @@ async function backupToSupabase(instanceId) {
         updated_at: new Date().toISOString(),
       }),
     })
+    if (!r.ok) {
+      const detail = (await r.text().catch(() => '')).slice(0, 200)
+      const msg = `HTTP ${r.status} ${detail}`
+      if (msg !== lastBackupError) console.error(`[${instanceId}] ❌ Supabase session backup FAILED: ${msg} — check SUPABASE_URL / SUPABASE_SERVICE_KEY (must be the service_role key)`)
+      lastBackupError = msg
+      return false
+    }
+    lastBackupError = ''
+    return true
   } catch (e) {
-    console.error(`[${instanceId}] Supabase backup error:`, e.message)
+    console.error(`[${instanceId}] ❌ Supabase session backup error:`, e.message)
+    return false
   }
 }
 
@@ -336,6 +377,13 @@ async function createSession(instanceId) {
 
   fs.mkdirSync(authDir, { recursive: true })
   const { state, saveCreds } = await useMultiFileAuthState(authDir)
+  // Signal keys change without a creds.update; back them up too, otherwise a
+  // restored session has stale keys and WhatsApp logs the device out.
+  const originalKeysSet = state.keys.set.bind(state.keys)
+  state.keys.set = async (data) => {
+    await originalKeysSet(data)
+    scheduleBackup(instanceId)
+  }
   const { version }          = await fetchLatestBaileysVersion()
 
   const sock = makeWASocket({
@@ -359,7 +407,7 @@ async function createSession(instanceId) {
   // Save to disk AND backup to Supabase on every creds update
   sock.ev.on('creds.update', async () => {
     await saveCreds()
-    backupToSupabase(instanceId)  // fire-and-forget, non-blocking
+    scheduleBackup(instanceId)
   })
 
   sock.ev.on('connection.update', async (update) => {
@@ -381,6 +429,7 @@ async function createSession(instanceId) {
       const s = sessions.get(instanceId)
       if (s) { s.connected = true; s.phoneNumber = phoneNumber; s.qr = null; s._reconnectAttempt = 0 }
       console.log(`[${instanceId}] ✅ Connected! Phone: ${phoneNumber} Name: ${displayName || '(none yet)'}`)
+      scheduleBackup(instanceId, 500)
       await notifyWabek('connected', instanceId, { phoneNumber, ...(displayName ? { displayName } : {}) })
     }
 
@@ -552,6 +601,25 @@ async function restoreSessions() {
   }
 }
 
+// Numbers WABEK believes are connected but whose session could not be loaded
+// here are reported as logged out, so the dashboard asks for a new QR scan
+// instead of showing "connected" while every send fails.
+async function reportMissingSessions() {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_instances?select=id&instance_type=eq.wa_web&status=eq.connected`, {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` },
+    })
+    if (!r.ok) return
+    const rows = await r.json()
+    for (const { id } of rows || []) {
+      if (sessions.has(id)) continue
+      console.warn(`[${id}] marked connected in WABEK but no session here — reporting logged out`)
+      await notifyWabek('disconnected', id, { shouldReconnect: false, loggedOut: true, reason: 'session_missing' })
+    }
+  } catch (e) { console.error('[startup] missing-session report error:', e.message) }
+}
+
 // ─── Routes ───────────────────────────────────────────────
 
 app.get('/health', (req, res) => {
@@ -674,15 +742,29 @@ app.delete('/instance/:id', auth, async (req, res) => {
 })
 
 app.get('/instances', auth, (req, res) => {
-  res.json({ instances: [...sessions.entries()].map(([id, s]) => ({ id, connected: s.connected, phoneNumber: s.phoneNumber, status: s.connected ? 'connected' : s.qr ? 'qr_pending' : 'initializing' })) })
+  res.json({
+    startedAt: new Date(STARTED_AT).toISOString(),
+    uptimeSeconds: Math.round((Date.now() - STARTED_AT) / 1000),
+    restoreDone: RESTORE_DONE,
+    persistent: SESSIONS_PERSISTENT,
+    supabaseBackup: !!(SUPABASE_URL && SUPABASE_KEY),
+    instances: [...sessions.entries()].map(([id, s]) => ({ id, connected: s.connected, phoneNumber: s.phoneNumber, status: s.connected ? 'connected' : s.qr ? 'qr_pending' : 'initializing' })),
+  })
 })
 
 app.listen(PORT, async () => {
   console.log(`WABEK Baileys Server v7 — port ${PORT}`)
   console.log(`Sessions: disk=${SESSIONS_DIR} + Supabase backup=${SUPABASE_URL ? '✅' : '⚠️ not configured'}`)
   if (!WABEK_EVENTS_URL) console.warn('⚠️  WABEK_EVENTS_URL not set')
+  if (!SESSIONS_PERSISTENT && !(SUPABASE_URL && SUPABASE_KEY)) {
+    console.error('🚨 QR sessions are NOT persistent: no Railway Volume (SESSIONS_DIR / RAILWAY_VOLUME_MOUNT_PATH) and no Supabase backup (SUPABASE_URL + SUPABASE_SERVICE_KEY). Every deploy/restart will log out all QR numbers.')
+  } else if (!SESSIONS_PERSISTENT) {
+    console.warn('⚠️  No Railway Volume: sessions survive restarts only through the Supabase backup. Attaching a Volume is recommended.')
+  }
   await restoreSessions()
-  console.log(`[startup] Done. ${sessions.size} session(s) loaded.`)
+  RESTORE_DONE = true
+  console.log(`[startup] Done. ${sessions.size} session(s) loaded. sessionsDir=${SESSIONS_DIR} persistent=${SESSIONS_PERSISTENT}`)
+  await reportMissingSessions()
 
   // ── AI Quality Review Scheduler ─────────────────────────
   // Runs every hour to analyze inactive conversations
