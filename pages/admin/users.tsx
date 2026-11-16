@@ -7,7 +7,7 @@ import {
   CheckCircleIcon, EllipsisHorizontalIcon, EyeIcon, FunnelIcon, NoSymbolIcon, ShieldCheckIcon, UserGroupIcon, XMarkIcon,
 } from '@heroicons/react/24/outline'
 import {
-  Avatar, Badge, Button, Card, ConfirmDialog, DataTable, Dropdown, EmptyState, PageHeader, SearchInput, Select, StatusPill, formatNumber,
+  Avatar, Badge, Button, Card, ConfirmDialog, DataTable, Dropdown, EmptyState, PageHeader, SearchInput, Select, StatusPill,
 } from '@/components/ui'
 import type { Column } from '@/components/ui'
 import { useAuthStore } from '@/lib/store'
@@ -15,6 +15,7 @@ import { apiError, useAdminT } from '@/components/admin/i18n'
 import { ErrorState, Pagination } from '@/components/admin/shared'
 import { UserDrawer } from '@/components/admin/users/UserDrawer'
 import type { AdminPlanRef, AdminUser, UserUpdateBody } from '@/components/admin/users/types'
+import messages from '@/locales/admin/users'
 
 const PAGE = 20
 
@@ -25,7 +26,7 @@ function useDebounced<T>(value: T, delay = 400) {
 }
 
 export default function AdminUsersPage() {
-  const { tr, fmtDate } = useAdminT()
+  const { t, fmtDate, fmtNumber, tn } = useAdminT(messages)
   const qc = useQueryClient()
   const me = useAuthStore(s => s.user)
   const [rawSearch, setRawSearch] = useState('')
@@ -76,7 +77,7 @@ export default function AdminUsersPage() {
         }
       },
       onError: (e) => {
-        const msg = apiError(e, tr('تعذّر تحديث المستخدم', 'Update failed'))
+        const msg = apiError(e, t('updateFailed'))
         setSaveError(msg)
         toast.error(msg)
       },
@@ -85,14 +86,14 @@ export default function AdminUsersPage() {
   const save = (id: string, body: UserUpdateBody, label: string) => updateMut.mutateAsync({ id, body, label })
 
   const planOptions = [
-    { value: 'all', label: tr('كل الباقات', 'All plans') },
-    { value: 'free', label: tr('مجانية', 'Free') },
+    { value: 'all', label: t('allPlans') },
+    { value: 'free', label: t('free') },
     ...plans.map(p => ({ value: p.id, label: p.name })),
   ]
 
   const columns: Column<AdminUser>[] = [
     {
-      key: 'user', header: tr('المستخدم', 'User'),
+      key: 'user', header: t('user'),
       cell: u => (
         <div className="flex min-w-0 items-center gap-3">
           <Avatar name={u.name || u.email} size="sm" />
@@ -103,27 +104,27 @@ export default function AdminUsersPage() {
         </div>
       ),
     },
-    { key: 'plan', header: tr('الباقة', 'Plan'), cell: u => <Badge tone={u.plans?.name ? 'brand' : 'neutral'}>{u.plans?.name || tr('مجانية', 'Free')}</Badge> },
-    { key: 'expires', header: tr('تنتهي', 'Expires'), hideBelow: 'md', cell: u => <span className="tabular text-xs text-muted">{u.plan_expires_at ? fmtDate(u.plan_expires_at) : '—'}</span> },
+    { key: 'plan', header: t('plan'), cell: u => <Badge tone={u.plans?.name ? 'brand' : 'neutral'}>{u.plans?.name || t('free')}</Badge> },
+    { key: 'expires', header: t('expires'), hideBelow: 'md', cell: u => <span className="tabular text-xs text-muted">{u.plan_expires_at ? fmtDate(u.plan_expires_at) : '—'}</span> },
     {
-      key: 'role', header: tr('الدور', 'Role'), hideBelow: 'sm',
-      cell: u => <Badge tone={u.role === 'admin' ? 'violet' : 'neutral'} icon={u.role === 'admin' ? ShieldCheckIcon : undefined}>{u.role === 'admin' ? tr('مدير', 'Admin') : tr('مستخدم', 'User')}</Badge>,
+      key: 'role', header: t('role'), hideBelow: 'sm',
+      cell: u => <Badge tone={u.role === 'admin' ? 'violet' : 'neutral'} icon={u.role === 'admin' ? ShieldCheckIcon : undefined}>{u.role === 'admin' ? t('admin') : t('user2')}</Badge>,
     },
-    { key: 'status', header: tr('الحالة', 'Status'), cell: u => <StatusPill status={u.is_active !== false ? 'active' : 'blocked'}>{u.is_active !== false ? tr('نشط', 'Active') : tr('موقوف', 'Suspended')}</StatusPill> },
-    { key: 'joined', header: tr('انضم', 'Joined'), hideBelow: 'lg', cell: u => <span className="tabular text-xs text-muted">{fmtDate(u.created_at)}</span> },
+    { key: 'status', header: t('status'), cell: u => <StatusPill status={u.is_active !== false ? 'active' : 'blocked'}>{u.is_active !== false ? t('active') : t('suspended')}</StatusPill> },
+    { key: 'joined', header: t('joined'), hideBelow: 'lg', cell: u => <span className="tabular text-xs text-muted">{fmtDate(u.created_at)}</span> },
     {
-      key: 'actions', header: <span className="sr-only">{tr('إجراءات', 'Actions')}</span>, align: 'end',
+      key: 'actions', header: <span className="sr-only">{t('actions')}</span>, align: 'end',
       cell: u => (
         <div onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
           <Dropdown
-            label={tr(`إجراءات ${u.email}`, `Actions for ${u.email}`)}
+            label={t('actions2', { email: u.email })}
             triggerClassName="h-9 w-9 justify-center rounded-xl hover:bg-surface-3"
             trigger={<EllipsisHorizontalIcon className="h-5 w-5" />}
             items={[
-              { label: tr('عرض وتعديل', 'View & edit'), icon: EyeIcon, onClick: () => { setSaveError(null); setSelected(u) } },
+              { label: t('viewEdit'), icon: EyeIcon, onClick: () => { setSaveError(null); setSelected(u) } },
               u.is_active !== false
-                ? { label: tr('إيقاف الحساب', 'Suspend'), icon: NoSymbolIcon, danger: true, divider: true, disabled: u.id === me?.id, onClick: () => setQuick({ user: u, action: 'suspend' }) }
-                : { label: tr('تفعيل الحساب', 'Activate'), icon: CheckCircleIcon, divider: true, onClick: () => setQuick({ user: u, action: 'activate' }) },
+                ? { label: t('suspend'), icon: NoSymbolIcon, danger: true, divider: true, disabled: u.id === me?.id, onClick: () => setQuick({ user: u, action: 'suspend' }) }
+                : { label: t('activate'), icon: CheckCircleIcon, divider: true, onClick: () => setQuick({ user: u, action: 'activate' }) },
             ]}
           />
         </div>
@@ -134,25 +135,25 @@ export default function AdminUsersPage() {
   const clearFilters = () => { setPlanF('all'); setStatusF('all'); setRoleF('all') }
 
   return (
-    <AdminLayout title={tr('المستخدمون', 'Users')}>
+    <AdminLayout title={t('usersAlt')}>
       <PageHeader className="mb-6"
-        eyebrow={tr('الإدارة', 'Administration')}
-        title={tr('المستخدمون', 'Users')}
-        description={tr('ابحث عن أي حساب، وعيّن الباقات، وغيّر الأدوار، وأوقف الحسابات أو فعّلها.', 'Find any account, assign plans, change roles, and suspend or activate accounts.')}
-        actions={<Badge tone="neutral" size="md" className="tabular">{tr(`${formatNumber(data?.total ?? 0)} مستخدم`, `${formatNumber(data?.total ?? 0)} users`)}</Badge>}
+        eyebrow={t('administration')}
+        title={t('usersAlt')}
+        description={t('findAnyAccountAssign')}
+        actions={<Badge tone="neutral" size="md" className="tabular">{tn('userCount', data?.total ?? 0, { n: fmtNumber(data?.total ?? 0) })}</Badge>}
       />
 
       <Card padding="none">
         <div className="flex flex-col gap-3 border-b border-line-soft p-4 lg:flex-row lg:items-center">
-          <SearchInput value={rawSearch} onChange={setRawSearch} placeholder={tr('ابحث بالاسم أو البريد الإلكتروني', 'Search by name or email')} size="sm" wrapperClassName="lg:max-w-sm lg:flex-1" />
+          <SearchInput value={rawSearch} onChange={setRawSearch} placeholder={t('searchNameEmail')} size="sm" wrapperClassName="lg:max-w-sm lg:flex-1" />
           <div className="flex flex-wrap items-center gap-2">
             <FunnelIcon className="hidden h-4 w-4 text-muted sm:block" aria-hidden="true" />
-            <Select size="sm" aria-label={tr('تصفية حسب الباقة', 'Filter by plan')} value={planF} onChange={e => setPlanF(e.target.value)} options={planOptions} className="min-w-[140px]" />
-            <Select size="sm" aria-label={tr('تصفية حسب الحالة', 'Filter by status')} value={statusF} onChange={e => setStatusF(e.target.value)} className="min-w-[120px]"
-              options={[{ value: 'all', label: tr('كل الحالات', 'All statuses') }, { value: 'active', label: tr('نشط', 'Active') }, { value: 'suspended', label: tr('موقوف', 'Suspended') }]} />
-            <Select size="sm" aria-label={tr('تصفية حسب الدور', 'Filter by role')} value={roleF} onChange={e => setRoleF(e.target.value)} className="min-w-[120px]"
-              options={[{ value: 'all', label: tr('كل الأدوار', 'All roles') }, { value: 'user', label: tr('مستخدم', 'User') }, { value: 'admin', label: tr('مدير', 'Admin') }]} />
-            {filtering && <Button size="sm" variant="ghost" icon={XMarkIcon} onClick={clearFilters}>{tr('مسح', 'Clear')}</Button>}
+            <Select size="sm" aria-label={t('filterPlan')} value={planF} onChange={e => setPlanF(e.target.value)} options={planOptions} className="min-w-[140px]" />
+            <Select size="sm" aria-label={t('filterStatus')} value={statusF} onChange={e => setStatusF(e.target.value)} className="min-w-[120px]"
+              options={[{ value: 'all', label: t('allStatuses') }, { value: 'active', label: t('active') }, { value: 'suspended', label: t('suspended') }]} />
+            <Select size="sm" aria-label={t('filterRole')} value={roleF} onChange={e => setRoleF(e.target.value)} className="min-w-[120px]"
+              options={[{ value: 'all', label: t('allRoles') }, { value: 'user', label: t('user2') }, { value: 'admin', label: t('admin') }]} />
+            {filtering && <Button size="sm" variant="ghost" icon={XMarkIcon} onClick={clearFilters}>{t('clear')}</Button>}
           </div>
         </div>
 
@@ -165,12 +166,12 @@ export default function AdminUsersPage() {
               rowKey={u => u.id}
               columns={columns}
               minWidth={720}
-              caption={tr('قائمة المستخدمين', 'Users list')}
+              caption={t('usersList')}
               onRowClick={u => { setSaveError(null); setSelected(u) }}
               empty={<EmptyState size="sm" icon={UserGroupIcon}
-                title={search || filtering ? tr('لا توجد نتائج مطابقة', 'No matching users') : tr('لا يوجد مستخدمون بعد', 'No users yet')}
-                description={search || filtering ? tr('جرّب كلمة بحث أخرى أو امسح عوامل التصفية.', 'Try another search or clear the filters.') : undefined}
-                action={(search || filtering) ? <Button size="sm" variant="secondary" onClick={() => { setRawSearch(''); clearFilters() }}>{tr('مسح البحث', 'Clear search')}</Button> : undefined} />}
+                title={search || filtering ? t('noMatchingUsers') : t('noUsersYet')}
+                description={search || filtering ? t('tryAnotherSearchClear') : undefined}
+                action={(search || filtering) ? <Button size="sm" variant="secondary" onClick={() => { setRawSearch(''); clearFilters() }}>{t('clearSearch')}</Button> : undefined} />}
             />
           </div>
         )}
@@ -192,15 +193,15 @@ export default function AdminUsersPage() {
         destructive={quick?.action === 'suspend'}
         onClose={() => setQuick(null)}
         loading={updateMut.isLoading}
-        title={quick?.action === 'suspend' ? tr('إيقاف هذا المستخدم؟', 'Suspend this user?') : tr('تفعيل هذا المستخدم؟', 'Activate this user?')}
+        title={quick?.action === 'suspend' ? t('suspendUser') : t('activateUser')}
         description={quick ? (quick.action === 'suspend'
-          ? tr(`سيُمنع ${quick.user.email} من الدخول وتنتهي جلساته الحالية.`, `${quick.user.email} will be blocked from signing in and signed out everywhere.`)
+          ? t('willBlockedSigningSigned', { email: quick.user.email })
           : quick.user.email) : undefined}
-        confirmLabel={quick?.action === 'suspend' ? tr('إيقاف', 'Suspend') : tr('تفعيل', 'Activate')}
+        confirmLabel={quick?.action === 'suspend' ? t('suspend2') : t('activate2')}
         onConfirm={() => {
           if (!quick) return
           const active = quick.action === 'activate'
-          save(quick.user.id, { is_active: active }, active ? tr('تم تفعيل المستخدم', 'User activated') : tr('تم إيقاف المستخدم', 'User suspended'))
+          save(quick.user.id, { is_active: active }, active ? t('userActivated') : t('userSuspended'))
             .then(() => setQuick(null), () => setQuick(null))
         }}
       />

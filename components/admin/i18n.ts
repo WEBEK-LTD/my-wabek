@@ -1,26 +1,32 @@
 import { useCallback, useMemo } from 'react'
-import { useTranslation } from '@/hooks/useTranslation'
+import { useT, type LocaleDict, type Messages } from '@/lib/i18n-local'
+
+type Vars = Record<string, string | number | null | undefined>
+
+/** Keys that come in plural pairs: `foo_one` + `foo_other` → `foo`. */
+type PluralBase<M> = { [K in keyof M]: K extends `${infer B}_other` ? B : never }[keyof M]
 
 /**
- * Admin copy helper. The admin panel is Arabic-first; every other UI
- * language gets the English string. Keeps page copy next to the markup
- * instead of adding hundreds of admin-only keys to lib/i18n.ts.
+ * Admin wrapper around `useT` (see lib/i18n-local.ts). Copy lives in
+ * `locales/admin/*.ts`; this adds the date formats the admin tables use,
+ * tolerant of invalid / unknown input, and `tn` for plural forms.
  *
- *   const { tr, fmtDate } = useAdminT()
- *   tr('المستخدمون', 'Users')
+ *   import messages from '@/locales/admin/users'
+ *   const { t, tn, fmtDate } = useAdminT(messages)
+ *   t('title')  tn('userCount', n, { n: fmtNumber(n) })
  */
-export function useAdminT() {
-  const { lang, isRTL, dir, t } = useTranslation()
-  const ar = lang === 'ar'
-  const tr = useCallback((arText: string, enText: string) => (ar ? arText : enText), [ar])
-  // Latin digits in every language (matches formatNumber in the UI kit).
-  const locale = ar ? 'ar-u-nu-latn' : lang === 'en' ? 'en-GB' : lang
+export function useAdminT<M extends Messages>(messages: LocaleDict<M>) {
+  const base = useT(messages)
+  const { locale, t } = base
 
   const fmt = useMemo(() => {
     const make = (opts: Intl.DateTimeFormatOptions) => {
       try { return new Intl.DateTimeFormat(locale, opts) } catch { return new Intl.DateTimeFormat('en-GB', opts) }
     }
+    let plural: Intl.PluralRules
+    try { plural = new Intl.PluralRules(locale) } catch { plural = new Intl.PluralRules('en-GB') }
     return {
+      plural,
       date: make({ year: 'numeric', month: 'short', day: 'numeric' }),
       dateTime: make({ year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
       time: make({ hour: '2-digit', minute: '2-digit' }),
@@ -35,8 +41,15 @@ export function useAdminT() {
     return isNaN(d.getTime()) ? '—' : f.format(d)
   }
 
+  /** Plural-aware lookup: picks `${base}_one` when the language's rule says "one", else `${base}_other`. */
+  const tn = useCallback((key: PluralBase<M>, n: number, vars?: Vars) => {
+    const form = fmt.plural.select(n) === 'one' ? 'one' : 'other'
+    return t(`${String(key)}_${form}` as keyof M, vars)
+  }, [fmt, t])
+
   return {
-    tr, lang, isRTL, dir, t, locale,
+    ...base,
+    tn,
     fmtDate: (v: unknown) => safe(v, fmt.date),
     fmtDateTime: (v: unknown) => safe(v, fmt.dateTime),
     fmtTime: (v: unknown) => safe(v, fmt.time),
@@ -45,7 +58,8 @@ export function useAdminT() {
   }
 }
 
-export type AdminT = ReturnType<typeof useAdminT>['tr']
+/** Translate function returned by `useAdminT` for a given dictionary. */
+export type AdminT<M extends Messages> = ReturnType<typeof useAdminT<M>>['t']
 
 /** Error message from an axios error (API `{ error }` body), else the fallback. */
 export function apiError(e: unknown, fallback: string): string {

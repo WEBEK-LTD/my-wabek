@@ -11,6 +11,7 @@ import {
 import type { Tone } from '@/components/ui'
 import { apiError, useAdminT } from '@/components/admin/i18n'
 import { ErrorState, InfoTile } from '@/components/admin/shared'
+import supportMessages from '@/locales/admin/support'
 
 type Status = 'open' | 'pending' | 'resolved' | 'closed'
 interface TicketUser { name?: string | null; email?: string | null; created_at?: string | null }
@@ -24,7 +25,7 @@ const STATUSES: Status[] = ['open', 'pending', 'resolved', 'closed']
 const TONE: Record<Status, Tone> = { open: 'brand', pending: 'warning', resolved: 'success', closed: 'neutral' }
 
 export default function AdminSupportPage() {
-  const { tr, fmtDate, fmtTime, fmtDateTime } = useAdminT()
+  const { t, fmtDate, fmtTime, fmtDateTime } = useAdminT(supportMessages)
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [loadingList, setLoadingList] = useState(true)
   const [listError, setListError] = useState<string | null>(null)
@@ -40,7 +41,7 @@ export default function AdminSupportPage() {
   const [savingKnowledge, setSavingKnowledge] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  const statusLabel = (s: Status) => ({ open: tr('مفتوحة', 'Open'), pending: tr('معلّقة', 'Pending'), resolved: tr('محلولة', 'Resolved'), closed: tr('مغلقة', 'Closed') })[s] || s
+  const statusLabel = (s: Status) => ({ open: t('openAlt'), pending: t('pending'), resolved: t('resolved'), closed: t('closed') })[s] || s
 
   useEffect(() => { loadTickets() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [filterStatus])
   useEffect(() => { axios.get('/api/admin/support/knowledge').then(r => setKnowledge(r.data.knowledge || '')).catch(() => {}) }, [])
@@ -53,7 +54,7 @@ export default function AdminSupportPage() {
       const r = await axios.get(`/api/admin/support/tickets?status=${filterStatus}`)
       setTickets(r.data.tickets || [])
       setListError(null)
-    } catch (e) { setListError(apiError(e, tr('تعذّر تحميل التذاكر', 'Could not load tickets'))) }
+    } catch (e) { setListError(apiError(e, t('couldNotLoadTickets'))) }
     setLoadingList(false)
   }
 
@@ -71,11 +72,11 @@ export default function AdminSupportPage() {
     setSending(true)
     try {
       await axios.post('/api/admin/support/reply', { ticket_id: active.id, content: reply })
-      toast.success(tr('أُرسل الرد — أُبلغ المستخدم بالبريد وواتساب', 'Reply sent — user notified by email & WhatsApp'))
+      toast.success(t('replySentUserNotified'))
       setReply('')
       await loadMessages(active.id)
       await loadTickets()
-    } catch (e) { toast.error(apiError(e, tr('تعذّر الإرسال', 'Failed to send'))) }
+    } catch (e) { toast.error(apiError(e, t('failedSend'))) }
     setSending(false)
   }
 
@@ -84,17 +85,17 @@ export default function AdminSupportPage() {
       await axios.put('/api/admin/support/tickets', { id, status })
       setTickets(ts => ts.map(t => (t.id === id ? { ...t, status } : t)))
       if (active?.id === id) setActive(a => (a ? { ...a, status } : a))
-      toast.success(tr(`حُدّثت التذكرة إلى «${statusLabel(status)}»`, `Ticket marked as ${statusLabel(status)}`))
-    } catch (e) { toast.error(apiError(e, tr('تعذّر تحديث الحالة', 'Could not update the status'))) }
+      toast.success(t('ticketMarkedAs', { status: statusLabel(status) }))
+    } catch (e) { toast.error(apiError(e, t('couldNotUpdateStatus'))) }
   }
 
   async function saveKnowledge() {
     setSavingKnowledge(true)
     try {
       await axios.post('/api/admin/support/knowledge', { knowledge })
-      toast.success(tr('حُدّثت معرفة المساعد', 'AI knowledge updated'))
+      toast.success(t('aiKnowledgeUpdated'))
       setShowKnowledge(false)
-    } catch { toast.error(tr('تعذّر الحفظ', 'Failed to save')) }
+    } catch { toast.error(t('failedSave')) }
     setSavingKnowledge(false)
   }
 
@@ -108,30 +109,30 @@ export default function AdminSupportPage() {
   const customer = active?.users
 
   return (
-    <AdminLayout title={tr('تذاكر الدعم', 'Support tickets')}>
+    <AdminLayout title={t('supportTickets')}>
       <PageHeader className="mb-6"
-        eyebrow={tr('الدعم', 'Support')}
-        title={tr('تذاكر الدعم', 'Support tickets')}
-        description={tr('رد على العملاء من مكان واحد؛ يصلهم الرد بالبريد وواتساب.', 'Answer customers in one place; replies reach them by email and WhatsApp.')}
+        eyebrow={t('support')}
+        title={t('supportTickets')}
+        description={t('answerCustomersOnePlace')}
         actions={<>
-          <Button variant="secondary" icon={BookOpenIcon} onClick={() => setShowKnowledge(true)}>{tr('معرفة المساعد الذكي', 'AI knowledge base')}</Button>
-          <Button variant="ghost" size="icon" icon={ArrowPathIcon} aria-label={tr('تحديث', 'Refresh')} onClick={() => { loadTickets(); if (active) loadMessages(active.id) }} />
+          <Button variant="secondary" icon={BookOpenIcon} onClick={() => setShowKnowledge(true)}>{t('aiKnowledgeBase')}</Button>
+          <Button variant="ghost" size="icon" icon={ArrowPathIcon} aria-label={t('refresh')} onClick={() => { loadTickets(); if (active) loadMessages(active.id) }} />
         </>}
       />
 
       <Card padding="none" className="overflow-hidden">
         <div className="grid lg:h-[calc(100vh-260px)] lg:min-h-[560px] lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)_260px]">
           {/* Queue */}
-          <aside className={cn('flex min-h-0 flex-col border-line-soft lg:border-e', active && 'hidden lg:flex')} aria-label={tr('قائمة التذاكر', 'Ticket queue')}>
+          <aside className={cn('flex min-h-0 flex-col border-line-soft lg:border-e', active && 'hidden lg:flex')} aria-label={t('ticketQueue')}>
             <div className="space-y-3 border-b border-line-soft p-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-ink">{tr('الطابور', 'Queue')}</p>
-                {openCount > 0 && <Badge tone="danger" size="sm" dot pulse>{tr(`${openCount} مفتوحة`, `${openCount} open`)}</Badge>}
+                <p className="text-sm font-semibold text-ink">{t('queue')}</p>
+                {openCount > 0 && <Badge tone="danger" size="sm" dot pulse>{t('open2', { openCount })}</Badge>}
               </div>
-              <SearchInput size="sm" value={q} onChange={setQ} placeholder={tr('ابحث بالموضوع أو الرقم أو العميل', 'Search subject, number or customer')} />
+              <SearchInput size="sm" value={q} onChange={setQ} placeholder={t('searchSubjectNumberCustomer')} />
               <div className="-mx-1 overflow-x-auto px-1 scrollbar-none">
-                <Tabs variant="segmented" size="sm" value={filterStatus} onChange={v => setFilterStatus(v as 'all' | Status)} aria-label={tr('تصفية حسب الحالة', 'Filter by status')}
-                  tabs={[{ id: 'all', label: tr('الكل', 'All') }, ...STATUSES.map(s => ({ id: s, label: statusLabel(s) }))]} />
+                <Tabs variant="segmented" size="sm" value={filterStatus} onChange={v => setFilterStatus(v as 'all' | Status)} aria-label={t('filterStatus')}
+                  tabs={[{ id: 'all', label: t('all') }, ...STATUSES.map(s => ({ id: s, label: statusLabel(s) }))]} />
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
@@ -140,9 +141,9 @@ export default function AdminSupportPage() {
               ) : listError ? (
                 <div className="p-4"><ErrorState description={listError} onRetry={loadTickets} /></div>
               ) : filtered.length === 0 ? (
-                <EmptyState size="sm" icon={InboxIcon} title={q ? tr('لا نتائج', 'No results') : tr('لا توجد تذاكر', 'No tickets')}
-                  description={filterStatus !== 'all' ? tr('جرّب حالة أخرى.', 'Try another status.') : undefined}
-                  action={filterStatus !== 'all' || q ? <Button size="sm" variant="secondary" onClick={() => { setFilterStatus('all'); setQ('') }}>{tr('عرض الكل', 'Show all')}</Button> : undefined} />
+                <EmptyState size="sm" icon={InboxIcon} title={q ? t('noResults') : t('noTickets')}
+                  description={filterStatus !== 'all' ? t('tryAnotherStatus') : undefined}
+                  action={filterStatus !== 'all' || q ? <Button size="sm" variant="secondary" onClick={() => { setFilterStatus('all'); setQ('') }}>{t('showAll')}</Button> : undefined} />
               ) : (
                 <ul>
                   {filtered.map(t => (
@@ -169,19 +170,19 @@ export default function AdminSupportPage() {
           </aside>
 
           {/* Thread */}
-          <section className={cn('flex min-h-[520px] min-w-0 flex-col lg:min-h-0', !active && 'hidden lg:flex')} aria-label={tr('المحادثة', 'Conversation')}>
+          <section className={cn('flex min-h-[520px] min-w-0 flex-col lg:min-h-0', !active && 'hidden lg:flex')} aria-label={t('conversation')}>
             {active ? (
               <>
                 <div className="flex flex-wrap items-center gap-3 border-b border-line-soft px-4 py-3 sm:px-5">
-                  <Button size="icon-sm" variant="ghost" icon={ArrowRightIcon} className="lg:hidden ltr:[&_svg]:rotate-180" aria-label={tr('العودة إلى القائمة', 'Back to list')} onClick={() => setActive(null)} />
+                  <Button size="icon-sm" variant="ghost" icon={ArrowRightIcon} className="lg:hidden ltr:[&_svg]:rotate-180" aria-label={t('backList')} onClick={() => setActive(null)} />
                   <div className="min-w-0 flex-1">
                     <h2 className="truncate text-sm font-semibold text-ink"><span dir="ltr" className="tabular text-muted">#{active.ticket_number}</span> · {active.subject}</h2>
-                    <p className="text-xs text-muted">{tr('فُتحت في', 'Opened')} {fmtDate(active.created_at)}</p>
+                    <p className="text-xs text-muted">{t('opened')} {fmtDate(active.created_at)}</p>
                   </div>
                   <Dropdown
-                    label={tr('تغيير الحالة', 'Change status')}
+                    label={t('changeStatus')}
                     triggerClassName="h-9 gap-2 rounded-xl border border-line px-3 text-sm hover:bg-surface-2"
-                    trigger={<><Badge tone={TONE[active.status]} size="sm" dot>{statusLabel(active.status)}</Badge><span className="text-muted">{tr('تغيير', 'Change')}</span></>}
+                    trigger={<><Badge tone={TONE[active.status]} size="sm" dot>{statusLabel(active.status)}</Badge><span className="text-muted">{t('change')}</span></>}
                     items={STATUSES.map(s => ({ label: statusLabel(s), selected: s === active.status, icon: s === active.status ? CheckIcon : undefined, disabled: s === active.status, onClick: () => updateStatus(active.id, s) }))}
                   />
                 </div>
@@ -190,7 +191,7 @@ export default function AdminSupportPage() {
                   {loadingMsgs && !messages.length ? (
                     [0, 1, 2].map(i => <Skeleton key={i} className={cn('h-14 w-2/3 rounded-2xl', i % 2 && 'ms-auto')} />)
                   ) : messages.length === 0 ? (
-                    <EmptyState size="sm" icon={ChatBubbleLeftRightIcon} title={tr('لا توجد رسائل في هذه التذكرة', 'No messages in this ticket')} />
+                    <EmptyState size="sm" icon={ChatBubbleLeftRightIcon} title={t('noMessagesTicket')} />
                   ) : messages.map(m => {
                     const mine = m.sender_type === 'admin'
                     const ai = m.sender_type === 'ai'
@@ -200,7 +201,7 @@ export default function AdminSupportPage() {
                           ? <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-bg text-violet"><SparklesIcon className="h-4 w-4" aria-hidden="true" /></span>
                           : <Avatar name={customer?.name || customer?.email || '?'} size="sm" />)}
                         <div className={cn('max-w-[78%]', mine && 'items-end text-end')}>
-                          {!mine && <p className="mb-1 text-xs text-muted">{ai ? tr('مساعد WABEK الذكي', 'WABEK AI') : customer?.name || tr('المستخدم', 'User')}</p>}
+                          {!mine && <p className="mb-1 text-xs text-muted">{ai ? t('wabekAi') : customer?.name || t('user')}</p>}
                           <div dir="auto" className={cn('whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-start text-sm leading-relaxed',
                             mine ? 'rounded-se-md bg-brand-gradient text-[#04282C]'
                               : ai ? 'rounded-ss-md border border-violet/20 bg-violet-bg text-ink'
@@ -216,29 +217,29 @@ export default function AdminSupportPage() {
                 <div className="border-t border-line-soft p-3 sm:p-4">
                   <div className="flex items-end gap-2">
                     <Textarea
-                      aria-label={tr('الرد', 'Reply')}
+                      aria-label={t('reply')}
                       value={reply}
                       onChange={e => setReply(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply() } }}
-                      placeholder={tr('اكتب ردك… (Enter للإرسال، Shift+Enter لسطر جديد)', 'Type a reply… (Enter to send, Shift+Enter for a new line)')}
+                      placeholder={t('typeReplyEnterSend')}
                       rows={2}
                       maxLength={10000}
                       className="flex-1 resize-none"
                     />
-                    <Button icon={PaperAirplaneIcon} className="rtl:[&_svg]:-scale-x-100" loading={sending} disabled={!reply.trim()} onClick={sendReply}>{tr('إرسال', 'Send')}</Button>
+                    <Button icon={PaperAirplaneIcon} className="rtl:[&_svg]:-scale-x-100" loading={sending} disabled={!reply.trim()} onClick={sendReply}>{t('send')}</Button>
                   </div>
-                  <p className="mt-1.5 text-2xs text-muted">{tr('سيصل الرد إلى العميل بالبريد الإلكتروني وواتساب.', 'The customer gets the reply by email and WhatsApp.')}</p>
+                  <p className="mt-1.5 text-2xs text-muted">{t('customerGetsReplyEmail')}</p>
                 </div>
               </>
             ) : (
               <div className="flex flex-1 items-center justify-center p-6">
-                <EmptyState icon={ChatBubbleLeftRightIcon} title={tr('اختر تذكرة', 'Pick a ticket')} description={tr('اختر تذكرة من الطابور لعرض المحادثة والرد عليها.', 'Choose a ticket from the queue to read and reply.')} />
+                <EmptyState icon={ChatBubbleLeftRightIcon} title={t('pickTicket')} description={t('chooseTicketQueueRead')} />
               </div>
             )}
           </section>
 
           {/* Customer */}
-          <aside className="hidden min-h-0 overflow-y-auto border-s border-line-soft p-4 xl:block" aria-label={tr('بيانات العميل', 'Customer details')}>
+          <aside className="hidden min-h-0 overflow-y-auto border-s border-line-soft p-4 xl:block" aria-label={t('customerDetails')}>
             {active && customer ? (
               <div className="space-y-4">
                 <div className="flex flex-col items-center gap-2 text-center">
@@ -247,16 +248,16 @@ export default function AdminSupportPage() {
                   <p dir="ltr" className="break-all text-xs text-muted">{customer.email}</p>
                 </div>
                 <div className="grid gap-2">
-                  <InfoTile label={tr('رقم التذكرة', 'Ticket')} value={<span dir="ltr" className="tabular">#{active.ticket_number}</span>} />
-                  <InfoTile label={tr('الحالة', 'Status')} value={<Badge tone={TONE[active.status]} size="sm">{statusLabel(active.status)}</Badge>} />
-                  <InfoTile label={tr('فُتحت', 'Opened')} value={fmtDateTime(active.created_at)} />
-                  <InfoTile label={tr('العميل منذ', 'Customer since')} value={fmtDate(customer.created_at)} />
+                  <InfoTile label={t('ticket')} value={<span dir="ltr" className="tabular">#{active.ticket_number}</span>} />
+                  <InfoTile label={t('status')} value={<Badge tone={TONE[active.status]} size="sm">{statusLabel(active.status)}</Badge>} />
+                  <InfoTile label={t('opened2')} value={fmtDateTime(active.created_at)} />
+                  <InfoTile label={t('customerSince')} value={fmtDate(customer.created_at)} />
                 </div>
               </div>
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted">
                 <UserIcon className="h-6 w-6" aria-hidden="true" />
-                {tr('تظهر بيانات العميل هنا', 'Customer details appear here')}
+                {t('customerDetailsAppearHere')}
               </div>
             )}
           </aside>
@@ -268,30 +269,29 @@ export default function AdminSupportPage() {
         onClose={() => setShowKnowledge(false)}
         size="lg"
         icon={SparklesIcon}
-        title={tr('قاعدة معرفة مساعد WABEK', 'WABEK AI knowledge base')}
-        description={tr('معلومات إضافية يستخدمها المساعد عند الرد على التذاكر. يعرف ميزات WABEK افتراضيًا.', 'Extra information the AI uses when answering tickets. It already knows WABEK features.')}
+        title={t('wabekAiKnowledgeBase')}
+        description={t('extraInformationAiUses')}
         footer={<>
-          <Button variant="secondary" onClick={() => setShowKnowledge(false)}>{tr('إلغاء', 'Cancel')}</Button>
-          <Button loading={savingKnowledge} onClick={saveKnowledge}>{tr('حفظ المعرفة', 'Save knowledge')}</Button>
+          <Button variant="secondary" onClick={() => setShowKnowledge(false)}>{t('cancel')}</Button>
+          <Button loading={savingKnowledge} onClick={saveKnowledge}>{t('saveKnowledge')}</Button>
         </>}
       >
         <div className="space-y-4">
           <div className="rounded-xl border border-line-soft bg-surface-2 p-3.5">
-            <p className="eyebrow mb-2">{tr('المعرفة المدمجة', 'Built-in knowledge')}</p>
+            <p className="eyebrow mb-2">{t('builtKnowledge')}</p>
             <ul className="space-y-1.5 text-xs text-body">
               {[
-                tr('ميزات WABEK وأسعارها', 'WABEK features and pricing'),
-                tr('الحملات الجماعية، الروبوت، صندوق الفريق، الرد الذكي', 'Bulk campaigns, chatbot, team inbox, AI auto-reply'),
-                tr('يدعم Cloud API وواتساب ويب (Baileys)', 'Supports Cloud API + WhatsApp Web (Baileys)'),
-                tr('ساعات العمل: 9 صباحًا – 6 مساءً يوميًا', 'Business hours: 9AM–6PM daily'),
-                tr('بريد الدعم: support@waabek.com', 'Support email: support@waabek.com'),
+                t('wabekFeaturesPricing'),
+                t('bulkCampaignsChatbotTeam'),
+                t('supportsCloudApiWhatsapp'),
+                t('businessHours9am6pm'),
+                t('supportEmailSupportWaabek'),
               ].map(item => <li key={item} className="flex items-center gap-2"><CheckIcon className="h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />{item}</li>)}
             </ul>
           </div>
-          <Field label={tr('معرفة مخصّصة', 'Custom knowledge')} hint={tr('اكتب نصًا عاديًا يستخدمه المساعد في إجاباته.', 'Plain text the AI uses in its answers.')}>
+          <Field label={t('customKnowledge')} hint={t('plainTextAiUses')}>
             <Textarea rows={9} value={knowledge} onChange={e => setKnowledge(e.target.value)} className="font-mono text-sm"
-              placeholder={tr('أمثلة:\n- سياسة الاسترداد: استرداد كامل خلال 14 يومًا للباقات السنوية\n- ندعم العربية والإنجليزية والفرنسية والتركية',
-                'Examples:\n- Refund policy: full refund within 14 days for annual plans\n- We support Arabic, English, French, Turkish')} />
+              placeholder={t('examplesRefundPolicyFull')} />
           </Field>
         </div>
       </Modal>
