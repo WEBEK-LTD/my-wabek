@@ -1,6 +1,7 @@
 import { GetServerSideProps } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
 import { v4 as uuidv4 } from 'uuid'
+import { emitWebhookEvent } from '@/lib/outgoing-webhooks'
 
 export default function RedirectPage() {
   return <div>Redirecting...</div>
@@ -54,6 +55,18 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       ip_address: ip.slice(0, 64),
       user_agent: ua,
     })
+    try {
+      const { data: owner } = await db.from('tracked_links').select('user_id, short_code').eq('id', link.id).maybeSingle()
+      if (owner?.user_id) {
+        // Do not hold the visitor's redirect for a slow receiver
+        await Promise.race([
+          emitWebhookEvent(owner.user_id, 'link_clicked', {
+            link_id: link.id, short_code: owner.short_code || code, url: destination, clicked_at: new Date().toISOString(),
+          }),
+          new Promise(r => setTimeout(r, 1500)),
+        ])
+      }
+    } catch { /* never block the redirect */ }
   }
 
   return { redirect: { destination, permanent: false } }
