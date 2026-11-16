@@ -178,11 +178,22 @@ function StepDot({ n, label, state }: { n: number; label: string; state: 'done' 
   )
 }
 
+/** Arabic count of minutes with the correct noun form. */
+function arabicMinutes(n: number): string {
+  if (n === 1) return 'دقيقة واحدة'
+  if (n === 2) return 'دقيقتان'
+  if (n >= 3 && n <= 10) return `${n} دقائق`
+  return `${n} دقيقة`
+}
+
 export default function OTPPage() {
   // The default API key is fetched on demand (owner-only), not from the user object.
   const { data: defaultKeyData, isLoading: keyLoading } = useQuery<{ api_key: string | null }>('default-api-key',
     () => axios.get('/api/settings/default-api-key').then(r => r.data), { retry: false, staleTime: Infinity })
   const apiKey = defaultKeyData?.api_key || null
+  // Real server-side OTP settings (OTP_EXPIRY_MINUTES).
+  const otpConfigQ = useQuery<{ expiry_minutes: number; code_length: number }>('otp-config',
+    () => axios.get('/api/settings/otp-config').then(r => r.data), { retry: false, staleTime: 300000 })
 
   const [phone, setPhone] = useState('')
   const [purpose, setPurpose] = useState('verification')
@@ -335,7 +346,7 @@ export default function OTPPage() {
               <dl className="mt-3 divide-y divide-line-soft text-sm">
                 {[
                   { label: 'طول الرمز', value: '6 أرقام' },
-                  { label: 'مدة الصلاحية', value: `${process.env.NEXT_PUBLIC_OTP_EXPIRY || 10} دقائق` },
+                  { label: 'مدة الصلاحية', value: otpConfigQ.data ? arabicMinutes(otpConfigQ.data.expiry_minutes) : '…' },
                   { label: 'الاستخدام', value: 'مرة واحدة فقط' },
                   { label: 'التخزين', value: 'مُشفّر بـ SHA-256' },
                   { label: 'الإرسال', value: 'عبر رقم واتساب المتصل' },
