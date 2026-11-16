@@ -108,7 +108,7 @@ const en = {
 
   // Templates
   tpl_title: 'Approved templates',
-  tpl_d: 'Outside the 24-hour window WhatsApp only allows approved templates. Send one from a campaign to restart the conversation.',
+  tpl_d: 'Outside the 24-hour window WhatsApp only allows approved templates. Pick one, fill in its variables and send it to restart the conversation.',
   tpl_empty: 'No approved templates on this number',
   tpl_wa_web: 'WhatsApp Web numbers don’t use Meta templates.',
   tpl_vars: '{n} variables',
@@ -116,6 +116,15 @@ const en = {
   tpl_copy: 'Copy text',
   copied: 'Copied',
   tpl_error: 'Couldn’t load templates',
+  tpl_pick: 'Choose',
+  tpl_back: 'Back to templates',
+  tpl_var: 'Variable {n}',
+  tpl_preview: 'Preview',
+  tpl_send: 'Send template',
+  tpl_sent: 'Template sent',
+  tpl_send_failed: 'Couldn’t send the template',
+  tpl_fill_all: 'Fill in every variable',
+  tpl_buttons_note: 'This template has buttons; they are sent as approved.',
 
   // Panel
   contact: 'Contact',
@@ -254,7 +263,7 @@ const ar: Record<keyof typeof en, string> = {
   ai_failed: 'تعذّر الحصول على اقتراح',
 
   tpl_title: 'القوالب المعتمدة',
-  tpl_d: 'خارج نافذة الـ24 ساعة لا يسمح واتساب إلا بالقوالب المعتمدة. أرسل قالبًا عبر حملة لاستئناف المحادثة.',
+  tpl_d: 'خارج نافذة الـ24 ساعة لا يسمح واتساب إلا بالقوالب المعتمدة. اختر قالبًا واملأ متغيراته ثم أرسله لاستئناف المحادثة.',
   tpl_empty: 'لا توجد قوالب معتمدة على هذا الرقم',
   tpl_wa_web: 'أرقام واتساب ويب لا تستخدم قوالب Meta.',
   tpl_vars: '{n} متغيرات',
@@ -262,6 +271,15 @@ const ar: Record<keyof typeof en, string> = {
   tpl_copy: 'نسخ النص',
   copied: 'تم النسخ',
   tpl_error: 'تعذّر تحميل القوالب',
+  tpl_pick: 'اختيار',
+  tpl_back: 'العودة إلى القوالب',
+  tpl_var: 'المتغير {n}',
+  tpl_preview: 'معاينة',
+  tpl_send: 'إرسال القالب',
+  tpl_sent: 'تم إرسال القالب',
+  tpl_send_failed: 'تعذّر إرسال القالب',
+  tpl_fill_all: 'املأ جميع المتغيرات',
+  tpl_buttons_note: 'يحتوي هذا القالب على أزرار، وتُرسَل كما اعتُمدت.',
 
   contact: 'جهة الاتصال',
   open_contact: 'فتح جهة الاتصال',

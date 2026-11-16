@@ -16,7 +16,7 @@ import type { AssignFilter } from '@/components/inbox/ConversationList'
 import { MessageBubble } from '@/components/inbox/MessageBubble'
 import { Composer } from '@/components/inbox/Composer'
 import { CustomerPanel } from '@/components/inbox/CustomerPanel'
-import { TemplatesModal } from '@/components/inbox/TemplatesModal'
+import { TemplatesModal, type InboxTemplate, type TemplateParams } from '@/components/inbox/TemplatesModal'
 import { dayLabel, isAiMessage, windowState } from '@/components/inbox/utils'
 
 /** ≥1280px: the customer panel sits beside the thread instead of over it. */
@@ -381,6 +381,34 @@ export default function ChatPage() {
     } finally { setSending(false) }
   }
 
+  // ── Approved template (Cloud API; reopens a conversation outside the 24h window) ──
+  const sendTemplate = async (tpl: InboxTemplate, params: TemplateParams) => {
+    if (!activeConv) return
+    const instance = sendingInstance()
+    if (!instance) { toast.error(c('no_instance')); throw new Error('no_instance') }
+    try {
+      const { data } = await axios.post('/api/whatsapp/chat-send', {
+        instance_id: instance.id,
+        to: activeConv.contacts?.phone,
+        contact_id: activeConv.contacts?.id,
+        template: { name: tpl.name, language: tpl.language, params },
+      })
+      const content = data?.content || `[${tpl.name}]`
+      const now = new Date().toISOString()
+      setMessages(prev => [...prev, {
+        id: 'temp-' + Date.now(), direction: 'outbound', content, status: 'sent', created_at: now, type: 'text',
+        wa_message_id: data?.wa_message_id, meta: { method: 'template', template: tpl.name, source: 'live_chat' },
+      }])
+      setConversations(prev => prev.map(cv =>
+        cv.id === activeConv.id ? { ...cv, last_message: { content, direction: 'outbound', created_at: now } } : cv
+      ))
+      toast.success(c('tpl_sent'))
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || c('tpl_send_failed'))
+      throw e
+    }
+  }
+
   // ── Attachments (isolated from the text sendMessage flow above) ──────────
   function mimeToWaType(mime: string) {
     if (!mime) return 'document'
@@ -741,7 +769,13 @@ export default function ChatPage() {
         </div>
       )}
 
-      <TemplatesModal open={templatesOpen} onClose={() => setTemplatesOpen(false)} instanceId={sendingInstance()?.id || activeConv?.instance_id} />
+      <TemplatesModal
+        open={templatesOpen}
+        onClose={() => setTemplatesOpen(false)}
+        instanceId={sendingInstance()?.id || activeConv?.instance_id}
+        onSend={activeConv ? sendTemplate : undefined}
+        defaults={{ first: activeConv?.contacts?.name || undefined }}
+      />
     </DashboardLayout>
   )
 }
