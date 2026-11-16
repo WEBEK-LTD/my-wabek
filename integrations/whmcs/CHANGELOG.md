@@ -1,5 +1,19 @@
 # Changelog — WABEK WhatsApp for WHMCS
 
+## 4.1.0 — 2026-11-16
+
+### Added
+- **Theme-native client area.** The active client-area theme is detected (template variable, WHMCS `Theme::factory()`, `?systpl=` session, `Template` setting; child themes followed through the `parent:` key of `theme.yaml`; unknown themes sniffed for their Bootstrap version) and the pages are rendered from `templates/bs3/` (six, Lagom 1.x, other Bootstrap 3 themes), `templates/bs4/` (twenty-one, Nexus, other Bootstrap 4/5 themes, and the default) or `templates/lagom2/` (Lagom 2.x and its child themes). Each set uses the theme's own panels / cards / Lagom sections, buttons, alerts, labels / badges and form controls, so it takes the theme's colours, light/dark style and RTL.
+- **WhatsApp consent checkbox at checkout** (optional, setting *Show a WhatsApp consent checkbox at checkout*). Printed through `ShoppingCartCheckoutOutput`, so it works in every order form (standard_cart, premium/pure/supreme comparison, universal/cloud slider, boxes, Lagom, Lagom One Step, Nexus) without template edits. A changed choice is recorded with source `checkout` (new clients before the welcome message is queued).
+- Sidebar panel on the module pages and a theme-aware WhatsApp icon on the Account menu item (FA4 / v4-shims class on Bootstrap 3 themes, FA5/6 brands elsewhere), both through the WHMCS menu API.
+- French, German, Spanish and Turkish texts for the client area and checkout (other strings fall back to English).
+- `tests/`: template / theme-detection checks and a Playwright screenshot harness (Bootstrap 3.4.1 and 4.6.2, simulated six, Lagom 1, twenty-one and Lagom 2 light/dark, LTR and RTL, 390px and 1280px).
+
+### Changed
+- The client pages no longer carry their own branded header and inline `<style>`; the small stylesheet `assets/client.css` is scoped to `.wabek-ca` / `.wabek-co`, loaded only on `index.php?m=wabek` (and the checkout step when the checkbox is on) and uses Lagom / Bootstrap colour variables.
+- `templates/preferences.tpl` and `templates/verify.tpl` moved to the per-theme folders. When upgrading, the two old files can be deleted.
+- The WhatsApp-code-after-login redirect never touches the theme's login, logout or password-reset pages.
+
 ## 4.0.0 — 2026-11-16
 
 Complete rewrite of the addon (no code from 3.x).

@@ -1,4 +1,4 @@
-# WABEK WhatsApp for WHMCS — v4.0.0
+# WABEK WhatsApp for WHMCS — v4.1.0
 
 <div dir="rtl" lang="ar">
 
@@ -14,6 +14,8 @@
 - **قائمة انتظار** تعالجها مهام WHMCS المجدولة، مع إعادة المحاولة بمهلة متزايدة عند أخطاء الخادم وانتهاء المهلة فقط، وإرسال فوري اختياري للرسائل الضرورية.
 - **سجل إرسال** مع التصفية وإعادة الإرسال والإلغاء، و**أداة إرسال يدوي**، و**رسائل جماعية** حسب المنتج وحالة الخدمة وحالة العميل بمعدل محدود.
 - **الموافقة وإلغاء الاشتراك:** صفحة في منطقة العملاء (الحساب ← إشعارات واتساب)، مع نمطَي «الإرسال ما لم يُلغَ الاشتراك» و«الإرسال بعد الموافقة»، وحقل مخصص اختياري.
+- **مربع موافقة عند إتمام الطلب (اختياري):** مربع «أرسلوا إليّ تحديثات الطلبات والفواتير والدعم عبر واتساب» يظهر في جميع نماذج الطلب دون تعديل أي قالب، ويُسجَّل اختيار العميل بالمصدر `checkout`.
+- **متوافقة مع قوالب منطقة العملاء:** تتعرف الوحدة على القالب النشط (ومنه القوالب الفرعية عبر `theme.yaml`) وتعرض صفحاتها بمكوّنات القالب نفسه: six وLagom 1.x (Bootstrap 3)، وtwenty-one وNexus (Bootstrap 4)، وLagom 2.x بنمطيه الفاتح والداكن، مع دعم كامل للاتجاه من اليمين إلى اليسار.
 - **رمز تحقق عبر واتساب (اختياري):** توثيق رقم العميل، أو طلب رمز بعد كل تسجيل دخول، مع حدود محلية لعدد الطلبات.
 - **الأمان:** مفتاح API مشفّر بـ `encrypt()` ومُقنّع في الواجهة ومحذوف من السجلات، ويُرسَل في الترويسة `X-API-Key` فقط؛ رمز CSRF لكل طلب POST؛ ترميز جميع المخرجات؛ HTTPS مع التحقق من الشهادة ومهلة زمنية.
 
@@ -40,6 +42,20 @@
   3. ارفع المجلد الجديد وافتح صفحة الوحدة. ستُنقل تلقائيًا إعدادات الاتصال (ويُشفَّر مفتاح API ويُحذف النص الصريح من `tbladdonmodules`) وقائمة إلغاء الاشتراك.
   4. جداول الإصدار 3.x لا تُستخدم ولا تُحذف؛ يمكنك حذف الجداول `mod_wabek_*` القديمة يدويًا بعد التأكد.
 
+### القوالب ونماذج الطلب
+
+| القالب | ملفات العرض | ملاحظات |
+| --- | --- | --- |
+| six وLagom 1.x وأي قالب مبني على Bootstrap 3 | `templates/bs3/` | لوحات `panel` وأزرار القالب؛ يعرض القالب عنوان الصفحة ومسار التنقل |
+| twenty-one وNexus وأي قالب مبني على Bootstrap 4 أو 5 | `templates/bs4/` | بطاقات `card` وفئات Bootstrap 4؛ وهو الخيار الافتراضي لأي قالب غير معروف |
+| Lagom 2.x وقوالبه الفرعية | `templates/lagom2/` | أقسام `section` الخاصة بـ Lagom، ويتبع ألوان العلامة والنمط الداكن واتجاه RTL |
+
+- يُحدَّد القالب النشط من متغيرات WHMCS أو `Theme::factory()` أو الجلسة أو الإعداد `Template`، ثم تُتتبَّع القوالب الفرعية عبر المفتاح `parent:` في `theme.yaml`.
+- عنصر «إشعارات واتساب» يُضاف إلى قائمة الحساب، ولوحة جانبية في صفحات الوحدة، عبر واجهة القوائم في WHMCS فقط.
+- ملف الأنماط `assets/client.css` محصور في `.wabek-ca` و`.wabek-co`، ولا يُحمَّل إلا في صفحات الوحدة وصفحة إتمام الطلب.
+- مربع الموافقة عند إتمام الطلب يُعرض عبر `ShoppingCartCheckoutOutput`، فيعمل مع standard_cart ونماذج المقارنة والمنزلق والصناديق وLagom وLagom One Step وNexus. فعّله من **الإعدادات ← الخصوصية والموافقة**.
+- النصوص متوفرة بالعربية والإنجليزية كاملة، وبالفرنسية والألمانية والإسبانية والتركية لمنطقة العملاء.
+
 ### ملاحظات
 
 - خارج نافذة الـ 24 ساعة لا يُسلّم واتساب النص الحر؛ أدخل اسم قالب معتمد لكل حدث لاستخدامه بديلًا.
@@ -59,6 +75,8 @@ A WHMCS addon module that sends WhatsApp notifications to your clients and alert
 - **Queue** processed by the WHMCS cron with exponential backoff on 5xx, 429 and timeouts (never on other 4xx), plus an immediate-send option for critical messages that falls back to the queue.
 - **Send log** with filters, resend and cancel; a **manual send** tool; **bulk messages** filtered by product, service status and client status, rate-limited per cron run.
 - **Consent / opt-out:** client area page (Account → WhatsApp notifications), opt-out or opt-in mode, optional tickbox custom field; critical events are configurable per event.
+- **Optional consent checkbox at checkout:** "Send me order, billing and support updates on WhatsApp" in every order form without template edits; the choice is recorded with source `checkout`.
+- **Works with every client-area theme:** see *Themes and order forms* below.
 - **Optional WhatsApp OTP:** phone verification page, or a WhatsApp code after every client login, with local rate limits.
 - **Security:** API key encrypted with WHMCS `encrypt()`, masked in the UI, redacted from the module log and sent only in the `X-API-Key` header; CSRF token on every POST; all state changes POST-only; output escaped; HTTPS with certificate verification and timeouts; no raw SQL.
 
@@ -84,6 +102,21 @@ A WHMCS addon module that sends WhatsApp notifications to your clients and alert
   2. **Delete `includes/hooks/wabek_notifications.php`** if it exists — otherwise clients may get duplicate messages.
   3. Upload the new folder and open the module page. The connection settings (API key re-encrypted, plaintext copy removed from `tbladdonmodules`) and the opt-out list are imported.
   4. The 3.x tables are no longer used and are not dropped; remove the old `mod_wabek_*` tables manually once you are satisfied.
+
+### Themes and order forms
+
+| Client-area theme | Templates | Notes |
+| --- | --- | --- |
+| six, Lagom 1.x, other Bootstrap 3 themes | `templates/bs3/` | panels, theme buttons; the theme prints the page title and breadcrumb |
+| twenty-one, Nexus, other Bootstrap 4/5 themes | `templates/bs4/` | cards and Bootstrap 4 classes; also used for unknown themes |
+| Lagom 2.x and its child themes | `templates/lagom2/` | Lagom `.section` layout; follows Lagom's brand colours, dark style and RTL |
+
+- The active theme comes from the WHMCS template variables, `Theme::factory()`, the session (`?systpl=`) or the `Template` setting; child themes are followed through the `parent:` key of their `theme.yaml`, unknown ones are sniffed for their Bootstrap version.
+- The **WhatsApp notifications** item is added to the Account menu (and a sidebar panel to the module pages) through the WHMCS menu API only.
+- `assets/client.css` is scoped to `.wabek-ca` / `.wabek-co` and loaded only on `index.php?m=wabek` and the checkout step.
+- The checkout checkbox is printed through `ShoppingCartCheckoutOutput`, so it works with standard_cart, premium/pure/supreme comparison, universal/cloud slider, boxes, Lagom, Lagom One Step and Nexus. Enable it under **Settings → Privacy & consent**.
+- Texts: English and Arabic in full; French, German, Spanish and Turkish for the client area.
+- Upgrading from 4.0.0: `templates/preferences.tpl` and `templates/verify.tpl` are no longer used and can be deleted.
 
 ### Tables
 
@@ -112,4 +145,10 @@ All requests carry `X-API-Key`. Every message is rendered by the addon; the plat
 
 ```bash
 integrations/whmcs/build.sh   # writes public/downloads/wabek-whmcs-addon.zip
+```
+
+### Theme tests
+
+```bash
+integrations/whmcs/tests/run.sh /tmp/wabek-theme-test   # render checks + Playwright screenshots (outside the repo)
 ```
