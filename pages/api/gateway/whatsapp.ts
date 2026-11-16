@@ -1,8 +1,12 @@
-import { smartSend, smartSendWAWeb, resolveProvider } from '@/lib/wa-smart-send'
+import { smartSend, smartSendWAWeb, resolveProvider, isInWindow, checkSendAllowed } from '@/lib/wa-smart-send'
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
-import { handleCors } from '@/lib/middleware'
-import { authenticateApiKey } from '@/lib/api-key-auth'
+import { handleCors, rateLimitAsync, rateLimitByKey } from '@/lib/middleware'
+import { authenticateApiKey, apiKeyHasPermission, apiPlanAllowed, PLAN_NO_API_ERROR, permissionDeniedError } from '@/lib/api-key-auth'
+import { insertMessage } from '@/lib/message-insert'
+
+const ipLimiter = rateLimitAsync({ maxRequests: 300, windowMs: 60 * 1000 })
+const KEY_LIMIT = { maxRequests: 100, windowMs: 60 * 1000 }
 
 // Compatible with Digits WordPress Plugin Custom Gateway
 // Configure in Digits:
@@ -15,9 +19,13 @@ import { authenticateApiKey } from '@/lib/api-key-auth'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (handleCors(req, res)) return
+  if (!(await ipLimiter(req, res))) return
 
   const auth = await authenticateApiKey(req, { allowBody: true, route: '/api/gateway/whatsapp' })
   if (!auth) return res.status(401).json({ error: 'Invalid API key', code: 'UNAUTHORIZED' })
+  if (!(await rateLimitByKey(res, `gw:${auth.keyId || auth.userId}`, KEY_LIMIT))) return
+  if (!(await apiPlanAllowed(auth))) return res.status(403).json(PLAN_NO_API_ERROR)
+  if (!apiKeyHasPermission(auth, 'send')) return res.status(403).json(permissionDeniedError('send'))
   const userId = auth.userId
 
   // Support both GET and POST (Digits uses both)
@@ -52,10 +60,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Clean phone number
   const cleanPhone = to.replace(/[^0-9]/g, '')
 
-  const result = resolveProvider(instance) === 'wa_web'
-    ? await smartSendWAWeb({ userId, instanceId: instance.id, to: cleanPhone, text: message, source: 'api' })
-    : await smartSend({ userId, instanceId: instance.id, phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: cleanPhone, text: message, source: 'api' })
+  let result: { messageId?: string | null; error?: string; blocked?: string }
+  const otpMatch = message.length <= 300 && /code|otp|verif|رمز|كود|تحقق/i.test(message) ? message.match(/\b(\d{4,8})\b/) : null
+  if (resolveProvider(instance) !== 'wa_web' && otpMatch && !(await isInWindow(userId, cleanPhone, instance.id))) {
+    // Digits / OTP plugins send the code as plain text. Outside the 24h
+    // window plain text cannot be delivered — send the code through the
+    // approved Authentication template instead (never an unrelated template).
+    const guard = await checkSendAllowed(userId, cleanPhone)
+    if (!guard.allowed) return res.status(403).json({ error: guard.error, code: (guard.code || 'blocked').toUpperCase() })
+    const { sendOtpTemplate } = await import('@/lib/otp-template')
+    const { getSetting } = await import('@/lib/settings')
+    const otpTemplateName = await getSetting('otp_template_name', 'wabek_otp') as string
+    const otp = await sendOtpTemplate({ phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: cleanPhone, templateName: otpTemplateName, code: otpMatch[1] })
+    if (otp.sent) {
+      // Store without the code itself
+      await insertMessage({ user_id: userId, instance_id: instance.id, contact_id: null, direction: 'outbound', type: 'text', content: '[OTP]', wa_message_id: otp.messageId || null, status: 'sent', meta: { source: 'api', method: 'template', template: otp.usedTemplateName } })
+      result = { messageId: otp.messageId || null }
+    } else {
+      result = { error: 'outside_window' }
+    }
+  } else {
+    result = resolveProvider(instance) === 'wa_web'
+      ? await smartSendWAWeb({ userId, instanceId: instance.id, to: cleanPhone, text: message, source: 'api' })
+      : await smartSend({ userId, instanceId: instance.id, phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: cleanPhone, text: message, source: 'api' })
+  }
 
+  if (result.error === 'outside_window') {
+    return res.status(422).json({
+      error: 'Recipient is outside the 24-hour WhatsApp window: plain text cannot be delivered. Use /api/v1/send with an approved template, or configure an Authentication template for codes.',
+      code: 'OUTSIDE_WINDOW',
+    })
+  }
   if (result.error) {
     return res.status(result.blocked ? 403 : 502).json({ error: result.error, code: result.blocked ? result.blocked.toUpperCase() : 'SEND_FAILED' })
   }

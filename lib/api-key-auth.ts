@@ -15,6 +15,32 @@ import { safeEqual } from './security'
 export interface ApiKeyAuth {
   userId: string
   via: 'api_key' | 'legacy_user_key' | 'jwt'
+  /** api_keys.id when authenticated with a key from Settings → API Keys */
+  keyId?: string
+  /** api_keys.permissions; null/empty = full access (legacy keys) */
+  permissions?: string[] | null
+}
+
+// ── API key permissions ───────────────────────────────────────────────────────
+// Names stored in api_keys.permissions. 'contacts' (the old default) grants
+// both contacts:read and contacts:write; contacts:write implies read.
+export const API_KEY_PERMISSIONS = ['send', 'contacts:read', 'contacts:write', 'otp'] as const
+export type ApiKeyPermission = typeof API_KEY_PERMISSIONS[number]
+export const LEGACY_API_KEY_PERMISSIONS = ['contacts'] as const
+
+export function isValidApiKeyPermission(p: unknown): boolean {
+  return typeof p === 'string' &&
+    ((API_KEY_PERMISSIONS as readonly string[]).includes(p) || (LEGACY_API_KEY_PERMISSIONS as readonly string[]).includes(p))
+}
+
+/** Empty / missing permissions = full access (backward compatible). */
+export function apiKeyHasPermission(auth: Pick<ApiKeyAuth, 'permissions'>, needed: ApiKeyPermission): boolean {
+  const perms = Array.isArray(auth.permissions) ? auth.permissions.map(String) : []
+  if (!perms.length) return true
+  if (perms.includes('*') || perms.includes(needed)) return true
+  if (needed.startsWith('contacts:') && perms.includes('contacts')) return true
+  if (needed === 'contacts:read' && perms.includes('contacts:write')) return true
+  return false
 }
 
 function headerKey(req: NextApiRequest): { key: string | null; bearer: string | null } {
@@ -46,14 +72,17 @@ export async function lookupApiKey(apiKey: string): Promise<ApiKeyAuth | null> {
 
   const { data: rows } = await db
     .from('api_keys')
-    .select('id, user_id')
+    .select('id, user_id, permissions')
     .eq('key_hash', keyHash)
     .eq('is_active', true)
     .limit(1)
   const keyRecord = rows?.[0]
   if (keyRecord?.user_id) {
     db.from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', keyRecord.id).then(() => {}, () => {})
-    return { userId: keyRecord.user_id, via: 'api_key' }
+    return {
+      userId: keyRecord.user_id, via: 'api_key', keyId: keyRecord.id,
+      permissions: Array.isArray(keyRecord.permissions) ? keyRecord.permissions : null,
+    }
   }
 
   // Legacy per-user key (not every user has an api_keys row yet). The value is
@@ -97,4 +126,39 @@ export async function authenticateApiKey(
   if (!queryApiKeyAllowed()) return null
   console.warn(`[api-key] DEPRECATED: API key sent in the query string/body on ${opts.route || req.url?.split('?')[0]} — send it in the X-API-Key header instead`)
   return lookupApiKey(legacy)
+}
+
+/**
+ * Plan gate for the integration API (/api/v1, /api/gateway): the account's
+ * plan must have `allow_api_access`. Platform admins and dashboard (JWT)
+ * calls are not gated. API_ACCESS_MODE=log only logs (rollout switch).
+ */
+export async function apiPlanAllowed(auth: ApiKeyAuth): Promise<boolean> {
+  if (auth.via === 'jwt') return true
+  const db = supabaseAdmin()
+  try {
+    const { data } = await db.from('users').select('role').eq('id', auth.userId).maybeSingle()
+    if (data?.role === 'admin') return true
+  } catch { /* fall through to the plan check */ }
+  const { checkPlanFeature } = await import('./middleware')
+  const ok = await checkPlanFeature(auth.userId, 'allow_api_access')
+  if (!ok && process.env.API_ACCESS_MODE === 'log') {
+    console.warn(`[api-key] user ${auth.userId} has no allow_api_access on its plan — not blocking (API_ACCESS_MODE=log)`)
+    return true
+  }
+  return ok
+}
+
+export const PLAN_NO_API_ERROR = {
+  error: 'Your plan does not include API access. Upgrade your plan to use the WABEK API.',
+  code: 'plan_no_api',
+  upgrade_required: true,
+} as const
+
+export function permissionDeniedError(perm: ApiKeyPermission) {
+  return {
+    error: `This API key does not have the "${perm}" permission`,
+    code: 'permission_denied',
+    required: perm,
+  }
 }

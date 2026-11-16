@@ -1,9 +1,30 @@
 import { smartSend, smartSendWAWeb, resolveProvider, isInWindow, checkSendAllowed } from '@/lib/wa-smart-send'
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
-import { handleCors, apiRateLimit } from '@/lib/middleware'
-import { authenticateApiKey } from '@/lib/api-key-auth'
+import { handleCors, rateLimitAsync, rateLimitByKey, checkPlanLimit, contactLimitError } from '@/lib/middleware'
+import {
+  authenticateApiKey, apiKeyHasPermission, apiPlanAllowed, ApiKeyPermission,
+  PLAN_NO_API_ERROR, permissionDeniedError,
+} from '@/lib/api-key-auth'
 import { insertMessage } from '@/lib/message-insert'
+import { emitWebhookEvent } from '@/lib/outgoing-webhooks'
+
+// Per-IP ceiling before authentication (slows key guessing), then the
+// per-API-key limit. Both are shared across serverless instances and answer
+// 429 with a Retry-After header.
+const ipLimiter = rateLimitAsync({ maxRequests: 300, windowMs: 60 * 1000 })
+const KEY_LIMIT = { maxRequests: 100, windowMs: 60 * 1000 }
+
+// Permission each action needs on an API key (api_keys.permissions).
+function requiredPermission(method: string | undefined, action: string): ApiKeyPermission | null {
+  switch (action) {
+    case 'send': case 'message-status': case 'instances': case 'whmcs-webhook': return 'send'
+    case 'contacts': return method === 'GET' ? 'contacts:read' : 'contacts:write'
+    case 'contacts-opt-out': case 'opt-out': return 'contacts:write'
+    case 'otp': case 'otp-verify': return 'otp'
+    default: return null
+  }
+}
 
 // Auth: `X-API-Key: <key>` or `Authorization: Bearer <key|session JWT>`.
 // `?api_key=` still works for existing installs (deprecated, logged) unless
@@ -26,13 +47,20 @@ function otpCode(body: Record<string, any>): string | null {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (handleCors(req, res)) return
-  if (!apiRateLimit(req, res)) return
+  if (!(await ipLimiter(req, res))) return
 
   const auth = await authenticateApiKey(req, { allowJwt: true, route: '/api/v1' })
   if (!auth) return res.status(401).json({ error: 'Invalid API key' })
 
+  if (!(await rateLimitByKey(res, `v1:${auth.keyId || auth.userId}`, KEY_LIMIT))) return
+
   const { action } = req.query
   const db = supabaseAdmin()
+
+  if (!(await apiPlanAllowed(auth))) return res.status(403).json(PLAN_NO_API_ERROR)
+
+  const needed = requiredPermission(req.method, String(action || ''))
+  if (needed && !apiKeyHasPermission(auth, needed)) return res.status(403).json(permissionDeniedError(needed))
 
   // ── Robust body parsing ─────────────────────────────────────────────
   // Some HTTP clients (e.g. PHP cURL with the wrong Content-Type, or
@@ -234,10 +262,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             // Caller may name the template's approved language (e.g. "ar");
             // otherwise try the common defaults.
-            const requestedLang = typeof body.template_language === 'string' && /^[a-z]{2,3}(_[A-Z]{2})?$/.test(body.template_language)
+            const requestedLang = typeof body.template_language === 'string' && /^[a-z]{2,3}(_[A-Z]{2,4})?$/.test(body.template_language)
               ? body.template_language
               : null
-            const tmplLanguages = requestedLang ? [requestedLang] : ['en', 'en_US', 'ar']
+            const { templateLanguageOrder } = await import('@/lib/wa-smart-send')
+            // The given language first, then 'ar' -> 'en' -> 'en_US'
+            const tmplLanguages = templateLanguageOrder(requestedLang)
             const tmplAttempts: { language: string; components: string; ok: boolean; status?: number; error?: string }[] = []
             let sent = false
 
@@ -260,6 +290,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                   const status = tmplErr?.response?.status
                   const errMsg = tmplErr?.response?.data?.error?.message || tmplErr?.message || 'Unknown error'
                   tmplAttempts.push({ language, components: variant.label, ok: false, status, error: errMsg })
+                  // 132001: no template in this language - other shapes cannot help
+                  if (tmplErr?.response?.data?.error?.code === 132001) break
                 }
               }
               if (sent) break
@@ -284,7 +316,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (result?.error) { await releaseIdem(); return res.status(502).json({ error: 'Failed to send message', detail: result.error }) }
       // Template paths above send directly — store their row once here
       if (!saved) {
-        await insertMessage({ user_id: auth.userId, instance_id: instance.id, contact_id: null, direction: 'outbound', type: 'text', content: message, wa_message_id: result?.messageId || null, status: 'sent', meta: { source: 'api' } })
+        const row = await insertMessage({ user_id: auth.userId, instance_id: instance.id, contact_id: null, direction: 'outbound', type: 'text', content: message, wa_message_id: result?.messageId || null, status: 'sent', meta: { source: 'api' } })
+        if (!row.error) {
+          await emitWebhookEvent(auth.userId, 'message_sent', {
+            message_id: result?.messageId || null, id: row.id, to: String(to).replace(/[^0-9]/g, ''), instance_id: instance.id,
+            contact_id: null, type: 'text', message, source: 'api', method: 'template', campaign_id: null,
+          })
+        }
       }
       return respondSent({ success: true, message_id: result?.messageId })
     } catch (err: unknown) {
@@ -310,9 +348,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (typeof name === 'string') row.name = name.slice(0, 200)
     if (typeof email === 'string') row.email = email.slice(0, 200)
     if (Array.isArray(tags)) row.tags = tags.filter(t => typeof t === 'string').slice(0, 50)
+    const { data: before } = await db.from('contacts').select('id').eq('user_id', auth.userId).eq('phone', phone).limit(1)
+    const isNew = !before?.length
+    if (isNew) {
+      const lim = await checkPlanLimit(auth.userId, 'contacts')
+      if (!lim.allowed) return res.status(403).json(contactLimitError(lim.limit))
+    }
     const { data, error } = await db.from('contacts').upsert(row, { onConflict: 'user_id,phone' }).select().single()
     if (error) return res.status(500).json({ error: 'Failed to save contact' })
-    return res.status(200).json({ contact: data })
+    if (isNew) {
+      await emitWebhookEvent(auth.userId, 'contact_created', {
+        contact_id: data.id, phone: data.phone, name: data.name || null, email: data.email || null,
+        tags: data.tags || [], source: 'api',
+      })
+    }
+    return res.status(200).json({ contact: data, created: isNew })
   }
 
   // POST /api/v1/contacts-opt-out - {phone, opted_out: boolean}
@@ -323,13 +373,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const optedOut = opted_out === undefined ? true : (opted_out === true || opted_out === 'true' || opted_out === 1 || opted_out === '1')
     const { phoneVariants } = await import('@/lib/wa-smart-send')
     const variants = phoneVariants(phone)
-    const { data: existing } = await db.from('contacts').select('id').eq('user_id', auth.userId).in('phone', variants)
+    const { data: existing } = await db.from('contacts').select('id, opted_out').eq('user_id', auth.userId).in('phone', variants)
+    let contactId: string | null = null
+    let changed = false
     if (existing && existing.length) {
       const { error } = await db.from('contacts').update({ opted_out: optedOut }).eq('user_id', auth.userId).in('id', existing.map(r => r.id))
       if (error) return res.status(500).json({ error: 'Failed to update contact' })
+      contactId = existing[0].id
+      changed = existing.some(r => (r.opted_out === true) !== optedOut)
     } else {
-      const { error } = await db.from('contacts').insert({ user_id: auth.userId, phone, opted_out: optedOut })
+      const lim = await checkPlanLimit(auth.userId, 'contacts')
+      if (!lim.allowed) return res.status(403).json(contactLimitError(lim.limit))
+      const { data: created, error } = await db.from('contacts').insert({ user_id: auth.userId, phone, opted_out: optedOut }).select('id, phone').maybeSingle()
       if (error) return res.status(500).json({ error: 'Failed to save contact' })
+      contactId = created?.id || null
+      changed = true
+      if (created) await emitWebhookEvent(auth.userId, 'contact_created', { contact_id: created.id, phone: created.phone, name: null, source: 'api' })
+    }
+    // Opt-out / opt-in recorded by a plugin (e.g. a checkout checkbox):
+    // opt_out / opt_in webhook, and `opt_in` automations on (re)subscribe.
+    if (changed) {
+      const { onSubscriptionChanged } = await import('@/lib/opt-out')
+      await onSubscriptionChanged({ userId: auth.userId, phone, contactId, optedOut, source: 'api' })
     }
     return res.status(200).json({ success: true, opted_out: optedOut })
   }
@@ -367,6 +432,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!phone || typeof phone !== 'string') return res.status(400).json({ error: 'phone required' })
     const allowedPurposes = ['verification', 'login', 'transaction'] as const
     const safePurpose = (allowedPurposes as readonly string[]).includes(purpose) ? purpose : 'verification'
+    // Recipients who opted out / are blocked get no codes either (OTP sends
+    // are not counted against the monthly message limit).
+    const guard = await checkSendAllowed(auth.userId, phone)
+    if (!guard.allowed && guard.code !== 'plan_limit') {
+      return res.status(403).json({ success: false, error: guard.error, code: guard.code })
+    }
     const { sendOTP, OtpSendError } = await import('@/lib/otp')
     try {
       const result = await sendOTP({
@@ -388,15 +459,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  // POST /api/v1/otp/verify - Verify OTP
+  // POST /api/v1/otp-verify - Verify OTP  { otp_id | otpId, otp | code }
   if (req.method === 'POST' && action === 'otp-verify') {
-    const { otp_id, otp } = req.body
-    if (!otp_id || !otp) return res.status(400).json({ error: 'otp_id and otp required' })
+    const otp_id = req.body.otp_id ?? req.body.otpId
+    const otp = req.body.otp ?? req.body.code
+    if (!otp_id || !otp || (typeof otp_id !== 'string' && typeof otp_id !== 'number') || (typeof otp !== 'string' && typeof otp !== 'number')) {
+      return res.status(400).json({ error: 'otp_id and otp required' })
+    }
     // Only OTPs issued for this API key's account can be verified with it
     const { data: owned } = await db.from('otp_codes').select('id').eq('id', String(otp_id)).eq('user_id', auth.userId).maybeSingle()
     if (!owned) return res.status(200).json({ valid: false, reason: 'OTP not found' })
     const { verifyOTP } = await import('@/lib/otp')
-    const result = await verifyOTP({ otpId: otp_id, otp })
+    const result = await verifyOTP({ otpId: String(otp_id), otp: String(otp), userId: auth.userId })
     return res.status(200).json(result)
   }
 
@@ -404,12 +478,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === 'POST' && action === 'whmcs-webhook') {
     const { processWHMCSWebhook } = await import('@/lib/whmcs')
     try {
-      await processWHMCSWebhook(auth.userId, req.body)
+      const r = await processWHMCSWebhook(auth.userId, req.body)
+      if (!r.sent) {
+        if (r.reason === 'ignored') return res.status(200).json({ success: true, sent: false, reason: r.detail || 'ignored' })
+        const status = r.blocked ? 403 : r.reason === 'outside_window' ? 422 : 502
+        return res.status(status).json({ success: false, sent: false, error: r.error || 'Failed to send notification', code: r.blocked || r.reason })
+      }
+      return res.status(200).json({ success: true, sent: true, message_id: r.messageId || null })
     } catch (e: any) {
       console.error('[v1/whmcs-webhook] error:', e?.message)
       return res.status(502).json({ success: false, error: 'Failed to process webhook' })
     }
-    return res.status(200).json({ success: true })
   }
 
   return res.status(404).json({ error: 'Unknown action' })

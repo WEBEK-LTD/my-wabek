@@ -90,6 +90,25 @@ export function rateLimitAsync(config: RateLimitConfig) {
   }
 }
 
+/**
+ * Async limiter keyed by an explicit identity (e.g. the API key id) instead
+ * of the client IP. Sets `Retry-After` and returns 429 with code `rate_limited`.
+ */
+export async function rateLimitByKey(
+  res: NextApiResponse,
+  key: string,
+  config: RateLimitConfig
+): Promise<boolean> {
+  const windowSec = Math.ceil(config.windowMs / 1000)
+  const ok = await hitRateLimit(key, config.maxRequests, windowSec)
+  if (!ok) {
+    res.setHeader('Retry-After', String(windowSec))
+    res.status(429).json({ error: 'Too many requests', code: 'rate_limited', retryAfter: windowSec })
+    return false
+  }
+  return true
+}
+
 export const authRateLimitAsync = rateLimitAsync({ maxRequests: 10, windowMs: 60 * 1000 })
 export const apiRateLimitAsync  = rateLimitAsync({ maxRequests: 100, windowMs: 60 * 1000 })
 
@@ -102,7 +121,9 @@ export function rateLimit(config: RateLimitConfig) {
     const key = `${getClientIp(req)}:${routeKey(req)}`
     if (!memoryHit(key, config.maxRequests, config.windowMs)) {
       const existing = rateLimitStore.get(key)
-      res.status(429).json({ error: 'Too many requests', retryAfter: Math.ceil(((existing?.resetAt || Date.now()) - Date.now()) / 1000) })
+      const retryAfter = Math.max(1, Math.ceil(((existing?.resetAt || Date.now()) - Date.now()) / 1000))
+      res.setHeader('Retry-After', String(retryAfter))
+      res.status(429).json({ error: 'Too many requests', retryAfter })
       return false
     }
     return true
@@ -161,7 +182,7 @@ export function handleCors(req: NextApiRequest, res: NextApiResponse): boolean {
 //   no plan_id → allow (don't block users without a plan)
 export async function checkPlanLimit(
   userId: string,
-  type: 'messages' | 'contacts' | 'instances' | 'campaigns'
+  type: 'messages' | 'contacts' | 'instances' | 'campaigns' | 'sub_accounts'
 ): Promise<{ allowed: boolean; limit: number; current: number }> {
 
   const ALLOW = (limit = -1, current = 0) => ({ allowed: true,  limit, current })
@@ -204,7 +225,7 @@ export async function checkPlanLimit(
     // 2. Get plan
     const { data: plan, error: planErr } = await db
       .from('plans')
-      .select('max_messages_month, max_contacts, max_instances, max_campaigns')
+      .select('*')
       .eq('id', planId)
       .maybeSingle()
     if (planErr) throw planErr
@@ -223,11 +244,15 @@ export async function checkPlanLimit(
       contacts:  toInt(plan.max_contacts),
       instances: toInt(plan.max_instances),
       campaigns: toInt(plan.max_campaigns),
+      sub_accounts: toInt(plan.max_sub_accounts ?? -1),
     }
 
     const limit = limitMap[type] ?? -1
 
-    // -1 or 0 → unlimited
+    // -1 → unlimited; 0 → not set (unlimited) — except for sub-accounts,
+    // where the column default 0 means "none" unless the plan explicitly
+    // enables the feature (allow_sub_accounts = true → 0 = unlimited).
+    if (type === 'sub_accounts' && limit === 0 && plan.allow_sub_accounts !== true) return BLOCK(0, 0)
     if (limit <= 0) return ALLOW(limit)
 
     // 4. Count current usage
@@ -259,6 +284,13 @@ export async function checkPlanLimit(
       if (count === null) throw new Error('instance count unavailable')
       current = count
 
+    } else if (type === 'sub_accounts') {
+      const { count } = await db.from('sub_accounts')
+        .select('id', { count: 'exact', head: true })
+        .eq('owner_id', userId)
+      if (count === null) throw new Error('sub-account count unavailable')
+      current = count
+
     } else if (type === 'campaigns') {
       const { count } = await db.from('campaigns')
         .select('id', { count: 'exact', head: true })
@@ -276,6 +308,18 @@ export async function checkPlanLimit(
     // Fail CLOSED: an infrastructure error must not grant unlimited usage.
     console.error('[checkPlanLimit] error — blocking:', err)
     return BLOCK()
+  }
+}
+
+/** Standard 403 body when the plan's max_contacts is reached. */
+export function contactLimitError(limit: number) {
+  return {
+    error: limit > 0
+      ? `Contact limit reached: your plan allows ${limit} contacts. Upgrade your plan to add more.`
+      : 'Contact limit reached for your plan.',
+    code: 'plan_limit',
+    upgrade_required: true,
+    limit,
   }
 }
 
