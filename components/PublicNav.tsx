@@ -71,6 +71,7 @@ export default function PublicNav({ active = '', lang: langProp = '', onLangChan
   const signedIn = mounted && !!user
 
   const links: [string, string][] = [
+    [t(lang, 'home'), '/'],
     [t(lang, 'pub_product'), '/features'],
     [t(lang, 'integrations'), '/integrations'],
     [t(lang, 'pricing'), '/pricing'],

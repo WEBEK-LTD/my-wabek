@@ -41,6 +41,7 @@ export default function PublicFooter({ lang: langProp = '', onLangChange = null,
     [t(lang, 'pub_legal'), '/legal'],
   ]
   const secondary: [string, string][] = [
+    [t(lang, 'home'), '/'],
     [t(lang, 'pub_product'), '/features'],
     [t(lang, 'integrations'), '/integrations'],
     [t(lang, 'pricing'), '/pricing'],
