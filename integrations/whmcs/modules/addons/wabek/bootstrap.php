@@ -11,7 +11,7 @@ if (!defined('WHMCS')) {
 
 if (!defined('WABEK_MODULE_DIR')) {
     define('WABEK_MODULE_DIR', __DIR__);
-    define('WABEK_MODULE_VERSION', '4.2.1');
+    define('WABEK_MODULE_VERSION', '4.3.0');
 
     spl_autoload_register(static function ($class) {
         $prefix = 'WABEK\\';

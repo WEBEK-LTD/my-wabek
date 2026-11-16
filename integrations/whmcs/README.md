@@ -94,7 +94,7 @@ A WHMCS addon module that sends WhatsApp notifications to your clients and alert
 - **Consent / opt-out:** client area page (Account → WhatsApp notifications), opt-out or opt-in mode, optional tickbox custom field; critical events are configurable per event.
 - **Optional consent checkbox at checkout:** "Send me order, billing and support updates on WhatsApp" in every order form without template edits; the choice is recorded with source `checkout`.
 - **Works with every client-area theme:** see *Themes and order forms* below.
-- **Optional WhatsApp OTP:** phone verification page, or a WhatsApp code after every client login, with local rate limits.
+- **WhatsApp OTP (on by default):** clients see the number codes go to, verify it, change it (the new number is used only after its code is confirmed), and — in *optional* mode — turn a WhatsApp code at sign-in on or off; *require* mode asks every client after login. Local rate limits.
 - **Security:** API key encrypted with WHMCS `encrypt()`, masked in the UI, redacted from the module log and sent only in the `X-API-Key` header; CSRF token on every POST; all state changes POST-only; output escaped; HTTPS with certificate verification and timeouts; no raw SQL.
 
 ### Requirements

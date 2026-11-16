@@ -199,7 +199,7 @@ final class AdminController
             'message_language' => ['auto', 'english', 'arabic'],
             'admin_language'   => ['english', 'arabic'],
             'consent_mode'     => ['opt_out', 'opt_in'],
-            'otp_mode'         => ['off', 'verify', 'login'],
+            'otp_mode'         => ['off', 'verify', 'optional', 'login'],
         ];
         foreach ($choices as $k => $allowed) {
             Config::set($k, Security::choice(Security::post($k, 20), $allowed, Config::DEFAULTS[$k]));
@@ -614,7 +614,7 @@ final class AdminController
             . '<small class="wb-help">' . View::e(Lang::t('help_include_credentials')) . '</small>'
             . View::field(Lang::t('set_log_retention_days'), View::input('log_retention_days', $s['log_retention_days'], 'number', ['min' => '0', 'max' => '3650']), Lang::t('help_log_retention'));
 
-        $otp = View::field(Lang::t('set_otp_mode'), View::select('otp_mode', ['off' => Lang::t('otp_off'), 'verify' => Lang::t('otp_verify'), 'login' => Lang::t('otp_login')], $s['otp_mode']), Lang::t('help_otp_mode'))
+        $otp = View::field(Lang::t('set_otp_mode'), View::select('otp_mode', ['off' => Lang::t('otp_off'), 'verify' => Lang::t('otp_verify'), 'optional' => Lang::t('otp_optional'), 'login' => Lang::t('otp_login')], $s['otp_mode']), Lang::t('help_otp_mode'))
             . View::toggle('otp_skip_no_phone', $s['otp_skip_no_phone'] === '1', Lang::t('set_otp_skip_no_phone'))
             . '<div class="wb-grid-4">'
             . View::field(Lang::t('set_otp_per_hour'), View::input('otp_per_hour', $s['otp_per_hour'], 'number', ['min' => '1', 'max' => '20']))

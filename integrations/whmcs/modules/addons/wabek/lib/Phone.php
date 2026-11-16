@@ -180,6 +180,42 @@ final class Phone
         ]);
     }
 
+    /**
+     * Save the number a client chose (and confirmed with a WhatsApp code) where Phone::lookup() reads it first:
+     * the WhatsApp number custom field when one is configured, otherwise the override column.
+     */
+    public static function setClientNumber(int $clientId, string $e164): void
+    {
+        if ($clientId <= 0) {
+            return;
+        }
+        $fieldId = Config::int('phone_field_id');
+        if ($fieldId > 0) {
+            Capsule::table('tblcustomfieldsvalues')->updateOrInsert(['fieldid' => $fieldId, 'relid' => $clientId], ['value' => $e164]);
+            return;
+        }
+        self::setOverride($clientId, $e164);
+    }
+
+    /** The profile phone number of a client as E.164 (ignores the custom field and the override). */
+    public static function profileNumber(int $clientId): ?string
+    {
+        if ($clientId <= 0) {
+            return null;
+        }
+        $client = Capsule::table('tblclients')->where('id', $clientId)->first(['phonenumber', 'country']);
+        return $client ? self::toE164((string) $client->phonenumber, (string) $client->country) : null;
+    }
+
+    /** ISO country of a client ('' when unknown). */
+    public static function clientCountry(int $clientId): string
+    {
+        if ($clientId <= 0) {
+            return '';
+        }
+        return (string) Capsule::table('tblclients')->where('id', $clientId)->value('country');
+    }
+
     private static function overrideColumn(): bool
     {
         static $has = null;

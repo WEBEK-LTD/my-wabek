@@ -16,7 +16,7 @@
         <div class="alert alert-success" role="status">{$wl.client_ok_verified|escape:'html'}</div>
         <a class="btn btn-default" href="{$wabek.url_self|escape:'html'}">{$wl.client_back|escape:'html'}</a>
       {else}
-        <p class="wabek-intro">{if $wabek.login_gate}{$wl.client_login_gate|escape:'html'}{else}{$wl.client_verify_intro|escape:'html'}{/if}</p>
+        <p class="wabek-intro">{if $wabek.login_gate}{$wl.client_login_gate|escape:'html'}{elseif $wabek.changing}{$wl.client_change_intro|escape:'html'}{else}{$wl.client_verify_intro|escape:'html'}{/if}</p>
         <p>{$wl.client_code_to|escape:'html'} <bdi class="wabek-phone" dir="ltr">{$wabek.phone_masked|escape:'html'}</bdi></p>
 
         {if $wabek.code_sent}
@@ -44,6 +44,13 @@
     </div>
   </div>
 
+  {if $wabek.changing && !$wabek.login_gate}
+    <form method="post" action="{$wabek.url_self|escape:'html'}" class="wabek-center">
+      <input type="hidden" name="token" value="{$wabek.token|escape:'html'}">
+      <input type="hidden" name="wb_action" value="otp_change_cancel">
+      <button type="submit" class="btn btn-link">{$wl.client_btn_cancel_change|escape:'html'}</button>
+    </form>
+  {/if}
   {if $wabek.login_gate}
     <p class="wabek-center"><a href="{$wabek.url_logout|escape:'html'}">{$wl.client_logout|escape:'html'}</a></p>
   {/if}

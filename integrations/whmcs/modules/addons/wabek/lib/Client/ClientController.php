@@ -69,10 +69,21 @@ final class ClientController
         $flash = $_SESSION['wabek_flash'] ?? null;
         unset($_SESSION['wabek_flash']);
 
-        $phone = $clientId > 0 ? Phone::forClient($clientId) : null;
+        // Leaving the code page drops a pending number change, so "Verify number" always means the current number.
+        if ($action !== 'verify' && isset($_SESSION['wabek_otp_target'])) {
+            unset($_SESSION['wabek_otp_target'], $_SESSION['wabek_otp_request']);
+        }
+
+        $lookup = $clientId > 0 ? Phone::lookup($clientId) : ['phone' => null, 'source' => ''];
+        $phone = $lookup['phone'];
         $state = $clientId > 0 ? Consent::state($clientId) : ['opted_in' => false, 'opted_out' => false, 'verified_phone' => '', 'verified_at' => ''];
         $subscribed = $clientId > 0 && Consent::isSubscribed($state);
         $verified = $phone !== null && $state['verified_phone'] === $phone;
+        $mode = Otp::mode();
+        $profile = $clientId > 0 ? Phone::profileNumber($clientId) : null;
+        // A new number waiting for its code (index.php?m=wabek&action=verify shows it instead of the current one).
+        $target = is_string($_SESSION['wabek_otp_target'] ?? null) ? (string) $_SESSION['wabek_otp_target'] : '';
+        $changing = $target !== '' && $action === 'verify';
 
         $pending = (int) ($_SESSION['wabek_otp_request'] ?? 0) > 0;
         $theme = Theme::detect($this->vars);
@@ -84,11 +95,20 @@ final class ClientController
             'variant'      => $theme['variant'],
             'family'       => $theme['family'],
             'lagom'        => $theme['lagom'],
-            'phone_masked' => $phone !== null ? Phone::mask($phone) : '',
-            'has_phone'    => $phone !== null,
+            'phone_masked' => $changing ? Phone::mask($target) : ($phone !== null ? Phone::mask($phone) : ''),
+            'has_phone'    => $phone !== null || $changing,
             'subscribed'   => $subscribed,
-            'verified'     => $verified,
-            'otp_enabled'  => Otp::mode() !== 'off',
+            'verified'     => $verified && !$changing,
+            'changing'     => $changing,
+            'otp_enabled'  => $mode !== 'off',
+            'otp_mode'     => $mode,
+            'login_code'   => $clientId > 0 && Otp::loginRequiredFor($clientId),
+            'login_forced' => $mode === 'login',
+            'login_choice' => $mode === 'optional',
+            'phone_source' => (string) $lookup['source'],
+            'can_reset'    => $lookup['source'] === 'override' && $profile !== null && $profile !== $phone,
+            'profile_masked' => $profile !== null ? Phone::mask($profile) : '',
+            'verified_at'  => $verified && !empty($state['verified_at']) ? substr((string) $state['verified_at'], 0, 10) : '',
             'login_gate'   => Otp::loginPending(),
             'code_sent'    => $pending,
             'flash_type'   => is_array($flash) ? (string) $flash[0] : '',
@@ -137,8 +157,62 @@ final class ClientController
                 $this->flash('success', Lang::t($action === 'subscribe' ? 'client_ok_subscribed' : 'client_ok_unsubscribed'));
                 return;
 
+            case 'otp_change':
+                // The client types a new WhatsApp number; it is saved only after the code sent to it is confirmed.
+                $new = Phone::fromPost('new_phone', Phone::clientCountry($clientId));
+                if ($new === null) {
+                    $this->flash('error', Lang::t('client_err_new_phone'));
+                    return;
+                }
+                $state = Consent::state($clientId, false);
+                if ($new === Phone::forClient($clientId) && $state['verified_phone'] === $new) {
+                    $this->flash('success', Lang::t('client_ok_verified'));
+                    return;
+                }
+                $r = Otp::request($clientId, 'change', Security::ip(), $new);
+                if ($r['ok']) {
+                    $_SESSION['wabek_otp_request'] = (int) $r['request_id'];
+                    $_SESSION['wabek_otp_target'] = $new;
+                    $this->flash('success', Lang::t('client_ok_code_sent', ['{phone}' => Phone::mask($new)]));
+                    $this->redirect('index.php?m=wabek&action=verify');
+                }
+                $this->flash('error', Lang::t($r['error'], ['{seconds}' => (string) ($r['wait'] ?? 0)]));
+                return;
+
+            case 'otp_change_cancel':
+                unset($_SESSION['wabek_otp_request'], $_SESSION['wabek_otp_target']);
+                return;
+
+            case 'use_profile':
+                // Back to the profile phone number (drops a number chosen here or set on the admin profile tab).
+                if (Phone::profileNumber($clientId) !== null) {
+                    Phone::setOverride($clientId, '');
+                    Consent::resyncPlatform($clientId);
+                    $this->flash('success', Lang::t('client_ok_number_reset'));
+                }
+                return;
+
+            case 'login_code_on':
+            case 'login_code_off':
+                if (Otp::mode() !== 'optional') {
+                    $this->flash('error', Lang::t('otp_disabled'));
+                    return;
+                }
+                $on = $action === 'login_code_on';
+                $phone = Phone::forClient($clientId);
+                if ($on && ($phone === null || Consent::state($clientId, false)['verified_phone'] !== $phone)) {
+                    $this->flash('error', Lang::t('client_err_verify_first'));
+                    return;
+                }
+                Otp::setClientLoginChoice($clientId, $on);
+                $this->flash('success', Lang::t($on ? 'client_ok_login_code_on' : 'client_ok_login_code_off'));
+                return;
+
             case 'otp_send':
-                $r = Otp::request($clientId, Otp::loginPending() ? 'login' : 'verification', Security::ip());
+                $target = is_string($_SESSION['wabek_otp_target'] ?? null) ? (string) $_SESSION['wabek_otp_target'] : '';
+                $r = $target !== '' && !Otp::loginPending()
+                    ? Otp::request($clientId, 'change', Security::ip(), $target)
+                    : Otp::request($clientId, Otp::loginPending() ? 'login' : 'verification', Security::ip());
                 if ($r['ok']) {
                     $_SESSION['wabek_otp_request'] = (int) $r['request_id'];
                     $this->flash('success', Lang::t('client_ok_code_sent', ['{phone}' => Phone::mask((string) $r['phone'])]));
@@ -151,13 +225,15 @@ final class ClientController
                 $requestId = (int) ($_SESSION['wabek_otp_request'] ?? 0);
                 $r = Otp::verify($clientId, $requestId, Security::post('code', 12));
                 if ($r['ok']) {
-                    unset($_SESSION['wabek_otp_request']);
+                    $changed = isset($_SESSION['wabek_otp_target']);
+                    unset($_SESSION['wabek_otp_request'], $_SESSION['wabek_otp_target']);
                     if (Otp::loginPending()) {
                         Otp::clearLoginPending();
                         $this->flash('success', Lang::t('client_ok_login_verified'));
                         $this->redirect('clientarea.php');
                     }
-                    $this->flash('success', Lang::t('client_ok_verified'));
+                    $this->flash('success', Lang::t($changed ? 'client_ok_number_changed' : 'client_ok_verified'));
+                    $this->redirect('index.php?m=wabek');
                 } else {
                     if (in_array($r['error'], ['otp_expired', 'otp_too_many'], true)) {
                         unset($_SESSION['wabek_otp_request']);

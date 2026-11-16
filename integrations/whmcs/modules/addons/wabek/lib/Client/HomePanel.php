@@ -43,6 +43,8 @@ final class HomePanel
             'has_phone'    => $phone !== null,
             'phone_masked' => $phone !== null ? Phone::mask($phone) : '',
             'verified'     => $phone !== null && $state['verified_phone'] === $phone,
+            'otp_enabled'  => \WABEK\Otp::mode() !== 'off',
+            'url_verify'   => 'index.php?m=wabek&action=verify',
             'token'        => Security::token(),
             'url_self'     => 'index.php?m=wabek',
             'flash'        => is_string($flash) ? $flash : '',
@@ -86,7 +88,15 @@ final class HomePanel
             $btnOff = 'btn btn-sm btn-outline-danger';
             $muted = 'small text-muted';
         }
-        $verified = $d['verified'] ? ' <span class="' . $badgeOn . '">' . $e($t['client_verified_badge'] ?? '') . '</span>' : '';
+        $otp = !empty($d['otp_enabled']);
+        $badgeWarn = $variant === 'bs3' ? 'label label-warning' : ($variant === 'lagom2' ? 'label label-warning badge badge-warning' : 'badge badge-warning bg-warning text-dark');
+        $verified = $d['verified'] ? ' <span class="' . $badgeOn . '">' . $e($t['client_verified_badge'] ?? '') . '</span>'
+            : ($otp && $d['has_phone'] ? ' <span class="' . $badgeWarn . '">' . $e($t['client_not_verified_badge'] ?? '') . '</span>' : '');
+        $otpLine = $otp && $d['has_phone']
+            ? '<p class="' . $muted . ' wabek-otp-line">' . $e($t['client_hp_otp_line'] ?? '')
+                . (!$d['verified'] ? ' <a href="' . $e((string) ($d['url_verify'] ?? 'index.php?m=wabek&action=verify')) . '">' . $e($t['client_hp_verify'] ?? '') . '</a>' : '')
+                . '</p>'
+            : '';
 
         return '<div class="wabek-ca wabek-hp wabek-v-' . $variant . '" dir="' . ($rtl ? 'rtl' : 'ltr') . '">'
             . ($d['flash'] !== '' ? '<div class="alert alert-success" role="status">' . $e($d['flash']) . '</div>' : '')
@@ -95,6 +105,7 @@ final class HomePanel
             . ($d['has_phone']
                 ? '<p class="' . $muted . ' wabek-sent-to">' . $e($t['client_sent_to'] ?? '') . ' <bdi class="wabek-phone" dir="ltr">' . $e($d['phone_masked']) . '</bdi>' . $verified . '</p>'
                 : '<p class="' . $muted . ' wabek-sent-to">' . $e($t['client_no_phone'] ?? '') . '</p>')
+            . $otpLine
             . '<form method="post" action="' . $e($d['url_self']) . '" class="wabek-actions">'
             . '<input type="hidden" name="token" value="' . $e($d['token']) . '">'
             . '<input type="hidden" name="wb_action" value="' . ($on ? 'unsubscribe' : 'subscribe') . '">'

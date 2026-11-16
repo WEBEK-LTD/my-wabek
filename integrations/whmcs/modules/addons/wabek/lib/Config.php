@@ -42,7 +42,7 @@ final class Config
         'consent_field_created' => '0',        // id of the field the addon created itself (0 = none)
         'checkout_consent'     => '0',         // show a WhatsApp consent checkbox at checkout
         'phone_field_id'       => '0',         // optional custom field holding the WhatsApp number
-        'otp_mode'             => 'off',       // off | verify | login
+        'otp_mode'             => 'verify',    // off | verify | optional | login
         'otp_skip_no_phone'    => '1',
         'otp_per_hour'         => '3',
         'otp_resend_seconds'   => '60',

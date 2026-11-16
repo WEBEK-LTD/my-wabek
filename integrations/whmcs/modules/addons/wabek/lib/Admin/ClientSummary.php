@@ -45,6 +45,7 @@ final class ClientSummary
             'state'        => '',
             'subscribed'   => null,
             'verified'     => false,
+            'login_code'   => null,
             'last'         => null,
             'token'        => '',
             'flash'        => '',
@@ -60,6 +61,9 @@ final class ClientSummary
             $data['subscribed'] = Consent::isSubscribed($state);
             $data['state'] = self::stateKey($state, Config::get('consent_mode') === 'opt_in');
             $data['verified'] = $data['phone'] !== null && $state['verified_phone'] === $data['phone'];
+            if (in_array(\WABEK\Otp::mode(), ['optional', 'login'], true)) {
+                $data['login_code'] = \WABEK\Otp::loginRequiredFor($clientId);
+            }
         });
         self::guard('last message', $clientId, $failed, function () use ($clientId, &$data) {
             $row = Capsule::table(Outbox::TABLE)->where('client_id', $clientId)->where('audience', '!=', 'admin')
@@ -141,7 +145,10 @@ final class ClientSummary
             $phone = '<bdi dir="ltr">' . $e($d['phone']) . '</bdi> '
                 . ($d['verified'] ? '<span class="label label-success">' . $e($t['client_verified_badge']) . '</span>'
                     : '<span class="label label-default">' . $e($t['cs_not_verified']) . '</span>')
-                . (isset($t['cs_source_' . $d['phone_source']]) ? '<br><small class="text-muted">' . $e($t['cs_source_' . $d['phone_source']]) . '</small>' : '');
+                . (isset($t['cs_source_' . $d['phone_source']]) ? '<br><small class="text-muted">' . $e($t['cs_source_' . $d['phone_source']]) . '</small>' : '')
+                . (isset($d['login_code']) && is_bool($d['login_code'])
+                    ? '<br><small class="text-muted">' . $e($t['cs_login_code'] ?? '') . ': ' . $e($d['login_code'] ? ($t['cs_login_code_on'] ?? '') : ($t['cs_login_code_off'] ?? '')) . '</small>'
+                    : '');
         } else {
             $phone = '<span class="text-danger">' . $e($t['err_phone']) . '</span>';
         }

@@ -259,7 +259,7 @@ function fragmentChecks(string $h, string $what): void
     check(strpos($h, '<script') === false, "$what: hostile values escaped");
 }
 
-$hpBase = ['subscribed' => true, 'has_phone' => true, 'phone_masked' => '+966•••••567', 'verified' => true, 'token' => 'tok"en', 'url_self' => 'index.php?m=wabek', 'flash' => ''];
+$hpBase = ['subscribed' => true, 'has_phone' => true, 'phone_masked' => '+966•••••567', 'verified' => true, 'otp_enabled' => true, 'url_verify' => 'index.php?m=wabek&action=verify', 'token' => 'tok"en', 'url_self' => 'index.php?m=wabek', 'flash' => ''];
 foreach (['english' => false, 'arabic' => true] as $l => $rtl) {
     Lang::init([], $l);
     $wl = Lang::all();
@@ -432,6 +432,12 @@ $states = [
     'verify-send' => ['page' => 'verify', 'v' => ['verified' => false]],
     'verify-code' => ['page' => 'verify', 'v' => ['verified' => false, 'code_sent' => true, 'login_gate' => true, 'flash_type' => 'error', 'flash_text' => 'otp_invalid']],
     'verify-done' => ['page' => 'verify', 'v' => ['verified' => true]],
+    // 4.3.0: number card with change form, optional sign-in code, override with "use profile number", change flow.
+    'prefs-otp-optional' => ['page' => 'preferences', 'v' => ['verified' => true, 'otp_mode' => 'optional', 'login_choice' => true, 'login_code' => true, 'verified_at' => '2026-11-16']],
+    'prefs-otp-unverified' => ['page' => 'preferences', 'v' => ['verified' => false, 'otp_mode' => 'optional', 'login_choice' => true, 'login_code' => false, 'phone_source' => 'override', 'can_reset' => true]],
+    'prefs-otp-forced' => ['page' => 'preferences', 'v' => ['verified' => true, 'otp_mode' => 'login', 'login_forced' => true, 'login_code' => true]],
+    'prefs-otp-off' => ['page' => 'preferences', 'v' => ['verified' => false, 'otp_enabled' => false, 'otp_mode' => 'off']],
+    'verify-change' => ['page' => 'verify', 'v' => ['verified' => false, 'changing' => true, 'code_sent' => true]],
 ];
 
 $shells = [
@@ -580,6 +586,8 @@ foreach (['ltr' => 'english', 'rtl' => 'arabic'] as $dir => $lang) {
                 'theme' => $shell, 'variant' => $cfg['variant'], 'family' => $cfg['css'], 'lagom' => 0,
                 'phone_masked' => '+966 •••• 4567', 'has_phone' => true, 'subscribed' => true, 'verified' => false,
                 'otp_enabled' => true, 'login_gate' => false, 'code_sent' => false, 'flash_type' => '', 'flash_text' => '',
+                'changing' => false, 'otp_mode' => 'verify', 'login_code' => false, 'login_forced' => false, 'login_choice' => false,
+                'phone_source' => 'profile', 'can_reset' => false, 'profile_masked' => '+966 •••• 1111', 'verified_at' => '',
                 'company' => 'Example', 'url_self' => 'index.php?m=wabek', 'url_verify' => 'index.php?m=wabek&action=verify',
                 'url_profile' => 'clientarea.php?action=details', 'url_logout' => 'logout.php',
             ], $def['v']);

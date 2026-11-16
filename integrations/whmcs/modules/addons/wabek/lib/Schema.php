@@ -94,6 +94,7 @@ final class Schema
                 $t->string('updated_ip', 45)->default('');
                 $t->string('source', 16)->default('');
                 $t->string('phone_override', 20)->default('');
+                $t->boolean('login_otp')->default(false);
                 $t->dateTime('updated_at')->nullable();
             });
         }
@@ -154,6 +155,12 @@ final class Schema
                 $t->string('phone_override', 20)->default('');
             });
         }
+        // 4.3.0: the client's own choice of a WhatsApp code at login (otp_mode = optional).
+        if ($schema->hasTable('mod_wabek_consent') && !$schema->hasColumn('mod_wabek_consent', 'login_otp')) {
+            $schema->table('mod_wabek_consent', function (Blueprint $t) {
+                $t->boolean('login_otp')->default(false);
+            });
+        }
     }
 
     /**
@@ -174,6 +181,12 @@ final class Schema
 
         // 4.2.0: native "Receive WhatsApp notifications" client field (idempotent; an existing 4.x field is reused).
         self::ensureConsentField();
+
+        // 4.3.0: WhatsApp verification is on by default. Installs that still had the old default ("off")
+        // switch to "verify" once, so clients see their number, can verify it and change it with a code.
+        if (version_compare($fromVersion, '4.3.0', '<') && Config::get('otp_mode') === 'off') {
+            Config::set('otp_mode', 'verify');
+        }
     }
 
     /** Create / re-attach the native consent custom field when the setting is on. Never fatal. */

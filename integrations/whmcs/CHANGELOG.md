@@ -1,5 +1,19 @@
 # Changelog — WABEK WhatsApp for WHMCS
 
+## 4.3.0 — 2026-11-16
+
+WhatsApp verification codes (OTP) are now visible and usable by clients out of the box, in every theme (six, twenty-one, Nexus, Lagom 1, Lagom 2), LTR and RTL.
+
+### Added
+- **"Your WhatsApp number" card** on the client's WhatsApp page (`index.php?m=wabek`): the number that notices and one-time codes go to, *Verified* / *Not verified* badge with the verification date, *Verify number*, and where the number comes from (profile phone or a number chosen for WhatsApp).
+- **Change the WhatsApp number with a code:** the client types a new number, a code is sent to that number, and it replaces the current one only after the code is confirmed (saved to the WhatsApp number custom field when one is configured, otherwise as the WhatsApp number of the client; the profile phone is never changed). *Cancel and keep my current number* on the code page; *Use my profile number instead* when a different number is in use. Logged to the activity log.
+- **New OTP mode "optional":** each client can turn a WhatsApp code at sign-in on or off from the same page (needs a verified number). In "require" mode the page shows that the code is required by the administrator.
+- Homepage panel: *Not verified* badge and a *Verify number* link; admin client summary: sign-in code state.
+- Column `mod_wabek_consent.login_otp` (added on upgrade).
+
+### Changed
+- **Default OTP mode is now "verify"** (was "off", which hid everything about codes from clients). Installs upgrading from an earlier 4.x that still had "off" switch to "verify" once; choose *Off* again in Settings → WhatsApp verification to hide it.
+
 ## 4.2.1 — 2026-11-16
 
 ### Fixed
