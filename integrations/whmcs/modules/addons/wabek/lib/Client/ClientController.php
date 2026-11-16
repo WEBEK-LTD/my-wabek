@@ -8,6 +8,7 @@ use WABEK\Lang;
 use WABEK\Otp;
 use WABEK\Phone;
 use WABEK\Security;
+use WABEK\Theme;
 
 if (!defined('WHMCS')) {
     die('This file cannot be accessed directly');
@@ -17,6 +18,11 @@ if (!defined('WHMCS')) {
  * Client area: index.php?m=wabek (WhatsApp preferences) and
  * index.php?m=wabek&action=verify (WhatsApp code). State changes are POST
  * with the WHMCS CSRF token, followed by a redirect (PRG).
+ *
+ * The page is rendered with the template set that matches the active theme
+ * (templates/bs3, templates/bs4 or templates/lagom2; see Theme): WHMCS loads
+ * the plain templates/preferences.tpl / verify.tpl, which include the variant
+ * from the absolute path in $wabekTplDir.
  */
 final class ClientController
 {
@@ -55,11 +61,15 @@ final class ClientController
         $verified = $phone !== null && $state['verified_phone'] === $phone;
 
         $pending = (int) ($_SESSION['wabek_otp_request'] ?? 0) > 0;
+        $theme = Theme::detect($this->vars);
         $view = [
             'action'       => $action,
             'token'        => Security::token(),
             'dir'          => Lang::isRtl() ? 'rtl' : 'ltr',
-            'logo'         => 'modules/addons/wabek/assets/logo-mark.png',
+            'theme'        => $theme['name'],
+            'variant'      => $theme['variant'],
+            'family'       => $theme['family'],
+            'lagom'        => $theme['lagom'],
             'phone_masked' => $phone !== null ? Phone::mask($phone) : '',
             'has_phone'    => $phone !== null,
             'subscribed'   => $subscribed,
@@ -70,17 +80,38 @@ final class ClientController
             'flash_type'   => is_array($flash) ? (string) $flash[0] : '',
             'flash_text'   => is_array($flash) ? (string) $flash[1] : '',
             'company'      => Config::companyName(),
+            'url_self'     => 'index.php?m=wabek',
+            'url_verify'   => 'index.php?m=wabek&action=verify',
+            'url_profile'  => 'clientarea.php?action=details',
+            'url_logout'   => 'logout.php',
         ];
 
+        $breadcrumb = ['index.php?m=wabek' => Lang::t('client_prefs_title')];
+        if ($action === 'verify') {
+            $breadcrumb['index.php?m=wabek&action=verify'] = Lang::t('client_verify_title');
+        }
         $title = $action === 'verify' ? Lang::t('client_verify_title') : Lang::t('client_prefs_title');
         return [
             'pagetitle'    => $title,
-            'breadcrumb'   => ['index.php?m=wabek' => Lang::t('client_prefs_title')],
+            'breadcrumb'   => $breadcrumb,
+            // templates/preferences.tpl and templates/verify.tpl are shims that include
+            // the theme's variant from $wabekTplDir (templates/bs3, bs4 or lagom2).
             'templatefile' => $action === 'verify' ? 'verify' : 'preferences',
             'requirelogin' => true,
             'forcessl'     => false,
-            'vars'         => ['wabek' => $view, 'wl' => Lang::all()],
+            'vars'         => ['wabek' => $view, 'wl' => Lang::all(), 'wabekTplDir' => self::variantDir($theme['variant'])],
         ];
+    }
+
+    /** Absolute path of the template set for a variant (allow-listed; bs4 when unknown or missing). */
+    public static function variantDir(string $variant): string
+    {
+        $variant = in_array($variant, Theme::VARIANTS, true) ? $variant : 'bs4';
+        $dir = WABEK_MODULE_DIR . '/templates/' . $variant;
+        if (!is_file($dir . '/preferences.tpl')) {
+            $dir = WABEK_MODULE_DIR . '/templates/bs4';
+        }
+        return str_replace('\\', '/', $dir);
     }
 
     private function post(int $clientId, string $action): void

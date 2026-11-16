@@ -37,6 +37,7 @@ final class Config
         'include_credentials'  => '0',
         'consent_mode'         => 'opt_out',   // opt_out | opt_in
         'consent_field_id'     => '0',         // optional tickbox custom field: ticked = opted out
+        'checkout_consent'     => '0',         // show a WhatsApp consent checkbox at checkout
         'phone_field_id'       => '0',         // optional custom field holding the WhatsApp number
         'otp_mode'             => 'off',       // off | verify | login
         'otp_skip_no_phone'    => '1',

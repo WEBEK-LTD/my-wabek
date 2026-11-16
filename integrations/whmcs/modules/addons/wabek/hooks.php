@@ -12,6 +12,7 @@ if (!defined('WHMCS')) {
 
 require_once __DIR__ . '/bootstrap.php';
 
+use WABEK\Checkout;
 use WABEK\Config;
 use WABEK\Consent;
 use WABEK\Context;
@@ -21,6 +22,7 @@ use WABEK\Notifier;
 use WABEK\Otp;
 use WABEK\Phone;
 use WABEK\Security;
+use WABEK\Theme;
 use WHMCS\Database\Capsule;
 
 if (!function_exists('wabek_safe')) {
@@ -43,6 +45,10 @@ add_hook('ClientAdd', 1, function ($vars) {
     wabek_safe('ClientAdd', function () use ($vars) {
         $id = (int) ($vars['client_id'] ?? $vars['userid'] ?? 0);
         if ($id > 0) {
+            // Account created during checkout: record the WhatsApp checkbox before the welcome is queued.
+            wabek_safe('ClientAdd checkout consent', function () use ($id) {
+                Checkout::applyForNewClient($id);
+            });
             Notifier::client('client_welcome', Context::client($id), 'client:' . $id, 'client_welcome:' . $id);
         }
     });
@@ -132,8 +138,35 @@ add_hook('AfterShoppingCartCheckout', 1, function ($vars) {
     wabek_safe('AfterShoppingCartCheckout', function () use ($vars) {
         $id = (int) ($vars['OrderID'] ?? $vars['orderid'] ?? 0);
         if ($id > 0) {
+            wabek_safe('AfterShoppingCartCheckout consent', function () use ($id) {
+                Checkout::applyForOrder($id);
+            });
             Notifier::admins('admin_new_order', Context::order($id), 'order:' . $id);
         }
+    });
+});
+
+// ── Checkout: optional WhatsApp consent checkbox (setting checkout_consent) ──
+// ShoppingCartCheckoutOutput is printed inside the checkout form by every
+// order form, so the box works with standard_cart, the comparison / slider /
+// boxes forms, Lagom, Lagom One Step and Nexus without template edits.
+
+add_hook('ShoppingCartCheckoutOutput', 1, function ($vars) {
+    return (string) wabek_safe('ShoppingCartCheckoutOutput', function () use ($vars) {
+        return Checkout::output(is_array($vars) ? $vars : []);
+    });
+});
+
+add_hook('ShoppingCartValidateCheckout', 1, function ($vars) {
+    wabek_safe('ShoppingCartValidateCheckout', function () {
+        Checkout::capture();
+    });
+    return [];
+});
+
+add_hook('PreShoppingCartCheckout', 1, function ($vars) {
+    wabek_safe('PreShoppingCartCheckout', function () {
+        Checkout::capture();
     });
 });
 
@@ -254,7 +287,8 @@ add_hook('ClientAreaPage', 1, function ($vars) {
         }
         $file = (string) ($vars['filename'] ?? '');
         $onVerify = ($_GET['m'] ?? '') === 'wabek' && ($_GET['action'] ?? '') === 'verify';
-        if ($file === 'logout' || $onVerify) {
+        // Never interfere with the theme's login / logout / password-reset pages.
+        if (in_array($file, ['logout', 'login', 'pwreset', 'password-reset'], true) || $onVerify) {
             return;
         }
         if (Phone::forClient($clientId) === null && Config::bool('otp_skip_no_phone')) {
@@ -266,22 +300,77 @@ add_hook('ClientAreaPage', 1, function ($vars) {
     });
 });
 
-// ── Navigation & admin panels ──────────────────────────────────────────
+// ── Navigation, client-area styles & admin panels ─────────────────────
 
+// Account dropdown (six, twenty-one, Nexus, Lagom 1/2 all build it from this menu).
 add_hook('ClientAreaSecondaryNavbar', 1, function ($navbar) {
     wabek_safe('ClientAreaSecondaryNavbar', function () use ($navbar) {
         if (empty($_SESSION['uid']) || !is_object($navbar)) {
             return;
         }
         $account = $navbar->getChild('Account');
-        if ($account) {
+        if ($account && !$account->getChild('wabek-whatsapp')) {
             Lang::initForSession(false);
             $account->addChild('wabek-whatsapp', [
                 'label' => Lang::t('client_nav'),
                 'uri'   => 'index.php?m=wabek',
+                'icon'  => Theme::brandIcon('whatsapp'),
                 'order' => 75,
             ]);
         }
+    });
+});
+
+// Sidebar panel on the module's own pages, through the menu API (no raw HTML).
+add_hook('ClientAreaPrimarySidebar', 1, function ($sidebar) {
+    wabek_safe('ClientAreaPrimarySidebar', function () use ($sidebar) {
+        if (empty($_SESSION['uid']) || !is_object($sidebar) || ($_GET['m'] ?? '') !== 'wabek'
+            || Otp::loginPending() || $sidebar->getChild('wabek-whatsapp')) {
+            return;
+        }
+        Lang::initForSession(false);
+        $verify = ($_GET['action'] ?? '') === 'verify' && Otp::mode() !== 'off';
+        $panel = $sidebar->addChild('wabek-whatsapp', [
+            'label' => Lang::t('client_nav'),
+            'icon'  => Theme::brandIcon('whatsapp'),
+            'order' => 10,
+        ]);
+        $panel->addChild('wabek-preferences', [
+            'label'   => Lang::t('client_nav_prefs'),
+            'uri'     => 'index.php?m=wabek',
+            'order'   => 10,
+            'current' => !$verify,
+        ]);
+        if (Otp::mode() !== 'off') {
+            $panel->addChild('wabek-verify', [
+                'label'   => Lang::t('client_btn_verify'),
+                'uri'     => 'index.php?m=wabek&action=verify',
+                'order'   => 20,
+                'current' => $verify,
+            ]);
+        }
+        $panel->addChild('wabek-profile', [
+            'label' => Lang::t('client_edit_profile'),
+            'uri'   => 'clientarea.php?action=details',
+            'order' => 30,
+        ]);
+    });
+});
+
+// Scoped stylesheet, only on index.php?m=wabek and the checkout step.
+add_hook('ClientAreaHeadOutput', 1, function ($vars) {
+    return (string) wabek_safe('ClientAreaHeadOutput', function () use ($vars) {
+        $file = (string) ($vars['filename'] ?? '');
+        $module = isset($_GET['m']) && is_string($_GET['m']) ? $_GET['m'] : '';
+        $step = isset($_GET['a']) && is_string($_GET['a']) ? $_GET['a'] : '';
+        $onModule = $module === 'wabek';
+        $onCheckout = $file === 'cart' && in_array($step, ['view', 'checkout'], true) && Checkout::enabled();
+        if (!$onModule && !$onCheckout) {
+            return '';
+        }
+        $root = isset($vars['WEB_ROOT']) && is_string($vars['WEB_ROOT']) ? rtrim($vars['WEB_ROOT'], '/') . '/' : '';
+        $href = $root . 'modules/addons/wabek/assets/client.css?v=' . rawurlencode(WABEK_MODULE_VERSION);
+        return '<link rel="stylesheet" href="' . Security::e($href) . '">';
     });
 });
 

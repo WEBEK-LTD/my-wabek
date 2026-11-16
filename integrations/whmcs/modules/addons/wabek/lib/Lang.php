@@ -6,7 +6,7 @@ if (!defined('WHMCS')) {
     die('This file cannot be accessed directly');
 }
 
-/** Module language strings (lang/english.php, lang/arabic.php). */
+/** Module language strings (lang/*.php), always on top of English. */
 final class Lang
 {
     /** @var array<string,string> */
@@ -14,7 +14,8 @@ final class Lang
     /** @var string */
     private static $language = 'english';
 
-    public const SUPPORTED = ['english', 'arabic'];
+    /** Full translations: english, arabic. Client area / checkout only (rest falls back to English): the others. */
+    public const SUPPORTED = ['english', 'arabic', 'french', 'german', 'spanish', 'turkish'];
 
     /** Use the strings WHMCS passed in $vars['_lang'], with English as fallback. */
     public static function init(array $vars = [], string $language = ''): void
