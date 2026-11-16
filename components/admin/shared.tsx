@@ -6,6 +6,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { Badge, Button, Input, cn } from '@/components/ui'
 import { useAdminT } from './i18n'
+import messages from '@/locales/admin/shared'
 
 /* ── Secrets ─────────────────────────────────────────────── */
 
@@ -32,7 +33,7 @@ export interface SecretFieldProps {
  * Never sends a placeholder back unless it is unchanged.
  */
 export function SecretField({ stored, value, onChange, placeholder, id, mono = true, ...aria }: SecretFieldProps) {
-  const { tr } = useAdminT()
+  const { t } = useAdminT(messages)
   const hasStored = isMasked(stored) || (!!stored && String(stored).length > 0)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -45,10 +46,10 @@ export function SecretField({ stored, value, onChange, placeholder, id, mono = t
     return (
       <div className="flex flex-wrap items-center gap-2 rounded-field border border-line bg-surface-2 px-3 py-2">
         <KeyIcon className="h-4 w-4 shrink-0 text-brand-ink" aria-hidden="true" />
-        <Badge tone="success" size="sm" dot>{tr('محفوظ', 'Set')}</Badge>
+        <Badge tone="success" size="sm" dot>{t('set')}</Badge>
         <span dir="ltr" className="font-mono text-sm text-muted">{isMasked(stored) ? stored : MASK_PREFIX}</span>
         <Button size="xs" variant="ghost" className="ms-auto" onClick={() => { setEditing(true); setDraft('') }} aria-describedby={aria['aria-describedby']}>
-          {tr('تغيير', 'Change')}
+          {t('change')}
         </Button>
       </div>
     )
@@ -66,13 +67,13 @@ export function SecretField({ stored, value, onChange, placeholder, id, mono = t
           className={mono ? 'font-mono' : undefined}
           wrapperClassName="flex-1"
           value={current}
-          placeholder={placeholder || (hasStored ? tr('أدخل القيمة الجديدة', 'Enter the new value') : '')}
+          placeholder={placeholder || (hasStored ? t('enterNewValue') : '')}
           onChange={e => {
             const v = e.target.value
             if (hasStored) { setDraft(v); onChange(v || String(stored)) } else onChange(v)
           }}
           endAdornment={
-            <button type="button" onClick={() => setShow(s => !s)} className="text-muted hover:text-ink" aria-label={show ? tr('إخفاء', 'Hide') : tr('إظهار', 'Show')}>
+            <button type="button" onClick={() => setShow(s => !s)} className="text-muted hover:text-ink" aria-label={show ? t('hide') : t('show')}>
               {show ? <EyeSlashIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
             </button>
           }
@@ -80,12 +81,12 @@ export function SecretField({ stored, value, onChange, placeholder, id, mono = t
         />
         {hasStored && (
           <Button variant="secondary" onClick={() => { setEditing(false); setDraft(''); onChange(String(stored)) }}>
-            {tr('إلغاء', 'Cancel')}
+            {t('cancel')}
           </Button>
         )}
       </div>
-      {!hasStored && <span className="text-xs text-muted"><Badge tone="warning" size="sm">{tr('غير مضبوط', 'Not set')}</Badge></span>}
-      {hasStored && <span className="text-xs text-muted">{tr('اترك الحقل فارغًا للإبقاء على القيمة المحفوظة.', 'Leave empty to keep the stored value.')}</span>}
+      {!hasStored && <span className="text-xs text-muted"><Badge tone="warning" size="sm">{t('notSet')}</Badge></span>}
+      {hasStored && <span className="text-xs text-muted">{t('leaveEmptyKeepStored')}</span>}
     </div>
   )
 }
@@ -121,15 +122,15 @@ export function InfoTile({ label, value, className }: { label: React.ReactNode; 
 export function ErrorState({ title, description, onRetry, className }: {
   title?: React.ReactNode; description?: React.ReactNode; onRetry?: () => void; className?: string
 }) {
-  const { tr } = useAdminT()
+  const { t } = useAdminT(messages)
   return (
     <div role="alert" className={cn('flex flex-col items-center gap-3 rounded-card border border-danger/20 bg-danger-bg/40 px-6 py-10 text-center', className)}>
       <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-danger-bg text-danger">
         <ExclamationTriangleIcon className="h-6 w-6" aria-hidden="true" />
       </span>
-      <p className="text-base font-semibold text-ink">{title || tr('تعذّر تحميل البيانات', 'Could not load data')}</p>
+      <p className="text-base font-semibold text-ink">{title || t('couldNotLoadData')}</p>
       {description && <p className="max-w-md text-sm text-muted">{description}</p>}
-      {onRetry && <Button variant="secondary" size="sm" icon={ArrowPathIcon} onClick={onRetry}>{tr('إعادة المحاولة', 'Try again')}</Button>}
+      {onRetry && <Button variant="secondary" size="sm" icon={ArrowPathIcon} onClick={onRetry}>{t('tryAgain')}</Button>}
     </div>
   )
 }
@@ -173,18 +174,18 @@ export function Steps({ items, className }: { items: React.ReactNode[]; classNam
 /* ── Copy / JSON ─────────────────────────────────────────── */
 
 export function CopyButton({ text, label, size = 'icon-sm', className }: { text: string; label?: string; size?: 'icon-sm' | 'xs' | 'sm'; className?: string }) {
-  const { tr } = useAdminT()
+  const { t } = useAdminT(messages)
   const [done, setDone] = useState(false)
   const copy = async () => {
     try { await navigator.clipboard.writeText(text) } catch { /* clipboard blocked */ }
     setDone(true)
     setTimeout(() => setDone(false), 1800)
   }
-  const aria = label || tr('نسخ', 'Copy')
+  const aria = label || t('copy')
   if (size === 'icon-sm') {
     return <Button size="icon-sm" variant="ghost" icon={done ? CheckIcon : ClipboardDocumentIcon} onClick={copy} aria-label={aria} className={className} />
   }
-  return <Button size={size} variant="secondary" icon={done ? CheckIcon : ClipboardDocumentIcon} onClick={copy} className={className}>{done ? tr('تم النسخ', 'Copied') : aria}</Button>
+  return <Button size={size} variant="secondary" icon={done ? CheckIcon : ClipboardDocumentIcon} onClick={copy} className={className}>{done ? t('copied') : aria}</Button>
 }
 
 function highlightJson(json: string) {
@@ -223,17 +224,17 @@ export function JsonViewer({ value, maxHeight = 320, className }: { value: unkno
 export function Pagination({ page, total, pageSize, onChange, className }: {
   page: number; total: number; pageSize: number; onChange: (p: number) => void; className?: string
 }) {
-  const { tr } = useAdminT()
+  const { t } = useAdminT(messages)
   const pages = Math.max(1, Math.ceil(total / pageSize))
   if (total <= pageSize) return null
   return (
-    <nav aria-label={tr('التنقل بين الصفحات', 'Pagination')} className={cn('flex items-center justify-between gap-3 border-t border-line-soft px-4 py-3', className)}>
+    <nav aria-label={t('pagination')} className={cn('flex items-center justify-between gap-3 border-t border-line-soft px-4 py-3', className)}>
       <Button size="sm" variant="secondary" icon={ChevronRightIcon} className="[&_svg]:ltr:rotate-180" disabled={page <= 1} onClick={() => onChange(page - 1)}>
-        {tr('السابق', 'Previous')}
+        {t('previous')}
       </Button>
-      <span className="tabular text-sm text-muted">{tr(`صفحة ${page} من ${pages}`, `Page ${page} of ${pages}`)}</span>
+      <span className="tabular text-sm text-muted">{t('page', { page, pages })}</span>
       <Button size="sm" variant="secondary" iconEnd={ChevronLeftIcon} className="[&_svg]:ltr:rotate-180" disabled={page >= pages} onClick={() => onChange(page + 1)}>
-        {tr('التالي', 'Next')}
+        {t('next')}
       </Button>
     </nav>
   )
@@ -253,7 +254,7 @@ export interface DrawerProps {
 
 /** Side sheet on the reading-end edge (full-width on phones). */
 export function Drawer({ open, onClose, title, description, footer, children, width = 'md' }: DrawerProps) {
-  const { tr, dir } = useAdminT()
+  const { t, dir } = useAdminT(messages)
   const fromX = dir === 'rtl' ? '-translate-x-full' : 'translate-x-full'
   return (
     <Transition show={open} as={Fragment}>
@@ -274,7 +275,7 @@ export function Drawer({ open, onClose, title, description, footer, children, wi
                     {title && <Dialog.Title className="text-lg font-semibold text-ink">{title}</Dialog.Title>}
                     {description && <Dialog.Description className="mt-0.5 truncate text-sm text-muted">{description}</Dialog.Description>}
                   </div>
-                  <button type="button" onClick={onClose} className="-me-1.5 flex h-9 w-9 items-center justify-center rounded-xl text-muted transition hover:bg-surface-3 hover:text-ink" aria-label={tr('إغلاق', 'Close')}>
+                  <button type="button" onClick={onClose} className="-me-1.5 flex h-9 w-9 items-center justify-center rounded-xl text-muted transition hover:bg-surface-3 hover:text-ink" aria-label={t('close')}>
                     <XMarkIcon className="h-5 w-5" aria-hidden="true" />
                   </button>
                 </div>

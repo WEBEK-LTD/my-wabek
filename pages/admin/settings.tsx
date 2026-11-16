@@ -6,7 +6,7 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import { AdjustmentsHorizontalIcon, CreditCardIcon, EnvelopeIcon, PuzzlePieceIcon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 import { Button, Card, PageHeader, Skeleton, Tabs, cn } from '@/components/ui'
-import { apiError, useAdminT } from '@/components/admin/i18n'
+import { useApiError, useAdminT } from '@/components/admin/i18n'
 import { ErrorState } from '@/components/admin/shared'
 import type { Settings } from '@/components/admin/settings/controls'
 import { GeneralSection } from '@/components/admin/settings/GeneralSection'
@@ -14,6 +14,7 @@ import { SecuritySection } from '@/components/admin/settings/SecuritySection'
 import { SmtpSection } from '@/components/admin/settings/SmtpSection'
 import { PaymentsSection } from '@/components/admin/settings/PaymentsSection'
 import { IntegrationsSection } from '@/components/admin/settings/IntegrationsSection'
+import messages from '@/locales/admin/settings/page'
 
 type SectionId = 'general' | 'security' | 'smtp' | 'payments' | 'integrations'
 // Old tab ids keep working as ?tab=… deep links.
@@ -24,7 +25,8 @@ const EMPTY_OBJ: Record<string, never> = {}
 interface SeoBundle { seo?: Record<string, unknown>; brand?: Record<string, string>; smtp?: Record<string, string>; push?: Record<string, unknown>; webmaster?: Record<string, unknown> }
 
 export default function AdminSettingsPage() {
-  const { tr } = useAdminT()
+  const { t, tn } = useAdminT(messages)
+  const apiError = useApiError()
   const router = useRouter()
   const [section, setSection] = useState<SectionId>('general')
   const [settings, setSettings] = useState<Settings>({})
@@ -67,39 +69,39 @@ export default function AdminSettingsPage() {
       const body = Object.fromEntries(changed.map(k => [k, settings[k]]))
       await axios.put('/api/admin/settings', body)
       setOriginal(settings)
-      toast.success(tr('حُفظت الإعدادات', 'Settings saved'))
-    } catch (e) { toast.error(apiError(e, tr('تعذّر الحفظ', 'Failed to save'))) }
+      toast.success(t('settingsSaved'))
+    } catch (e) { toast.error(apiError(e, t('failedSave'))) }
     finally { setSaving(false) }
   }
 
   const sections: { id: SectionId; label: string; desc: string; icon: React.ElementType; generic?: boolean }[] = [
-    { id: 'general', label: tr('عام', 'General'), desc: tr('المنصة، التسجيل، الهوية', 'Platform, registration, brand'), icon: AdjustmentsHorizontalIcon, generic: true },
-    { id: 'security', label: tr('الأمان وOTP', 'Security & OTP'), desc: tr('رموز التحقق، الدخول', 'Verification codes, sign-in'), icon: ShieldCheckIcon, generic: true },
-    { id: 'smtp', label: tr('البريد (SMTP)', 'Email (SMTP)'), desc: tr('خادم الإرسال، الاختبار', 'Mail server, test'), icon: EnvelopeIcon },
-    { id: 'payments', label: tr('المدفوعات', 'Payments'), desc: 'Stripe', icon: CreditCardIcon },
-    { id: 'integrations', label: tr('التكاملات', 'Integrations'), desc: tr('التتبّع، مشرفو المواقع، الإشعارات', 'Tracking, webmaster, push'), icon: PuzzlePieceIcon },
+    { id: 'general', label: t('general'), desc: t('platformRegistrationBrand'), icon: AdjustmentsHorizontalIcon, generic: true },
+    { id: 'security', label: t('securityOtp'), desc: t('verificationCodesSign'), icon: ShieldCheckIcon, generic: true },
+    { id: 'smtp', label: t('emailSmtp'), desc: t('mailServerTest'), icon: EnvelopeIcon },
+    { id: 'payments', label: t('payments'), desc: 'Stripe', icon: CreditCardIcon },
+    { id: 'integrations', label: t('integrations'), desc: t('trackingWebmasterPush'), icon: PuzzlePieceIcon },
   ]
   const current = sections.find(s => s.id === section)!
   const go = (id: string) => { setSection(id as SectionId); router.replace({ pathname: router.pathname, query: { tab: id } }, undefined, { shallow: true, scroll: false }) }
 
   return (
-    <AdminLayout title={tr('إعدادات المنصة', 'Platform settings')}>
+    <AdminLayout title={t('platformSettings')}>
       <PageHeader className="mb-6"
-        eyebrow={tr('الإعدادات', 'Settings')}
-        title={tr('إعدادات المنصة', 'Platform settings')}
-        description={tr('إعدادات عامة تنطبق على كل المستخدمين. القيم السرية تظهر مقنّعة ولا تُرسل إلا عند تغييرها.', 'Platform-wide settings for every user. Secrets are shown masked and only sent when you change them.')}
-        actions={current.generic ? <Button loading={saving} disabled={!dirty || loading} onClick={save}>{tr('حفظ التغييرات', 'Save changes')}</Button> : undefined}
+        eyebrow={t('settings')}
+        title={t('platformSettings')}
+        description={t('platformWideSettingsEvery')}
+        actions={current.generic ? <Button loading={saving} disabled={!dirty || loading} onClick={save}>{t('saveChanges')}</Button> : undefined}
       />
 
       <div className="mb-4 lg:hidden">
         <div className="-mx-4 overflow-x-auto px-4 scrollbar-none">
-          <Tabs variant="pills" size="sm" value={section} onChange={go} aria-label={tr('أقسام الإعدادات', 'Settings sections')} idPrefix="settings"
+          <Tabs variant="pills" size="sm" value={section} onChange={go} aria-label={t('settingsSections')} idPrefix="settings"
             tabs={sections.map(s => ({ id: s.id, label: s.label, icon: s.icon }))} />
         </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
-        <nav className="hidden lg:block" aria-label={tr('أقسام الإعدادات', 'Settings sections')}>
+        <nav className="hidden lg:block" aria-label={t('settingsSections')}>
           <ul className="sticky top-[72px] space-y-1">
             {sections.map(s => (
               <li key={s.id}>
@@ -139,10 +141,10 @@ export default function AdminSettingsPage() {
           {current.generic && dirty && (
             <div className="sticky bottom-4 z-10 mt-5">
               <Card padding="sm" className="flex flex-wrap items-center justify-between gap-3 shadow-dropdown">
-                <span className="text-sm text-ink">{tr(`${changed.length} تغيير غير محفوظ`, `${changed.length} unsaved change(s)`)}</span>
+                <span className="text-sm text-ink">{tn('unsavedChanges', changed.length, { n: changed.length })}</span>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="ghost" onClick={() => setSettings(original)}>{tr('تراجع', 'Discard')}</Button>
-                  <Button size="sm" loading={saving} onClick={save}>{tr('حفظ', 'Save')}</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setSettings(original)}>{t('discard')}</Button>
+                  <Button size="sm" loading={saving} onClick={save}>{t('save')}</Button>
                 </div>
               </Card>
             </div>
