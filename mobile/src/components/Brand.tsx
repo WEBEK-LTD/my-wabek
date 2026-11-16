@@ -1,38 +1,30 @@
 import React from 'react'
 import { View, type StyleProp, type ViewStyle } from 'react-native'
 import { Image } from 'expo-image'
-import { LinearGradient } from 'expo-linear-gradient'
-import { C } from '@/lib/theme'
+import Svg, { Defs, RadialGradient, Stop, Circle } from 'react-native-svg'
 
 const LOGO = require('../../assets/brand/logo.png')
 
 /**
- * The WABEK mark on a white tile with the brand gradient ring — the way the
- * app icon looks on a phone, so the teal/green logo always reads clearly.
+ * The WABEK mark on its own — no box around it. A soft round glow in the
+ * brand's teal sits behind it so the logo reads clearly on the dark screens.
+ * (`ring` is kept for call-site compatibility; it only strengthens the glow.)
  */
 export function LogoTile({ size = 96, ring = true, style }: { size?: number; ring?: boolean; style?: StyleProp<ViewStyle> }) {
-  const radius = size * 0.28
-  const tile = (
-    <LinearGradient
-      colors={['#FFFFFF', '#F2FBF9', '#E3F5F1']}
-      start={{ x: 0.2, y: 0 }}
-      end={{ x: 0.9, y: 1 }}
-      style={{ flex: 1, borderRadius: ring ? radius - 2 : radius, alignItems: 'center', justifyContent: 'center' }}
-    >
-      <Image source={LOGO} style={{ width: size * 0.75, height: size * 0.75 }} contentFit="contain" accessibilityLabel="WABEK" />
-    </LinearGradient>
-  )
-  if (!ring) {
-    return <View style={[{ width: size, height: size, borderRadius: radius, overflow: 'hidden' }, style]}>{tile}</View>
-  }
+  const glow = size * 1.5
   return (
-    <LinearGradient
-      colors={[C.tealLight, C.teal, C.green]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={[{ width: size, height: size, borderRadius: radius, padding: Math.max(2, size * 0.02) }, style]}
-    >
-      {tile}
-    </LinearGradient>
+    <View style={[{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }, style]}>
+      <Svg width={glow} height={glow} style={{ position: 'absolute', left: (size - glow) / 2, top: (size - glow) / 2 }} pointerEvents="none">
+        <Defs>
+          <RadialGradient id="logoGlow" cx="50%" cy="50%" r="50%">
+            <Stop offset="0" stopColor="#5FE3EA" stopOpacity={ring ? 0.55 : 0.4} />
+            <Stop offset="0.45" stopColor="#12B5BE" stopOpacity={ring ? 0.28 : 0.18} />
+            <Stop offset="1" stopColor="#12B5BE" stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Circle cx={glow / 2} cy={glow / 2} r={glow / 2} fill="url(#logoGlow)" />
+      </Svg>
+      <Image source={LOGO} style={{ width: size, height: size }} contentFit="contain" accessibilityLabel="WABEK" />
+    </View>
   )
 }

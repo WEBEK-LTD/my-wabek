@@ -76,9 +76,8 @@ export default function Splash() {
         <Ring delay={0} color="rgba(139,224,122,0.8)" />
         <Ring delay={1200} color="rgba(18,181,190,0.8)" />
         <Ring delay={2400} color="rgba(139,224,122,0.7)" />
-        <View style={{ position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(18,181,190,0.22)' }} />
-        <Animated.View style={{ transform: [{ translateY: float.interpolate({ inputRange: [0, 1], outputRange: [0, -8] }) }], shadowColor: C.teal, shadowOpacity: 0.5, shadowRadius: 40, shadowOffset: { width: 0, height: 20 }, elevation: 16 }}>
-          <LogoTile size={150} />
+        <Animated.View style={{ transform: [{ translateY: float.interpolate({ inputRange: [0, 1], outputRange: [0, -8] }) }] }}>
+          <LogoTile size={156} />
         </Animated.View>
       </View>
 

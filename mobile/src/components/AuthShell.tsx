@@ -21,7 +21,7 @@ export function AuthShell({ title, subtitle, children, footer, back = true }: { 
             </View>
             <View style={{ alignItems: 'center', paddingBottom: 6 }}>
               <Floating distance={6} duration={2000}>
-                <View style={shadow.glow}><LogoTile size={92} /></View>
+                <LogoTile size={96} />
               </Floating>
               <T w="bold" size={26} color={C.onDeep} style={{ marginTop: 18, textAlign: 'center' }} accessibilityRole="header">{title}</T>
               {subtitle ? <T size={14} color={C.onDeepMuted} style={{ marginTop: 4, textAlign: 'center', paddingHorizontal: 24 }}>{subtitle}</T> : null}
