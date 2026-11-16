@@ -23,7 +23,7 @@ export default function PrivacyPage() {
 
   return (<>
     <Head>
-      <link rel="icon" href="https://res.cloudinary.com/dkl7ntpgw/image/upload/f_auto,q_auto/%D8%AA%D8%B5%D9%85%D9%8A%D9%85_%D8%A8%D8%AF%D9%88%D9%86_%D8%B9%D9%86%D9%88%D8%A7%D9%86_1_kejdrs" /><title>{T('Privacy Policy','سياسة الخصوصية','Politique de confidentialité','Gizlilik Politikası')} | {name}</title></Head>
+      <link rel="icon" href="/brand/favicon-32.png" /><title>{T('Privacy Policy','سياسة الخصوصية','Politique de confidentialité','Gizlilik Politikası')} | {name}</title></Head>
     <div className="lpage">
       <PublicNav active="/legal/privacy" onLangChange={setLang} />
       <style>{`

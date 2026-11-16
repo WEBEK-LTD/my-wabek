@@ -31,7 +31,7 @@ export default function ForgotPasswordPage() {
   return (
     <>
       <Head>
-      <link rel="icon" href="https://res.cloudinary.com/dkl7ntpgw/image/upload/f_auto,q_auto/%D8%AA%D8%B5%D9%85%D9%8A%D9%85_%D8%A8%D8%AF%D9%88%D9%86_%D8%B9%D9%86%D9%88%D8%A7%D9%86_1_kejdrs" /><title>Forgot Password | WABEK</title></Head>
+      <link rel="icon" href="/brand/favicon-32.png" /><title>Forgot Password | WABEK</title></Head>
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-center py-12 px-4">
         <div className="max-w-md mx-auto w-full">
           <div className="flex items-center gap-3 mb-8 justify-center">
