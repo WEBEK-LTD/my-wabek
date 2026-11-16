@@ -2,7 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuth } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { escapeFilterValue } from '@/lib/security'
-import { getAllowedInstances, canUseInstance, ownsContact, isValidAssignee } from '@/lib/inbox-access'
+import { getAllowedInstances, canUseInstance, ownsContact, isValidAssignee, saveConversationAssignment } from '@/lib/inbox-access'
 import { v4 as uuidv4 } from 'uuid'
 
 const STATUSES = ['open', 'pending', 'resolved', 'spam']
@@ -147,13 +147,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Upsert with the correct conflict target based on whether instance_id is set
-    const { data, error } = instance_id
-      ? await db.from('conversation_assignments').upsert(upsertData, {
-          onConflict: 'owner_id,contact_id,instance_id',
-        }).select().single()
-      : await db.from('conversation_assignments').upsert(upsertData, {
-          onConflict: 'owner_id,contact_id',
-        }).select().single()
+    // Select-then-update/insert (022's unique key includes instance_id, and
+    // NULL instance_ids never conflict, so a plain upsert can't be used).
+    const { data, error } = await saveConversationAssignment(db, upsertData as typeof upsertData & { owner_id: string; contact_id: string })
 
     if (error) {
       console.error('[inbox] upsert error:', error.message)

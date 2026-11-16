@@ -1,7 +1,6 @@
 import { smartSend, smartSendWAWeb, SmartSendResult } from '@/lib/wa-smart-send'
 import { supabaseAdmin } from './supabase'
-import { isValidAssignee } from './inbox-access'
-import { sendWAWebMessage } from './wa-web'
+import { isValidAssignee, saveConversationAssignment } from './inbox-access'
 import { sendTextMessage } from './whatsapp'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -373,13 +372,15 @@ async function executeNode(
         // The assignee must be the owner or one of the owner's team members
         const assigneeOk = await isValidAssignee(db, session.user_id, assignedTo)
         if (contact && assigneeOk) {
-          await db.from('conversation_assignments').upsert({
+          const { error } = await saveConversationAssignment(db, {
             owner_id: session.user_id,
             contact_id: contact.id,
+            instance_id: (instance.id as string) || null,
             assigned_to: assignedTo,
             status: 'open',
             updated_at: new Date().toISOString(),
-          }, { onConflict: 'owner_id,contact_id' })
+          })
+          if (error) console.error('[CHATBOT] assign failed:', error.message)
         }
       }
       return await next()
@@ -425,24 +426,13 @@ async function sendMsg(node: ChatbotNode, session: Session, instance: Record<str
     let waMessageId = ''
 
     if (instType === 'wa_web' || instType === 'baileys') {
-      const r = await sendWAWebMessage({ instanceId: instance.id as string, to: session.contact_phone, text })
-      waMessageId = r?.messageId || ''
-
-      // smartSend (cloud_api path below) already inserts a `messages` row
-      // with meta.source — for wa_web we insert it ourselves here.
-      await db.from('messages').insert({
-        id: uuidv4(),
-        user_id: session.user_id,
-        instance_id: instance.id,
-        direction: 'outbound',
-        type: 'text',
-        content: text,
-        wa_message_id: waMessageId,
-        status: 'sent',
-        meta: { method: 'text', source: 'chatbot' },
-      })
+      // Guarded send (plan limit / opt-out); smartSendWAWeb persists the row.
+      const r = await smartSendWAWeb({ userId: session.user_id, instanceId: instance.id as string, to: session.contact_phone, text, source: 'chatbot' })
+      if (r.error && !r.messageId) return false
+      waMessageId = r.messageId || ''
     } else {
       const r: SmartSendResult = await smartSend({ userId: (instance as any)?.user_id || (instance as any)?.userId || '', instanceId: (instance as any)?.id || '', phoneNumberId: instance.phone_number_id as string, accessToken: instance.access_token as string, to: session.contact_phone, text: text, source: 'chatbot' as any })
+      if (r.error && !r.messageId) return false
       waMessageId = r.messageId || ''
       // NOTE: smartSend already inserts the outbound `messages` row
       // (with wa_message_id dedup + meta.source='chatbot') — do not

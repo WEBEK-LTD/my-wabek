@@ -32,6 +32,13 @@ export default function SettingsPage() {
   }, [user?.id, user?.phone, user?.otp_mode])
   const [passwords, setPasswords] = useState({ current: '', newPass: '', confirm: '' })
   const [otp, setOtp] = useState({ otp_mode: user?.otp_mode || 'disabled' })
+  // Phone change is confirmed with a code sent to the new number (API → 202).
+  const [phoneOtpPending, setPhoneOtpPending] = useState(false)
+  const [phoneOtp, setPhoneOtp] = useState('')
+  // Weakening 2FA requires the current password.
+  const [currentPassword, setCurrentPassword] = useState('')
+  const OTP_STRENGTH = { disabled: 0, new_device: 1, always: 2 }
+  const weakening2fa = (OTP_STRENGTH[otp.otp_mode] ?? 0) < (OTP_STRENGTH[user?.otp_mode || 'disabled'] ?? 0)
 
   const { data: devicesData, refetch: refetchDevices } = useQuery('trusted-devices', () =>
     axios.get('/api/settings/devices').then(r => r.data), { enabled: tab === 'devices' }
@@ -40,7 +47,15 @@ export default function SettingsPage() {
   const profileMut = useMutation(
     (body) => axios.put('/api/settings/profile', body),
     { 
-      onSuccess: async () => { 
+      onSuccess: async (res) => { 
+        if (res?.status === 202 || res?.data?.requiresPhoneVerification) {
+          setPhoneOtpPending(true)
+          setPhoneOtp('')
+          toast.success('We sent a verification code to the new number by WhatsApp')
+          return
+        }
+        setPhoneOtpPending(false)
+        setPhoneOtp('')
         await fetchMe()  // reload full user from DB including phone/otp_mode/last_login etc.
         toast.success('Profile updated ✅') 
       },
@@ -60,6 +75,7 @@ export default function SettingsPage() {
       onSuccess: async (_, body) => {
         // Update store immediately so UI reflects the new mode
         setUser({ ...user, otp_mode: body.otp_mode })
+        setCurrentPassword('')
         toast.success('Security settings updated ✅')
       },
       onError: (e) => toast.error(e?.response?.data?.error || 'Failed') 
@@ -104,10 +120,18 @@ export default function SettingsPage() {
             </div>
             <div>
               <label className="label">WhatsApp Number <span className="text-slate-500 font-normal">(for OTP)</span></label>
-              <input value={profile.phone} onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))}
+              <input value={profile.phone} onChange={e => { setProfile(p => ({ ...p, phone: e.target.value })); setPhoneOtpPending(false) }}
                 placeholder="+201234567890" className="input" />
               <p className="text-xs text-slate-500 mt-1">Used for OTP verification. Include country code.</p>
             </div>
+            {phoneOtpPending && (
+              <div>
+                <label className="label">Verification code</label>
+                <input value={phoneOtp} onChange={e => setPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                  inputMode="numeric" autoComplete="one-time-code" placeholder="123456" className="input" />
+                <p className="text-xs text-slate-500 mt-1">Enter the code we sent by WhatsApp to confirm the phone number change.</p>
+              </div>
+            )}
             <div>
               <label className="label">Language / اللغة / Dil</label>
               <select value={profile.language || 'en'} onChange={e => setProfile(p => ({ ...p, language: e.target.value }))} className="input">
@@ -130,8 +154,9 @@ export default function SettingsPage() {
                 <option value="America/New_York">America/New_York (GMT-5)</option>
               </select>
             </div>
-            <button onClick={() => profileMut.mutate(profile)} disabled={profileMut.isLoading} className="btn-primary">
-              {profileMut.isLoading ? 'Saving...' : 'Save Profile'}
+            <button onClick={() => profileMut.mutate(phoneOtpPending ? { ...profile, phone_otp: phoneOtp } : profile)}
+              disabled={profileMut.isLoading || (phoneOtpPending && !phoneOtp)} className="btn-primary">
+              {profileMut.isLoading ? 'Saving...' : phoneOtpPending ? 'Verify & Save' : 'Save Profile'}
             </button>
           </div>
         )}
@@ -200,7 +225,16 @@ export default function SettingsPage() {
                 ))}
               </div>
 
-              <button onClick={() => securityMut.mutate(otp)} disabled={securityMut.isLoading}
+              {weakening2fa && (
+                <div className="mt-4">
+                  <label className="label">Current password</label>
+                  <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)}
+                    autoComplete="current-password" className="input" />
+                  <p className="text-xs text-slate-500 mt-1">Required to lower or disable two-factor authentication.</p>
+                </div>
+              )}
+              <button onClick={() => securityMut.mutate(weakening2fa ? { ...otp, current_password: currentPassword } : otp)}
+                disabled={securityMut.isLoading || (weakening2fa && !currentPassword)}
                 className="btn-primary mt-4 w-full justify-center">
                 {securityMut.isLoading ? <><ArrowPathIcon className="w-4 h-4 animate-spin" /> Saving...</> : '💾 Save Security Settings'}
               </button>

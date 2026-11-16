@@ -1,9 +1,31 @@
+/**
+ * Stripe Connect webhook — subscriptions that resellers sell on their OWN
+ * connected Stripe account (direct charges, created by POST /api/billing
+ * action=checkout with reseller_id). The platform webhook
+ * (/api/billing/webhook) ignores every event that carries `event.account`.
+ *
+ * Handled (all for connected accounts only):
+ *   checkout.session.completed      → activate subscription + plan
+ *   invoice.payment_succeeded       → (first payment and every renewal)
+ *                                      extend plan_expires_at + record the
+ *                                      reseller earning exactly once
+ *   customer.subscription.updated / deleted / paused / resumed
+ *                                   → status / cancel / period changes
+ *
+ * Trust model: the connected account comes from the signed event; it must
+ * belong to the reseller in the subscription metadata, the user must be that
+ * reseller's referral, and the plan must be one the reseller sells.
+ * Idempotency: processed_stripe_events (shared with the platform webhook) +
+ * the unique (reseller_id, payment_ref) index on reseller_earnings (028).
+ */
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabaseAdmin } from '@/lib/supabase'
 import Stripe from 'stripe'
-import { v4 as uuidv4 } from 'uuid'
+import { supabaseAdmin } from '@/lib/supabase'
+import { applySubscriptionState, mapStripeStatus, recordResellerEarning, BillingCycle } from '@/lib/stripe'
 
 export const config = { api: { bodyParser: false } }
+
+type DB = ReturnType<typeof supabaseAdmin>
 
 async function buffer(req: NextApiRequest): Promise<Buffer> {
   const chunks: Buffer[] = []
@@ -11,27 +33,134 @@ async function buffer(req: NextApiRequest): Promise<Buffer> {
   return Buffer.concat(chunks)
 }
 
-/** Atomic balance/earning increments (migration 027), with a safe fallback. */
-async function addResellerEarning(db: ReturnType<typeof supabaseAdmin>, resellerId: string, referredUserId: string, amount: number) {
-  const { error } = await db.rpc('reseller_add_earning', {
-    p_reseller_id: resellerId, p_referred_user_id: referredUserId, p_amount: amount,
-  })
-  if (!error) return
-  console.error('[connect-webhook] reseller_add_earning rpc failed, using fallback:', error.message)
-  const { data: rp } = await db.from('reseller_profiles').select('balance_pending, balance_total').eq('user_id', resellerId).maybeSingle()
-  if (rp) {
-    await db.from('reseller_profiles').update({
-      balance_pending: Number(rp.balance_pending || 0) + amount,
-      balance_total: Number(rp.balance_total || 0) + amount,
-    }).eq('user_id', resellerId)
+interface ConnectContext { userId: string; planId: string; resellerId: string }
+
+/** Validates metadata against the DB. Returns null (and logs) when anything doesn't line up. */
+async function resolveContext(
+  db: DB,
+  accountId: string,
+  meta: Stripe.Metadata | null | undefined,
+  eventId: string,
+  requireActivePlan: boolean
+): Promise<ConnectContext | null> {
+  const userId = meta?.userId
+  const planId = meta?.planId
+  const resellerId = meta?.resellerId
+  if (!userId || !planId || !resellerId) {
+    console.warn(`[connect-webhook] ${eventId}: missing metadata`)
+    return null
   }
-  const { data: ref } = await db.from('reseller_referrals').select('total_earned')
-    .eq('reseller_id', resellerId).eq('referred_user_id', referredUserId).maybeSingle()
-  if (ref) {
-    await db.from('reseller_referrals').update({ total_earned: Number(ref.total_earned || 0) + amount })
-      .eq('reseller_id', resellerId).eq('referred_user_id', referredUserId)
+  const { data: profile } = await db.from('reseller_profiles').select('user_id')
+    .eq('stripe_connect_account_id', accountId).maybeSingle()
+  if (!profile || profile.user_id !== resellerId) {
+    console.warn(`[connect-webhook] ${eventId}: account/reseller mismatch`)
+    return null
+  }
+  const { data: referral } = await db.from('reseller_referrals').select('id')
+    .eq('reseller_id', resellerId).eq('referred_user_id', userId).maybeSingle()
+  if (!referral) {
+    console.warn(`[connect-webhook] ${eventId}: user is not a referral of reseller`)
+    return null
+  }
+  let q = db.from('reseller_plans').select('id')
+    .eq('reseller_id', resellerId).eq('base_plan_id', planId)
+  if (requireActivePlan) q = q.eq('is_active', true)
+  const { data: rplans } = await q.limit(1)
+  if (!rplans?.length) {
+    console.warn(`[connect-webhook] ${eventId}: plan not offered by reseller`)
+    return null
+  }
+  return { userId, planId, resellerId }
+}
+
+function cycleOf(sub: Stripe.Subscription): BillingCycle {
+  const interval = sub.items?.data?.[0]?.price?.recurring?.interval
+  if (interval === 'year') return 'yearly'
+  if (interval === 'month') return 'monthly'
+  return sub.metadata?.billingCycle === 'yearly' ? 'yearly' : 'monthly'
+}
+
+async function retrieveSub(stripe: Stripe, id: string, accountId: string): Promise<Stripe.Subscription | null> {
+  try {
+    return await stripe.subscriptions.retrieve(id, { expand: ['items.data.price'] }, { stripeAccount: accountId })
+  } catch (e) {
+    if ((e as { code?: string })?.code === 'resource_missing') return null
+    throw e
   }
 }
+
+async function syncSub(db: DB, sub: Stripe.Subscription, ctx: ConnectContext) {
+  return applySubscriptionState(db, {
+    userId: ctx.userId,
+    planId: ctx.planId,
+    sub,
+    status: mapStripeStatus(sub.status),
+    cycle: cycleOf(sub),
+  })
+}
+
+async function processEvent(stripe: Stripe, db: DB, event: Stripe.Event, accountId: string): Promise<void> {
+  switch (event.type) {
+    case 'checkout.session.completed': {
+      const session = event.data.object as Stripe.Checkout.Session
+      if (session.mode !== 'subscription' || !session.subscription) return
+      if (session.payment_status === 'unpaid') return
+      const subId = typeof session.subscription === 'string' ? session.subscription : session.subscription.id
+      const sub = await retrieveSub(stripe, subId, accountId)
+      if (!sub) return
+      const ctx = await resolveContext(db, accountId, { ...(sub.metadata || {}), ...(session.metadata || {}) }, event.id, true)
+      if (!ctx) return
+      await syncSub(db, sub, ctx)
+      // Earnings are recorded from invoice.payment_succeeded only (once per invoice).
+      return
+    }
+
+    case 'invoice.payment_succeeded': {
+      const invoice = event.data.object as Stripe.Invoice
+      if (!invoice.subscription) return
+      const subId = typeof invoice.subscription === 'string' ? invoice.subscription : invoice.subscription.id
+      const sub = await retrieveSub(stripe, subId, accountId)
+      if (!sub) return
+      const ctx = await resolveContext(db, accountId, sub.metadata, event.id, false)
+      if (!ctx) return
+      // Renewal: the retrieved subscription carries the new period end.
+      const synced = await syncSub(db, sub, ctx)
+      if (synced && invoice.amount_paid > 0) {
+        await recordResellerEarning(db, {
+          resellerId: ctx.resellerId,
+          userId: ctx.userId,
+          planId: ctx.planId,
+          cycle: synced.cycle,
+          amountCents: invoice.amount_paid,
+          paymentRef: invoice.id,
+        })
+      }
+      return
+    }
+
+    case 'customer.subscription.updated':
+    case 'customer.subscription.deleted':
+    case 'customer.subscription.paused':
+    case 'customer.subscription.resumed': {
+      const evSub = event.data.object as Stripe.Subscription
+      // Re-read to avoid acting on an out-of-order payload.
+      const sub = (await retrieveSub(stripe, evSub.id, accountId)) || evSub
+      const ctx = await resolveContext(db, accountId, sub.metadata, event.id, false)
+      if (!ctx) return
+      await syncSub(db, sub, ctx)
+      return
+    }
+  }
+}
+
+const HANDLED = new Set([
+  'checkout.session.completed',
+  'invoice.payment_succeeded',
+  'customer.subscription.updated',
+  'customer.subscription.deleted',
+  'customer.subscription.paused',
+  'customer.subscription.resumed',
+])
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -59,6 +188,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // The connected account comes from the signed event, not from a header.
   const accountId = event.account
   if (!accountId) return res.status(200).json({ received: true, ignored: 'not a connect event' })
+  if (!HANDLED.has(event.type)) return res.status(200).json({ received: true, ignored: event.type })
 
   const db = supabaseAdmin()
 
@@ -71,81 +201,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object as Stripe.Checkout.Session
-      const { userId, planId, resellerId, billingCycle } = session.metadata || {}
-
-      if (!userId || !planId || !resellerId || session.mode !== 'subscription' || !session.subscription) {
-        return res.status(200).json({ received: true })
-      }
-      if (session.payment_status === 'unpaid') return res.status(200).json({ received: true })
-
-      // The connected account must belong to the reseller named in metadata,
-      // the user must be that reseller's referral, and the plan must be one
-      // the reseller actually sells. Metadata alone is never trusted.
-      const { data: profile } = await db.from('reseller_profiles').select('user_id')
-        .eq('stripe_connect_account_id', accountId).maybeSingle()
-      if (!profile || profile.user_id !== resellerId) {
-        console.warn('[connect-webhook] account/reseller mismatch for event', event.id)
-        return res.status(200).json({ received: true })
-      }
-      const { data: referral } = await db.from('reseller_referrals').select('id')
-        .eq('reseller_id', resellerId).eq('referred_user_id', userId).maybeSingle()
-      if (!referral) {
-        console.warn('[connect-webhook] user is not a referral of reseller, event', event.id)
-        return res.status(200).json({ received: true })
-      }
-      const { data: rplan } = await db.from('reseller_plans').select('id')
-        .eq('reseller_id', resellerId).eq('base_plan_id', planId).eq('is_active', true).maybeSingle()
-      if (!rplan) {
-        console.warn('[connect-webhook] plan not offered by reseller, event', event.id)
-        return res.status(200).json({ received: true })
-      }
-
-      const subscription = await stripe.subscriptions.retrieve(
-        session.subscription as string,
-        { stripeAccount: accountId }
-      )
-
-      await db.from('subscriptions').upsert({
-        id: uuidv4(),
-        user_id: userId, plan_id: planId,
-        stripe_subscription_id: subscription.id,
-        status: 'active', billing_cycle: billingCycle === 'yearly' ? 'yearly' : 'monthly',
-        current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-        current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-        cancel_at_period_end: false,
-      }, { onConflict: 'user_id' })
-
-      await db.from('users').update({
-        plan_id: planId,
-        plan_expires_at: new Date(subscription.current_period_end * 1000).toISOString(),
-      }).eq('id', userId)
-
-      // Record earning for reseller
-      const amount = (session.amount_total || 0) / 100
-      const { data: basePlanData } = await db.from('plans').select('price_monthly').eq('id', planId).maybeSingle()
-      const platformFee = Number(basePlanData?.price_monthly || 0)
-      const resellerEarning = Math.round((amount - platformFee) * 100) / 100
-
-      if (resellerEarning > 0) {
-        await db.from('reseller_earnings').insert({
-          id: uuidv4(),
-          reseller_id: resellerId,
-          referred_user_id: userId,
-          amount: resellerEarning,
-          gross_amount: amount,
-          platform_fee: platformFee,
-          source: 'subscription',
-          payment_ref: session.id,
-        })
-        await addResellerEarning(db, resellerId, userId, resellerEarning)
-      }
-    }
-
+    await processEvent(stripe, db, event, accountId)
     return res.status(200).json({ received: true })
   } catch (err) {
-    console.error('[connect-webhook] processing failed:', err)
+    console.error('[connect-webhook] processing failed:', (err as Error)?.message)
     // Allow Stripe to retry this event.
     await db.from('processed_stripe_events').delete().eq('id', event.id)
     return res.status(500).json({ error: 'Processing failed' })

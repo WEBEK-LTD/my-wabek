@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireOwnerOrRole } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { rateLimit, logAction, getClientIp } from '@/lib/middleware'
 import { upsertSubscriptionRow, LIVE_SUB_STATUSES } from '@/lib/stripe'
@@ -10,7 +10,8 @@ const MAX_REDEEMS_PER_HOUR = 5
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   if (!redeemLimiter(req, res)) return
-  const user = await requireAuth(req, res)
+  // Only the account owner may change the account's plan.
+  const user = await requireOwnerOrRole(req, res)
   if (!user) return
 
   const raw = req.body?.code

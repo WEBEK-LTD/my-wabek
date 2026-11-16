@@ -37,3 +37,34 @@ export async function isValidAssignee(db: Db, ownerId: string, assigneeId: strin
   const { data: sub } = await db.from('users').select('id').eq('id', assigneeId).eq('sub_account_of', ownerId).maybeSingle()
   return !!sub
 }
+
+/**
+ * Create-or-update the conversation for (owner, contact, instance).
+ * Migration 022 replaced the old UNIQUE(owner_id, contact_id) with
+ * UNIQUE(owner_id, contact_id, instance_id) — NULL instance_ids never conflict,
+ * so `upsert(onConflict: 'owner_id,contact_id')` no longer works. This does an
+ * explicit select-then-update/insert and never rewrites an existing row's id.
+ */
+export async function saveConversationAssignment(
+  db: Db,
+  row: Record<string, unknown> & { owner_id: string; contact_id: string; instance_id?: string | null }
+): Promise<{ data: Record<string, unknown> | null; error: { message: string } | null }> {
+  const instanceId = row.instance_id || null
+  let q = db.from('conversation_assignments').select('id')
+    .eq('owner_id', row.owner_id).eq('contact_id', row.contact_id)
+  q = instanceId ? q.eq('instance_id', instanceId) : q.is('instance_id', null)
+  const { data: existing, error: findErr } = await q.order('updated_at', { ascending: false }).limit(1)
+  if (findErr) return { data: null, error: findErr }
+
+  const fields: Record<string, unknown> = { ...row }
+  delete fields.id
+  const existingId = existing?.[0]?.id as string | undefined
+  if (existingId) {
+    const { data, error } = await db.from('conversation_assignments')
+      .update(fields).eq('id', existingId).select().single()
+    return { data, error }
+  }
+  const { data, error } = await db.from('conversation_assignments')
+    .insert({ ...row, instance_id: instanceId }).select().single()
+  return { data, error }
+}

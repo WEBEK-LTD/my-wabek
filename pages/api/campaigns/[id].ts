@@ -247,7 +247,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             const r = await smartSendWAWeb({
               userId, instanceId: instance.id,
               to: cleanPhone, text: msg, contactId: contact.id,
-              source: 'campaign',
+              source: 'campaign', campaignId: id,
             })
             if (r.error && !r.messageId) throw new Error(r.error)
           } else {

@@ -81,16 +81,12 @@ export async function authenticateApiKey(
   const { key, bearer } = headerKey(req)
 
   if (bearer && opts.allowJwt && bearer.split('.').length === 3) {
-    const { verifyToken } = await import('./auth')
-    const payload = await verifyToken(bearer)
-    if (payload?.userId) {
-      // Team members act on their owner's account (same rule as requireAuth)
-      try {
-        const { data: u } = await supabaseAdmin().from('users').select('sub_account_of').eq('id', payload.userId).maybeSingle()
-        if (u?.sub_account_of) return { userId: u.sub_account_of, via: 'jwt' }
-      } catch {}
-      return { userId: payload.userId, via: 'jwt' }
-    }
+    // Full session check (suspended users, revoked token_version, team
+    // membership → owner's account) — same rules as requireAuth.
+    const { getAuthUser } = await import('./auth')
+    const r = await getAuthUser(req)
+    if (r.ok) return { userId: r.payload.userId, via: 'jwt' }
+    return null
   }
 
   const headerCandidate = key || bearer

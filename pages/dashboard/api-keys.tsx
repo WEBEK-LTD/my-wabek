@@ -25,6 +25,10 @@ export default function ApiKeysPage() {
   const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://your-site.netlify.app'
 
   const { data } = useQuery('api-keys', () => axios.get('/api/settings/api-keys').then(r => r.data))
+  // The default key is no longer part of the user object (owner-only endpoint).
+  const { data: defaultKeyData, isError: defaultKeyError } = useQuery('default-api-key',
+    () => axios.get('/api/settings/default-api-key').then(r => r.data), { retry: false, staleTime: Infinity })
+  const defaultApiKey = defaultKeyData?.api_key || null
   const keys = data?.keys || []
 
   const createMut = useMutation(
@@ -72,12 +76,12 @@ export default function ApiKeysPage() {
           </div>
           <div className="flex items-center gap-2 bg-[#F8FAFC] rounded-lg px-4 py-3 border border-slate-200">
             <code className="flex-1 text-blue-600 text-sm font-mono truncate text-slate-800">
-              {showDefaultKey ? (user?.api_key || 'Loading…') : '••••••••••••••••••••••••••••••••'}
+              {showDefaultKey ? (defaultApiKey || (defaultKeyError ? 'Only the account owner can view this key' : 'Loading…')) : '••••••••••••••••••••••••••••••••'}
             </code>
             <button onClick={() => setShowDefaultKey(v => !v)} className="text-slate-400 hover:text-slate-900 p-1">
               {showDefaultKey ? <EyeSlashIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
             </button>
-            <button onClick={() => user?.api_key && copy(user.api_key)} className="text-slate-400 hover:text-slate-900 p-1">
+            <button onClick={() => defaultApiKey && copy(defaultApiKey)} className="text-slate-400 hover:text-slate-900 p-1">
               <ClipboardIcon className="w-4 h-4" />
             </button>
           </div>
@@ -163,7 +167,7 @@ export default function ApiKeysPage() {
                     <code className="text-sm text-slate-700 font-mono text-slate-800">{ep.path}</code>
                   </div>
                   <button onClick={() => {
-                    const cmd = `curl -X ${ep.method} ${appUrl}${ep.path} \\\n  -H "X-API-Key: ${user?.api_key || 'YOUR_KEY'}"${ep.body ? ` \\\n  -H "Content-Type: application/json" \\\n  -d '${ep.body}'` : ''}`
+                    const cmd = `curl -X ${ep.method} ${appUrl}${ep.path} \\\n  -H "X-API-Key: ${defaultApiKey || 'YOUR_KEY'}"${ep.body ? ` \\\n  -H "Content-Type: application/json" \\\n  -d '${ep.body}'` : ''}`
                     copy(cmd)
                   }} className="text-xs text-slate-400 hover:text-blue-600 flex items-center gap-1">
                     <ClipboardIcon className="w-3.5 h-3.5" /> Copy curl
@@ -185,9 +189,9 @@ export default function ApiKeysPage() {
           <h3 className="font-display font-semibold text-slate-900 mb-3">🏢 WHMCS Webhook URL</h3>
           <div className="flex items-center gap-2 bg-[#F8FAFC] rounded-lg px-4 py-3 border border-slate-200">
             <code className="flex-1 text-blue-600 text-xs font-mono break-all">
-              {appUrl}/api/v1/whmcs-webhook?api_key={user?.api_key || 'YOUR_KEY'}
+              {appUrl}/api/v1/whmcs-webhook?api_key={defaultApiKey || 'YOUR_KEY'}
             </code>
-            <button onClick={() => copy(`${appUrl}/api/v1/whmcs-webhook?api_key=${user?.api_key}`)} className="text-slate-400 hover:text-slate-900 flex-shrink-0">
+            <button onClick={() => copy(`${appUrl}/api/v1/whmcs-webhook?api_key=${defaultApiKey || 'YOUR_KEY'}`)} className="text-slate-400 hover:text-slate-900 flex-shrink-0">
               <ClipboardIcon className="w-4 h-4" />
             </button>
           </div>

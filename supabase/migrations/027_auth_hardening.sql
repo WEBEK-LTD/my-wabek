@@ -5,7 +5,7 @@
 --  * team_members                — invite_expires_at (+ invite_token if missing)
 --  * rate_limits + rate_limit_hit() — serverless-safe rate limiter
 --  * processed_stripe_events     — Stripe webhook idempotency (shared)
---  * bump_token_version(), reseller_add_earning() — atomic updates
+--  * bump_token_version()       — atomic token revocation (reseller_add_earning is in 028)
 --  * case-insensitive unique custom_domain (only if no duplicates exist)
 -- No existing data is dropped or rewritten.
 -- ============================================================
@@ -54,6 +54,7 @@ END;
 $$;
 
 -- ── Stripe webhook idempotency (main billing webhook may share it) ──
+-- Identical definition in 028 (CREATE ... IF NOT EXISTS; either may run first).
 CREATE TABLE IF NOT EXISTS processed_stripe_events (
   id         TEXT PRIMARY KEY,
   created_at TIMESTAMPTZ DEFAULT now()
@@ -70,49 +71,31 @@ AS $$
   RETURNING token_version;
 $$;
 
-CREATE OR REPLACE FUNCTION reseller_add_earning(p_reseller_id UUID, p_referred_user_id UUID, p_amount NUMERIC)
-RETURNS VOID
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  UPDATE reseller_profiles
-     SET balance_pending = COALESCE(balance_pending, 0) + p_amount,
-         balance_total   = COALESCE(balance_total, 0) + p_amount,
-         updated_at      = now()
-   WHERE user_id = p_reseller_id;
-
-  UPDATE reseller_referrals
-     SET total_earned = COALESCE(total_earned, 0) + p_amount
-   WHERE reseller_id = p_reseller_id AND referred_user_id = p_referred_user_id;
-END;
-$$;
+-- reseller_add_earning(p_user, p_amount, p_referred) is defined in 028
+-- (single signature; every caller uses it).
 
 -- The server uses the service role. These must NOT be callable by the
 -- anon/authenticated PostgREST roles (functions default to EXECUTE for PUBLIC).
 REVOKE ALL ON FUNCTION rate_limit_hit(TEXT, INTEGER, INTEGER) FROM PUBLIC;
 REVOKE ALL ON FUNCTION bump_token_version(UUID) FROM PUBLIC;
-REVOKE ALL ON FUNCTION reseller_add_earning(UUID, UUID, NUMERIC) FROM PUBLIC;
 
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
     REVOKE ALL ON FUNCTION rate_limit_hit(TEXT, INTEGER, INTEGER) FROM anon;
     REVOKE ALL ON FUNCTION bump_token_version(UUID) FROM anon;
-    REVOKE ALL ON FUNCTION reseller_add_earning(UUID, UUID, NUMERIC) FROM anon;
     REVOKE ALL ON TABLE rate_limits FROM anon;
     REVOKE ALL ON TABLE processed_stripe_events FROM anon;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
     REVOKE ALL ON FUNCTION rate_limit_hit(TEXT, INTEGER, INTEGER) FROM authenticated;
     REVOKE ALL ON FUNCTION bump_token_version(UUID) FROM authenticated;
-    REVOKE ALL ON FUNCTION reseller_add_earning(UUID, UUID, NUMERIC) FROM authenticated;
     REVOKE ALL ON TABLE rate_limits FROM authenticated;
     REVOKE ALL ON TABLE processed_stripe_events FROM authenticated;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
     GRANT EXECUTE ON FUNCTION rate_limit_hit(TEXT, INTEGER, INTEGER) TO service_role;
     GRANT EXECUTE ON FUNCTION bump_token_version(UUID) TO service_role;
-    GRANT EXECUTE ON FUNCTION reseller_add_earning(UUID, UUID, NUMERIC) TO service_role;
     GRANT ALL ON TABLE rate_limits TO service_role;
     GRANT ALL ON TABLE processed_stripe_events TO service_role;
   END IF;

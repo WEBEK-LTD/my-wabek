@@ -1,14 +1,16 @@
 // @ts-nocheck
 import { useState } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
-import { useMutation } from 'react-query'
+import { useMutation, useQuery } from 'react-query'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { ShieldCheckIcon, PaperAirplaneIcon, CheckCircleIcon, ClipboardIcon, CodeBracketIcon } from '@heroicons/react/24/outline'
-import { useAuthStore } from '@/lib/store'
 
 export default function OTPPage() {
-  const { user } = useAuthStore()
+  // The default API key is fetched on demand (owner-only), not from the user object.
+  const { data: defaultKeyData } = useQuery('default-api-key',
+    () => axios.get('/api/settings/default-api-key').then(r => r.data), { retry: false, staleTime: Infinity })
+  const apiKey = defaultKeyData?.api_key || null
   const [phone, setPhone] = useState('')
   const [purpose, setPurpose] = useState('verification')
   const [otpId, setOtpId] = useState('')
@@ -141,12 +143,12 @@ export default function OTPPage() {
                     <span className="text-xs font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-600">POST</span>
                     <code className="text-sm text-slate-800 font-mono text-slate-800">/api/v1/otp</code>
                   </div>
-                  <button onClick={() => copy(`curl -X POST ${appUrl}/api/v1/otp \\\n  -H "X-API-Key: ${user?.api_key}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"phone": "+905551234567", "purpose": "verification"}'`)} className="text-xs text-blue-600 hover:text-blue-500 flex items-center gap-1">
+                  <button onClick={() => copy(`curl -X POST ${appUrl}/api/v1/otp \\\n  -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"phone": "+905551234567", "purpose": "verification"}'`)} className="text-xs text-blue-600 hover:text-blue-500 flex items-center gap-1">
                     <ClipboardIcon className="w-3.5 h-3.5" /> Copy
                   </button>
                 </div>
                 <pre className="px-4 py-3 text-xs text-slate-800 font-mono overflow-x-auto bg-white rounded-lg border border-slate-200">{`curl -X POST ${appUrl}/api/v1/otp \\
-  -H "X-API-Key: ${user?.api_key || 'YOUR_API_KEY'}" \\
+  -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
   -H "Content-Type: application/json" \\
   -d '{"phone": "+905551234567", "purpose": "verification"}'
 
@@ -167,12 +169,12 @@ export default function OTPPage() {
                     <span className="text-xs font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-600">POST</span>
                     <code className="text-sm text-slate-800 font-mono text-slate-800">/api/v1/otp-verify</code>
                   </div>
-                  <button onClick={() => copy(`curl -X POST ${appUrl}/api/v1/otp-verify \\\n  -H "X-API-Key: ${user?.api_key}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"otp_id": "uuid-from-step-1", "otp": "123456"}'`)} className="text-xs text-blue-600 hover:text-blue-500 flex items-center gap-1">
+                  <button onClick={() => copy(`curl -X POST ${appUrl}/api/v1/otp-verify \\\n  -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"otp_id": "uuid-from-step-1", "otp": "123456"}'`)} className="text-xs text-blue-600 hover:text-blue-500 flex items-center gap-1">
                     <ClipboardIcon className="w-3.5 h-3.5" /> Copy
                   </button>
                 </div>
                 <pre className="px-4 py-3 text-xs text-slate-800 font-mono overflow-x-auto bg-white rounded-lg border border-slate-200">{`curl -X POST ${appUrl}/api/v1/otp-verify \\
-  -H "X-API-Key: ${user?.api_key || 'YOUR_API_KEY'}" \\
+  -H "X-API-Key: ${apiKey || 'YOUR_API_KEY'}" \\
   -H "Content-Type: application/json" \\
   -d '{"otp_id": "uuid-from-step-1", "otp": "123456"}'
 
@@ -220,7 +222,7 @@ add_hook('ClientLogin', 1, function($vars) {
 // WHMCS Hook: Send OTP on client login
 add_hook('ClientLogin', 1, function($vars) {
   $phone  = $vars['client']['phonenumber'];
-  $apiKey = '${user?.api_key || 'YOUR_WABEK_API_KEY'}';
+  $apiKey = '${apiKey || 'YOUR_WABEK_API_KEY'}';
 
   $ch = curl_init('${appUrl}/api/v1/otp');
   curl_setopt_array($ch, [
@@ -239,7 +241,7 @@ add_hook('ClientLogin', 1, function($vars) {
 // WHMCS Hook: Send OTP on invoice creation
 add_hook('InvoiceCreated', 1, function($vars) {
   // Notify client via WHMCS webhook (handled automatically)
-  $apiKey  = '${user?.api_key || 'YOUR_WABEK_API_KEY'}';
+  $apiKey  = '${apiKey || 'YOUR_WABEK_API_KEY'}';
   $payload = [
     'action'    => 'InvoiceCreated',
     'invoiceid' => $vars['invoiceid'],

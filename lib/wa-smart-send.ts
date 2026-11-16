@@ -396,10 +396,15 @@ export async function smartSendWAWeb(params: {
   source?: string
   sentBy?: string  // actualUserId of the team member who sent (for performance tracking)
   bypassLimits?: boolean  // platform system messages only (OTP etc.)
+  campaignId?: string | null  // stored on the messages row (campaign stats)
+  messageType?: string        // messages.type (default 'text')
+  extraMeta?: Record<string, unknown> // merged into messages.meta (e.g. flow_id)
+  /** false = do not store the message (OTP codes must never land in an inbox). */
+  persist?: boolean
 }): Promise<SmartSendResult> {
   // WA Web — no templates, no 24h window restriction
   const db = supabaseAdmin()
-  const { userId, instanceId, to, text, contactId, source = 'api', sentBy } = params
+  const { userId, instanceId, to, text, contactId, source = 'api', sentBy, campaignId = null, messageType = 'text', extraMeta, persist = true } = params
   // Preserve full JID for @lid/@g.us/@s.whatsapp.net contacts — stripping
   // to digits-only and re-appending the default suffix server-side sends
   // to the WRONG (non-existent) JID for @lid contacts, causing send errors.
@@ -421,8 +426,8 @@ export async function smartSendWAWeb(params: {
     // Save to DB regardless of messageId — if messageId is null we still
     // need the message persisted so it survives a page refresh.
     // Only skip if an identical wa_message_id already exists (dedup).
-    let shouldInsert = true
-    if (messageId) {
+    let shouldInsert = persist
+    if (shouldInsert && messageId) {
       const { data: existing } = await db.from('messages').select('id').eq('wa_message_id', messageId).eq('instance_id', instanceId).limit(1).maybeSingle()
       if (existing) {
         console.log(`[smart-send] message ${messageId} already in DB, skipping insert`)
@@ -437,10 +442,11 @@ export async function smartSendWAWeb(params: {
         contact_id: contactId || null,
         wa_message_id: messageId,
         direction: 'outbound',
-        type: 'text',
+        type: messageType,
         content: text,
         status: 'sent',
-        meta: { method: 'text', source, ...(sentBy ? { sent_by: sentBy } : {}) },
+        ...(campaignId ? { campaign_id: campaignId } : {}),
+        meta: { method: 'text', source, ...(extraMeta || {}), ...(sentBy ? { sent_by: sentBy } : {}) },
       })
       if (insertErr) {
         console.error(`[smart-send] DB insert error:`, insertErr)

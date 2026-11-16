@@ -8,7 +8,7 @@ import { useAuthStore } from '@/lib/store'
 export default function TeamInvitePage() {
   const router = useRouter()
   const { token } = router.query
-  const { setUser, setToken } = useAuthStore()
+  const { user: me, setUser, setToken } = useAuthStore()
   const [step, setStep] = useState('loading') // loading | info | register | done
   const [invite, setInvite] = useState(null)
   const [form, setForm] = useState({ password: '', confirm: '' })
@@ -21,18 +21,31 @@ export default function TeamInvitePage() {
       .catch(() => setStep('invalid'))
   }, [token])
 
+  // Already logged in as the invited account → accept without a password.
+  const loggedInAsInvitee = !!(me?.email && invite?.email && me.email.toLowerCase() === String(invite.email).toLowerCase())
+
   const accept = async () => {
-    if (form.password !== form.confirm) { toast.error('Passwords do not match'); return }
-    if (form.password.length < 8) { toast.error('Password must be at least 8 characters'); return }
+    if (!loggedInAsInvitee) {
+      if (form.password !== form.confirm) { toast.error('Passwords do not match'); return }
+      if (form.password.length < 8) { toast.error('Password must be at least 8 characters'); return }
+    }
     setLoading(true)
     try {
-      const { data } = await axios.post('/api/team/invite/accept', { token, password: form.password })
+      const { data } = await axios.post('/api/team/invite/accept', loggedInAsInvitee ? { token } : { token, password: form.password })
       setUser(data.user)
-      setToken(data.token)
-      localStorage.setItem('wabek_token', data.token)
+      if (data.token) {
+        setToken(data.token)
+        localStorage.setItem('wabek_token', data.token)
+      }
       toast.success('Welcome to the team! 🎉')
       router.push('/dashboard')
     } catch (e) {
+      if (e?.response?.status === 409 && e?.response?.data?.requiresLogin) {
+        // The email already has an account: log in as it, then come back here.
+        toast.error(e.response.data.error, { duration: 6000 })
+        router.push(`/auth/login?redirect=${encodeURIComponent(router.asPath)}`)
+        return
+      }
       toast.error(e?.response?.data?.error || 'Failed to accept invite')
     } finally { setLoading(false) }
   }
@@ -71,6 +84,7 @@ export default function TeamInvitePage() {
                 <p className="text-slate-900 font-medium">{invite.name}</p>
                 <p className="text-slate-500 text-sm">{invite.email}</p>
               </div>
+              {!loggedInAsInvitee && (<>
               <div>
                 <label className="label">Set your password</label>
                 <input type="password" value={form.password} onChange={e => setForm(f => ({...f, password: e.target.value}))}
@@ -81,7 +95,8 @@ export default function TeamInvitePage() {
                 <input type="password" value={form.confirm} onChange={e => setForm(f => ({...f, confirm: e.target.value}))}
                   placeholder="Repeat password" className="input" />
               </div>
-              <button onClick={accept} disabled={loading || !form.password}
+              </>)}
+              <button onClick={accept} disabled={loading || (!loggedInAsInvitee && !form.password)}
                 className="btn-primary w-full justify-center py-3">
                 {loading ? 'Joining...' : '✅ Accept Invitation & Join'}
               </button>

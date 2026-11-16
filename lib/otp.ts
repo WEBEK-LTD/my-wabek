@@ -1,7 +1,6 @@
 import { smartSend, smartSendWAWeb, isInWindow } from '@/lib/wa-smart-send'
 import { supabaseAdmin } from './supabase'
 import { sendOtpTemplate } from './otp-template'
-import { sendWAWebMessage } from './wa-web'
 import { createHash } from 'crypto'
 import { randomDigits, safeEqual } from './security'
 
@@ -76,7 +75,9 @@ export async function sendOTP(params: {
   const isWAWeb = instance.instance_type === 'wa_web'
 
   if (isWAWeb) {
-    await sendWAWebMessage({ instanceId: instance.id, to: params.phone, text: message })
+    // OTP is a system message (bypassLimits) and is never stored in the inbox.
+    const r = await smartSendWAWeb({ userId: instance.user_id || params.userId, instanceId: instance.id, to: params.phone, text: message, source: 'notification', bypassLimits: true, persist: false })
+    if (r.error && !r.messageId) throw new Error('Failed to send OTP via WhatsApp')
   } else {
     // Cloud API — try template first, then text
     const { getSetting } = await import('./settings')
@@ -108,7 +109,8 @@ export async function sendOTP(params: {
       if (!inWindow) {
         throw new Error('No OTP Template Name configured (Settings → Security & OTP) and the recipient is outside the 24h messaging window. Configure an Authentication template (e.g. "digits") to send OTP codes reliably.')
       }
-      await smartSend({ userId: (instance as any)?.user_id || (instance as any)?.userId || '', instanceId: (instance as any)?.id || '', phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: params.phone, text: message, source: 'api' as any, forceTemplate: false })
+      const r = await smartSend({ userId: (instance as any)?.user_id || (instance as any)?.userId || '', instanceId: (instance as any)?.id || '', phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: params.phone, text: message, source: 'notification', forceTemplate: false, bypassLimits: true })
+      if (r.error && !r.messageId) throw new Error('Failed to send OTP via WhatsApp')
     }
   }
 

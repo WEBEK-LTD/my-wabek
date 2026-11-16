@@ -26,6 +26,7 @@ export interface MessageRow {
   media_url?: string | null
   media_mime_type?: string | null
   media_filename?: string | null
+  campaign_id?: string | null
   meta?: Record<string, unknown>
 }
 
@@ -56,6 +57,7 @@ export async function insertMessage(row: MessageRow): Promise<{ id: string; erro
     media_url:      row.media_url ?? null,
     media_mime_type: row.media_mime_type ?? null,
     media_filename: row.media_filename ?? null,
+    ...(row.campaign_id ? { campaign_id: row.campaign_id } : {}),
     ...(row.meta ? { meta: row.meta } : {}),
   }
 
@@ -85,6 +87,7 @@ export async function insertMessage(row: MessageRow): Promise<{ id: string; erro
       content:       row.content,
       status:        row.status,
       media_url:     row.media_url ?? null,
+      ...(row.campaign_id ? { campaign_id: row.campaign_id } : {}),
       ...(row.meta ? { meta: row.meta } : {}),
     }
     const { error: fallbackErr } = await db.from('messages').insert(fallback)

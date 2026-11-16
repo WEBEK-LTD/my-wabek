@@ -26,29 +26,18 @@ export default function OAuthCallbackPage() {
       const qParams = new URLSearchParams(window.location.search)
       const code = qParams.get('code')
       if (code) {
-        // Handle PKCE code exchange
+        // PKCE / code flow: the server-side callback exchanges the code, sets
+        // the httpOnly session cookie and redirects to /auth/oauth-success.
         setStatus('Exchanging code...')
-        axios.post('/api/auth/oauth/exchange-code', { code })
-          .then(({ data }) => {
-            if (data.token) {
-              localStorage.setItem('wabek_token', data.token)
-              setToken(data.token)
-              setUser(data.user)
-              router.replace('/dashboard')
-            } else {
-              router.replace('/auth/login?error=exchange_failed')
-            }
-          })
-          .catch(e => {
-            const msg = e?.response?.data?.error || 'server_error'
-            router.replace(`/auth/login?error=${encodeURIComponent(msg)}`)
-          })
+        window.location.replace(`/api/auth/oauth/callback?code=${encodeURIComponent(code)}`)
         return
       }
       router.replace('/auth/login?error=no_token')
       return
     }
 
+    // Drop the provider token from the address bar / history.
+    try { window.history.replaceState(null, '', window.location.pathname) } catch {}
     setStatus('Verifying your account...')
     axios.post('/api/auth/oauth/exchange', { access_token: accessToken })
       .then(({ data }) => {
