@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/auth'
 import { v4 as uuidv4 } from 'uuid'
+import { logAction, getClientIp } from '@/lib/middleware'
 
 const planSchema = z.object({
   name: z.string().min(1),
@@ -30,6 +31,7 @@ const planSchema = z.object({
   allow_sub_accounts: z.boolean().optional(),
   allow_reseller: z.boolean().optional(),
   allow_gift_invites: z.boolean().optional(),
+  allow_ai: z.boolean().optional(),
   invite_credits: z.number().min(0).optional(),
   // Display
   features: z.array(z.string()).default([]),
@@ -52,7 +54,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const body = planSchema.parse(req.body)
       const { data, error } = await db.from('plans').insert({ id: uuidv4(), ...body }).select().single()
-      if (error) return res.status(500).json({ error: error.message })
+      if (error) {
+        console.error('[admin plans] create failed:', error.message)
+        return res.status(500).json({ error: 'Failed to create plan' })
+      }
+      await logAction({ userId: admin.userId, action: 'admin_plan_create', resource: 'plan', resourceId: data?.id, details: { name: body.name }, ipAddress: getClientIp(req) })
       return res.status(201).json({ plan: data })
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ error: 'Invalid data', details: err.errors })

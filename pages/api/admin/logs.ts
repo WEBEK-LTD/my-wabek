@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/auth'
+import { escapeFilterValue } from '@/lib/security'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
@@ -9,7 +10,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const db = supabaseAdmin()
 
   const { search, page = '1', action_filter, user_id, date_from, date_to, mode = 'system' } = req.query
-  const pageNum = parseInt(page as string)
+  const pageNum = Math.max(1, parseInt(page as string) || 1)
+  const term = escapeFilterValue(search).replace(/\s+/g, '%')
   const limit   = 50
   const offset  = (pageNum - 1) * limit
 
@@ -33,16 +35,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // search: by action, IP, or resource
-  if (search) {
-    query = query.or(`action.ilike.%${search}%,ip_address.ilike.%${search}%,resource.ilike.%${search}%`)
+  if (term) {
+    query = query.or(`action.ilike.%${term}%,ip_address.ilike.%${term}%,resource.ilike.%${term}%`)
   }
 
   // date range
-  if (date_from) query = query.gte('created_at', new Date(date_from as string).toISOString())
-  if (date_to)   query = query.lte('created_at', new Date(date_to as string + 'T23:59:59').toISOString())
+  const df = date_from ? new Date(String(date_from)) : null
+  const dt = date_to ? new Date(String(date_to) + 'T23:59:59') : null
+  if (df && !isNaN(df.getTime())) query = query.gte('created_at', df.toISOString())
+  if (dt && !isNaN(dt.getTime())) query = query.lte('created_at', dt.toISOString())
 
   const { data, error, count } = await query
-  if (error) return res.status(500).json({ error: error.message })
+  if (error) {
+    console.error('[admin logs] query failed:', error.message)
+    return res.status(500).json({ error: 'Failed to load logs' })
+  }
 
   // Get distinct actions for filter dropdown
   const { data: actionRows } = await db.from('system_logs')
@@ -51,10 +58,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // For user search mode: find users matching search
   let userSuggestions: { id: string; name: string | null; email: string }[] = []
-  if (mode === 'user' && search && !user_id) {
+  if (mode === 'user' && term && !user_id) {
     const { data: users } = await db.from('users')
       .select('id, name, email')
-      .or(`email.ilike.%${search}%,name.ilike.%${search}%`)
+      .or(`email.ilike.%${term}%,name.ilike.%${term}%`)
       .limit(10)
     userSuggestions = users || []
   }

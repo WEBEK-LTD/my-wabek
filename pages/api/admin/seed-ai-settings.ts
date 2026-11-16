@@ -31,6 +31,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     updated_at: new Date().toISOString(),
   }, { onConflict: 'user_id,instance_id' }).select().single()
 
-  if (error) return res.status(500).json({ error: error.message, hint: 'Run migration 010_ai_settings.sql first' })
+  if (error) {
+    console.error('[seed-ai-settings] upsert failed:', error.message)
+    return res.status(500).json({ error: 'Failed to save AI settings', hint: 'Run migration 010_ai_settings.sql first' })
+  }
   return res.status(200).json({ success: true, settings: data })
 }

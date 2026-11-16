@@ -139,6 +139,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(400).json({ error: 'Invalid type' })
   } catch (err: any) {
-    return res.status(500).json({ error: err.message })
+    console.error('[gsc-data] error:', err?.message)
+    return res.status(500).json({ error: 'Failed to load Search Console data' })
   }
 }
