@@ -44,8 +44,8 @@ function audit(dir) {
   const doc = document.documentElement;
   if (doc.scrollWidth > window.innerWidth + 1) problems.push(`horizontal overflow: scrollWidth ${doc.scrollWidth} > ${window.innerWidth}`);
 
-  const roots = [...document.querySelectorAll('.wabek-ca, .wabek-co')];
-  if (!roots.length) problems.push('no .wabek-ca / .wabek-co root');
+  const roots = [...document.querySelectorAll('.wabek-ca, .wabek-co, .wabek-cs')];
+  if (!roots.length) problems.push('no .wabek-ca / .wabek-co / .wabek-cs root');
   for (const root of roots) {
     if (!visible(root)) problems.push('root not visible');
     const rr = root.getBoundingClientRect();
