@@ -13,7 +13,7 @@ jobs:
   keystore:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
@@ -37,7 +37,7 @@ jobs:
             echo "2. For each .txt file, add a repository secret with the file's name and its content."
             echo "3. Keep \`upload.keystore\` and the password somewhere safe (password manager), then delete the artifact."
           } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: android-upload-key
           path: out/
