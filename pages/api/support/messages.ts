@@ -1,4 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
+import { sendAdminPush } from '@/lib/mobile-push'
 import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 
@@ -57,7 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!ticket_id || !content || typeof content !== 'string') return res.status(400).json({ error: 'ticket_id and content required' })
     if (content.length > 10000) return res.status(400).json({ error: 'Message too long' })
     const { data: ticket } = await db
-      .from('support_tickets').select('id')
+      .from('support_tickets').select('id, ticket_number, users(name, email)')
       .eq('id', ticket_id).eq('user_id', user.userId).maybeSingle()
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' })
 
@@ -73,6 +74,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       status: 'open', updated_at: new Date().toISOString()
     }).eq('id', ticket_id)
 
+    const who = (ticket as { users?: { name?: string; email?: string } | null }).users
+    await sendAdminPush('support_reply', { number: String((ticket as { ticket_number?: number }).ticket_number ?? ''), from: who?.name || who?.email || 'Customer', preview: content.slice(0, 160) }, { ticket_id: String(ticket_id) })
     return res.status(200).json({ message: msg })
   }
 

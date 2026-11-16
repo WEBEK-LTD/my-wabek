@@ -24,6 +24,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (planId && planId !== 'all' && planId !== 'free' && !UUID.test(planId)) return res.status(400).json({ error: 'Invalid plan_id' })
     if (status && !['all', 'active', 'suspended'].includes(status)) return res.status(400).json({ error: 'Invalid status' })
     if (role && !['all', 'user', 'admin'].includes(role)) return res.status(400).json({ error: 'Invalid role' })
+    // deletion=requested → accounts that asked to be deleted from the mobile app (migration 036).
+    const deletion = one(req.query.deletion) === 'requested'
 
     let query = db.from('users')
       .select('id, email, name, role, plan_id, plan_expires_at, is_active, created_at, referred_by, plans(id, name, price_monthly)', { count: 'exact' })
@@ -44,9 +46,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     else if (status === 'suspended') query = query.eq('is_active', false)
     if (role === 'admin') query = query.eq('role', 'admin')
     else if (role === 'user') query = query.neq('role', 'admin')
+    if (deletion) query = query.not('deletion_requested_at', 'is', null)
 
     const { data, error, count } = await query
     if (error) {
+      if (deletion && /deletion_requested_at/.test(error.message || '')) {
+        return res.status(200).json({ users: [], total: 0, page: pageNum, limit: limitNum })
+      }
       console.error('[admin users] list failed:', error.message)
       return res.status(500).json({ error: 'Failed to load users' })
     }

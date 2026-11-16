@@ -1,4 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
+import { sendAdminPush } from '@/lib/mobile-push'
 import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { sendEmail } from '@/lib/email'
@@ -60,6 +61,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await db.from('support_messages').insert({
       ticket_id: ticket.id, sender_type: 'user', sender_id: user.userId, content: message,
     })
+    await sendAdminPush('support_ticket', { number: ticketNumber, from: userRow?.name || userRow?.email || 'Customer', subject: String(subject).slice(0, 120) }, { ticket_id: String(ticket.id) })
 
     try {
       await sendEmail({

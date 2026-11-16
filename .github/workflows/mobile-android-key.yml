@@ -1,0 +1,44 @@
+# Run ONCE: creates the Android upload key for Google Play and hands it to you
+# as a download kept for one day. Add the four values as
+# repository secrets (see the summary of the run), then delete the artifact.
+name: Mobile app — create Android upload key
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  keystore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Create the key
+        run: |
+          set -euo pipefail
+          PASS=$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 24)
+          ALIAS=wabek-upload
+          keytool -genkeypair -v -storetype PKCS12 -keystore upload.keystore -alias "$ALIAS" \
+            -keyalg RSA -keysize 4096 -validity 10000 -storepass "$PASS" -keypass "$PASS" \
+            -dname "CN=WABEK, O=WEBEK LTD, C=GB" >/dev/null 2>&1
+          mkdir out
+          base64 -w0 upload.keystore > out/ANDROID_UPLOAD_KEYSTORE_BASE64.txt
+          printf '%s' "$PASS" > out/ANDROID_UPLOAD_STORE_PASSWORD.txt
+          printf '%s' "$PASS" > out/ANDROID_UPLOAD_KEY_PASSWORD.txt
+          printf '%s' "$ALIAS" > out/ANDROID_UPLOAD_KEY_ALIAS.txt
+          cp upload.keystore out/upload.keystore
+          {
+            echo "### Android upload key created"
+            echo "1. Download the **android-upload-key** artifact below (kept 1 day)."
+            echo "2. For each .txt file, add a repository secret with the file's name and its content."
+            echo "3. Keep \`upload.keystore\` and the password somewhere safe (password manager), then delete the artifact."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: android-upload-key
+          path: out/
+          retention-days: 1

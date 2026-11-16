@@ -662,6 +662,38 @@ app.post('/instance/:id/qr', auth, async (req, res) => {
   res.json({ instanceId: id, qrCode: s.qr || null, connected: s.connected, phoneNumber: s.phoneNumber, status: s.connected ? 'connected' : s.qr ? 'qr_pending' : 'initializing' })
 })
 
+// Link a number with an 8-character pairing code instead of a QR (WhatsApp →
+// Linked devices → Link with phone number instead). Works from the same phone
+// that holds the number, where scanning a QR is impossible.
+app.post('/instance/:id/pair', auth, async (req, res) => {
+  const { id } = req.params
+  const digits = String(req.body?.phone || '').replace(/\D/g, '')
+  if (!/^\d{8,15}$/.test(digits)) return res.status(400).json({ error: 'Invalid phone number', code: 'invalid_phone' })
+  try {
+    if (!sessions.has(id)) await createSession(id)
+    let s = sessions.get(id)
+    if (!s) return res.status(500).json({ error: 'Failed to create session' })
+    if (s.connected) return res.json({ instanceId: id, connected: true, phoneNumber: s.phoneNumber, status: 'connected' })
+    if (s.sock?.authState?.creds?.registered) return res.status(409).json({ error: 'Already linked', code: 'already_linked' })
+    // The socket can ask for a code once the connection is up (first QR event).
+    for (let i = 0; i < 40 && !s.qr; i++) {
+      await new Promise(r => setTimeout(r, 250))
+      s = sessions.get(id)
+      if (!s) return res.status(500).json({ error: 'Session closed' })
+    }
+    const raw = await s.sock.requestPairingCode(digits)
+    const code = String(raw || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+    if (code.length !== 8) return res.status(502).json({ error: 'No pairing code returned' })
+    const pretty = `${code.slice(0, 4)}-${code.slice(4)}`
+    s.pairingCode = pretty
+    console.log(`[${id}] Pairing code issued`)
+    res.json({ instanceId: id, pairingCode: pretty, status: 'pairing', expiresIn: 60 })
+  } catch (e) {
+    console.error(`[${id}] pairing error:`, e.message)
+    res.status(502).json({ error: 'Could not get a pairing code', code: 'pairing_failed' })
+  }
+})
+
 app.post('/instance/:id/send', auth, async (req, res) => {
   const { id } = req.params
   const { to, text, mediaUrl, mediaType, caption, filename, mimetype } = req.body
