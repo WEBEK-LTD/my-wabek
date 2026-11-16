@@ -37,3 +37,26 @@ show.call('ageRating', g.call("v1/appInfos/#{info.id}/ageRatingDeclaration"))
 show.call('contentRights', { 'data' => g.call("v1/apps/#{app.id}")['data']&.dig('attributes', 'contentRightsDeclaration') })
 subs = g.call('v1/reviewSubmissions', { 'filter[app]' => app.id, include: 'items' })
 show.call('reviewSubmissions', subs)
+
+# Try to add the version to a review submission (draft only — NOT submitted) to get Apple's detailed reason.
+pc = rc
+post = lambda do |path, body|
+  r = pc.post(path, body); [r.status, r.body]
+rescue => e
+  [0, { 'error' => e.message[0, 2000] }]
+end
+st, sub = post.call('v1/reviewSubmissions', { data: { type: 'reviewSubmissions', attributes: { platform: 'IOS' }, relationships: { app: { data: { type: 'apps', id: app.id } } } } })
+puts "create draft submission: #{st} #{JSON.generate(sub)[0, 1500]}"
+sid = sub.dig('data', 'id')
+if sid && v
+  st2, item = post.call('v1/reviewSubmissionItems', { data: { type: 'reviewSubmissionItems', relationships: { reviewSubmission: { data: { type: 'reviewSubmissions', id: sid } }, appStoreVersion: { data: { type: 'appStoreVersions', id: v.id } } } } })
+  puts "add version to draft: #{st2} #{JSON.generate(item)[0, 3000]}"
+  unless st2.to_i.between?(200, 299)
+    begin
+      pc.patch("v1/reviewSubmissions/#{sid}", { data: { type: 'reviewSubmissions', id: sid, attributes: { canceled: true } } })
+      puts 'draft canceled'
+    rescue => e
+      puts "cancel draft: #{e.message[0, 300]}"
+    end
+  end
+end
