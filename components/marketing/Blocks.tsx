@@ -118,7 +118,7 @@ export function MiniUiCard({ title, tag, rows, note, mono }: { title: React.Reac
           <li key={i} className="flex items-center gap-3 rounded-xl bg-canvas px-3 py-2.5">
             <span aria-hidden="true" className="h-[30px] w-[30px] shrink-0 rounded-full" style={{ background: r.color }} />
             <span className={cn('min-w-0 flex-1 truncate text-[13px]', r.mono && 'font-mono text-[12px]')} dir={r.mono ? 'ltr' : undefined}>{r.label}</span>
-            <span className="tabular text-xs text-muted" dir={r.mono ? 'ltr' : undefined}>{r.value}</span>
+            <span className="tabular text-xs text-muted" dir="ltr">{r.value}</span>
           </li>
         ))}
       </ul>

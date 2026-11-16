@@ -8,9 +8,9 @@ const FUNNEL = [
   { key: 'mk_preview_read', value: 6912, pct: 62 },
   { key: 'mk_preview_replies', value: 1304, pct: 18 },
 ]
-const HOURS = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00']
-const SENT = [420, 760, 780, 750, 770, 740, 710, 680, 670, 650, 670, 640]
-const READ = [180, 520, 610, 640, 660, 650, 620, 600, 590, 580, 610, 642]
+const HOURS = ['09:00', '11:00', '13:00', '15:00', '17:00', '19:00', '21:00']
+const SENT = [420, 1540, 1520, 1430, 1340, 1320, 670]
+const READ = [180, 1130, 1300, 1270, 1190, 1190, 650]
 
 /**
  * ProductPreview — a campaign screen built from UI-kit components, shown at the

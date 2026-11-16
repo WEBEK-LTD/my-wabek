@@ -157,13 +157,13 @@ export function PlanCards({ plans, loading, error, onRetry, cycle = 'monthly', t
                 <span dir="ltr">≈ {formatPrice(yearly / 12)}</span> {t('mk_per_month')}
               </p>
             )}
-            {p.description && <p className={cn('text-[15px] leading-[1.8]', featured ? 'text-deep-muted' : 'text-body')}>{p.description}</p>}
+            {p.description && <p dir="auto" className={cn('text-[15px] leading-[1.8]', featured ? 'text-deep-muted' : 'text-body')}>{p.description}</p>}
             {shown.length > 0 && (
               <ul className={cn('flex flex-1 flex-col gap-2.5 border-t pt-5', featured ? 'border-white/10' : 'border-line-soft')}>
                 {shown.map((f, i) => (
                   <li key={i} className="flex items-start gap-2.5 text-sm leading-relaxed">
                     <CheckIcon aria-hidden="true" className={cn('mt-0.5 h-4 w-4 shrink-0', featured ? 'text-brand-green' : 'text-brand-ink')} strokeWidth={2.6} />
-                    <span>{f}</span>
+                    <span dir="auto">{f}</span>
                   </li>
                 ))}
               </ul>
@@ -259,7 +259,7 @@ export function PlanComparison({ plans, t, caption }: { plans: PublicPlan[]; t: 
       </TR>
       {rows.map((r, i) => (
         <TR key={title + i}>
-          <TD className="font-medium text-ink">{r.label}</TD>
+          <TD className="font-medium text-ink"><span dir="auto">{r.label}</span></TD>
           {r.cells.map((c, ci) => <TD key={ci} align="center">{cell(c)}</TD>)}
         </TR>
       ))}
