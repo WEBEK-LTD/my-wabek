@@ -1,11 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { logAction, getClientIp } from '@/lib/middleware'
 import { toPublicInstance } from '@/lib/whatsapp'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'instances')
   if (!user) return
   const db = supabaseAdmin()
   const id = typeof req.query.id === 'string' ? req.query.id : ''

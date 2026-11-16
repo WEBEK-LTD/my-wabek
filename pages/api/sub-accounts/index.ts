@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next'
 import { requireOwnerOrRole, hashPassword, generateApiKey } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getSetting } from '@/lib/settings'
+import { checkPlanLimit } from '@/lib/middleware'
 import { v4 as uuidv4 } from 'uuid'
 
 const PUBLIC_USER_FIELDS = 'id, name, email, is_active, created_at'
@@ -33,6 +34,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const cleanEmail = email.toLowerCase().trim()
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) || cleanEmail.length > 254) return res.status(400).json({ error: 'Invalid email' })
     if (password.length < 8 || password.length > 256) return res.status(400).json({ error: 'Password must be at least 8 characters' })
+
+    // Plan: max_sub_accounts (platform admins are not limited)
+    if (user.role !== 'admin') {
+      const lim = await checkPlanLimit(user.userId, 'sub_accounts')
+      if (!lim.allowed) {
+        return res.status(403).json({
+          error: lim.limit > 0
+            ? `Your plan allows ${lim.limit} sub-account(s). Upgrade your plan to add more.`
+            : 'Sub-accounts are not included in your plan.',
+          code: 'plan_limit', upgrade_required: true, limit: lim.limit, current: lim.current,
+        })
+      }
+    }
 
     const allowReg = await getSetting('allow_registration', 'true')
     if (allowReg === 'false' || allowReg === false) {

@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { randomCode } from '@/lib/security'
 import { v4 as uuidv4 } from 'uuid'
@@ -20,7 +20,7 @@ function normalizeHttpUrl(raw: unknown): string | null {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'links')
   if (!user) return
   const db = supabaseAdmin()
 

@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 
 interface FlowNode {
@@ -15,7 +15,7 @@ interface FlowEdge {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'chatbot', { write: false })
   if (!user) return
 
   const { flow_id, message } = req.body

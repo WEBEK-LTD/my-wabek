@@ -1,13 +1,13 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { v4 as uuidv4 } from 'uuid'
 import { checkPlanFeature } from '@/lib/middleware'
 import { automationFlowSchema as createSchema } from '@/lib/automation-engine'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'automation')
   if (!user) return
   const db = supabaseAdmin()
 

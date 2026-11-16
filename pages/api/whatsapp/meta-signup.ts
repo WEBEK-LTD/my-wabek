@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { GRAPH_BASE_URL } from '@/lib/whatsapp'
 import { checkInstanceCreateAllowed } from '@/lib/wa-smart-send'
@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from 'uuid'
 const isGraphId = (v: unknown) => typeof v === 'string' && /^\d{1,30}$/.test(v)
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'instances')
   if (!user) return
 
   // ── GET: return App ID + one-time state token ──────────────────

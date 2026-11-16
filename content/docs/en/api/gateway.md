@@ -32,7 +32,9 @@ With `GET`, parameters are read from the URL only. With `POST`, they are read fr
 | `message` | `text`, `msg` | Yes | Message text |
 | `instance_id` | `sender_id`, `sender` | No | ID of the sending number. Default: the first connected number |
 
-> **Warning:** On Cloud API numbers, if the recipient is outside the 24-hour window, your text is not sent; the platform's default notification template is sent instead. For sign-in codes on the Cloud API, use [Send a message](/docs/api/send-message) with `code`, or [Send a verification code](/docs/api/send-otp); both use an Authentication template.
+> **Warning:** On Cloud API numbers, if the recipient is outside the 24-hour window, plain text cannot be delivered. When the message contains a 4–8 digit code (for example "Your code is 482913"), WABEK sends the code through your approved Authentication template; otherwise nothing is sent and the request returns `422` with code `OUTSIDE_WINDOW`. WABEK never sends a different template in place of your text.
+
+Requires a plan with API access (`403` `plan_no_api`) and the `send` key permission (`403` `permission_denied`). Limited to 100 requests per minute per key (`429` with `Retry-After`).
 
 ## Response
 

@@ -38,13 +38,13 @@ The customer is outside the window and every template attempt failed. Read `atte
 
 | Error in `attempts` | Fix |
 |---|---|
-| `132001` template does not exist | Check the exact name, and that the template language is `en` or `en_US` |
+| `132001` template does not exist | Check the exact name, and pass the template's approved language in `template_language` (otherwise `ar`, `en`, `en_US` are tried) |
 | `132000` parameter count mismatch | Match the `template_params` keys to the template's variables |
 | Template not approved | Wait for approval, or edit the template and resubmit it |
 
 ## Verification codes are not arriving
 
-- On the Cloud API an approved **Authentication** template is required. WABEK looks for the names `wabek_otp`, `digits`, `otp_verification` and `authentication` in `en`, `en_US` and `en_GB`, plus the name configured on the platform. If none exists on your account, contact support.
+- On the Cloud API an approved **Authentication** template is required. WABEK looks for the names `wabek_otp`, `digits`, `otp_verification` and `authentication` in `ar`, `en`, `en_US` and `en_GB`, plus the name configured on the platform. If none exists on your account, contact support.
 - Check that the code is 4 to 8 digits when using the `code` field.
 - Codes are valid for a limited time (10 minutes by default) and for five attempts.
 

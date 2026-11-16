@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { checkInstanceCreateAllowed } from '@/lib/wa-smart-send'
 import { callWAServer, isValidInstanceId } from '@/lib/wa-web'
 import { v4 as uuidv4 } from 'uuid'
@@ -8,7 +8,7 @@ import { v4 as uuidv4 } from 'uuid'
 const PUBLIC_COLUMNS = 'id, user_id, status, qr_code, phone_number, display_name, instance_type, type'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'instances')
   if (!user) return
   const db = supabaseAdmin()
 

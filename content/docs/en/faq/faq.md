@@ -26,7 +26,7 @@ The current public API endpoints send text only. Attachments (up to 16 MB) can b
 
 ## Are Arabic templates supported?
 
-WABEK currently sends templates with English language codes only: `en` in campaigns, `en` then `en_US` in `POST /api/v1/send`, and `en`, `en_US` and `en_GB` for verification codes. A template approved in Meta only under the `ar` language code will not be found on these paths, and Meta returns error `132001`.
+Yes. Campaigns save the language of the template you pick (for example `ar`) and send it with that code. `POST /api/v1/send` uses `template_language` when you give it. Wherever no language is known, WABEK tries `ar`, then `en`, then `en_US` (verification codes also `en_GB`), skipping languages in which the template does not exist.
 
 ## How many messages can I send?
 

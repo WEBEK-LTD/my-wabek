@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { Button, Spinner } from '@/components/ui'
 import { ErrorScreen } from '@/components/marketing/ErrorScreen'
 import { usePublicLang } from '@/components/marketing/usePublicLang'
+import { emitWebhookEvent } from '@/lib/outgoing-webhooks'
 
 // Visual fallback only: getServerSideProps below always answers with a redirect.
 export default function RedirectPage() {
@@ -76,6 +77,18 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       ip_address: ip.slice(0, 64),
       user_agent: ua,
     })
+    try {
+      const { data: owner } = await db.from('tracked_links').select('user_id, short_code').eq('id', link.id).maybeSingle()
+      if (owner?.user_id) {
+        // Do not hold the visitor's redirect for a slow receiver
+        await Promise.race([
+          emitWebhookEvent(owner.user_id, 'link_clicked', {
+            link_id: link.id, short_code: owner.short_code || code, url: destination, clicked_at: new Date().toISOString(),
+          }),
+          new Promise(r => setTimeout(r, 1500)),
+        ])
+      }
+    } catch { /* never block the redirect */ }
   }
 
   return { redirect: { destination, permanent: false } }

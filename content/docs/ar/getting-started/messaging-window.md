@@ -32,20 +32,20 @@ slug: getting-started/messaging-window
 | صندوق الوارد | يُرسل نصك | يُرفض الإرسال وتظهر رسالة: العميل خارج نافذة الـ 24 ساعة ويجب أن يراسلك أولًا |
 | الحملات | تُرسل دائمًا عبر القالب الذي تختاره | كذلك |
 | `POST /api/v1/send` | يُرسل نصك | يحاول الإرسال عبر قالب (انظر أدناه)، وإن فشل يُعيد الخطأ `422` |
-| `/api/gateway/whatsapp` و`/api/webhooks/trigger` وWix | يُرسل نصك | يُرسل قالب الإشعار الافتراضي للمنصة بدلًا من نصك |
+| `/api/gateway/whatsapp` و`/api/webhooks/trigger` وWix وWHMCS webhook والأتمتة | يُرسل نصك | لا يُرسل شيء: `outside_window` (يرسل Gateway الرمز الذي يجده في النص عبر قالب Authentication لديك) |
 | رموز التحقق (OTP) | عبر قالب Authentication | عبر قالب Authentication |
 
-> **تحذير:** في نقاط `/api/gateway/whatsapp` و`/api/webhooks/trigger` وتكامل Wix، إذا كان العميل خارج النافذة فقد يصله قالب إشعار عام بدلًا من نص رسالتك. للرسائل المهمة خارج النافذة استخدم `POST /api/v1/send` مع الحقل `template`.
+> **تحذير:** لا ترسل WABEK قالبًا عامًا بدل نصك أبدًا. في `/api/gateway/whatsapp` و`/api/webhooks/trigger` وwebhooks تكاملَي Wix وWHMCS والأتمتة، لا تصل الرسالة إلى العميل خارج النافذة ويُبلَغ الطلب بالرمز `outside_window`. للرسائل المهمة خارج النافذة استخدم `POST /api/v1/send` مع الحقل `template`.
 
 ## إرسال قالب عبر الـ API
 
 في `POST /api/v1/send`، إذا كان المستلم خارج النافذة:
 
-1. إذا أرسلت `template` (اسم القالب) و`template_params` (كائن معاملات مسمّاة)، تُرسل WABEK هذا القالب بمعاملاتك.
+1. إذا أرسلت `template` (اسم القالب) و`template_params` (كائن معاملات مسمّاة، أو مصفوفة لـ `{{1}}` و`{{2}}` …)، تُرسل WABEK هذا القالب بمعاملاتك.
 2. إذا لم ترسل `template`، تحاول WABEK قالب التسويق الافتراضي المُعدّ في المنصة، وتضع نص `message` في المعامل `offer_details` واسم العميل في `customer_name`.
 3. إذا احتوت `message` على رمز رقمي من 4 إلى 8 أرقام، تُعامل كرمز تحقق وتُرسل عبر قالب Authentication.
 
-تُجرّب لغتا القالب `en` ثم `en_US`. راجع [إرسال رسالة](/docs/api/send-message).
+تُجرَّب أولًا اللغة المحددة في `template_language`، ثم `ar` ثم `en` ثم `en_US`. راجع [إرسال رسالة](/docs/api/send-message).
 
 ## القوالب: ما تحتاج إلى معرفته
 
@@ -56,7 +56,7 @@ slug: getting-started/messaging-window
 
 ### قالب رموز التحقق
 
-لإرسال رموز OTP عبر Cloud API يلزم قالب من فئة **Authentication** معتمد على حسابك. تبحث WABEK عن القالب المُعدّ في المنصة، ثم عن الأسماء الشائعة `wabek_otp` و`digits` و`otp_verification` و`authentication`، باللغات `en` و`en_US` و`en_GB`.
+لإرسال رموز OTP عبر Cloud API يلزم قالب من فئة **Authentication** معتمد على حسابك. تبحث WABEK عن القالب المُعدّ في المنصة، ثم عن الأسماء الشائعة `wabek_otp` و`digits` و`otp_verification` و`authentication`، باللغات `ar` و`en` و`en_US` و`en_GB`.
 
 > **ملاحظة:** إذا لم يكن لديك قالب Authentication معتمد بأحد هذه الأسماء، فلن تصل رموز التحقق إلى العملاء خارج النافذة. تواصل مع الدعم لمعرفة اسم القالب المعتمد في المنصة.
 

@@ -1,11 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { checkPlanFeature } from '@/lib/middleware'
 import { clampMaxTokens, clampTemperature, consumeAiQuota } from '@/lib/ai-engine'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).end()
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'ai')
   if (!user) return
 
   const { message, system_prompt, company_name, max_tokens, temperature } = req.body || {}

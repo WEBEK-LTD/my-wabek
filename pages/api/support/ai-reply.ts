@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { checkPlanFeature } from '@/lib/middleware'
 import { consumeAiQuota, AI_MAX_TOKENS_CAP } from '@/lib/ai-engine'
@@ -26,7 +26,7 @@ HOW TO HELP:
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).end()
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'inbox')
   if (!user) return
 
   const { ticket_id, message } = req.body || {}

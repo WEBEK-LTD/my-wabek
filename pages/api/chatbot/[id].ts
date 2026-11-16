@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { checkPlanFeature } from '@/lib/middleware'
 
@@ -18,7 +18,7 @@ const updateSchema = z.object({
 })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'chatbot')
   if (!user) return
   const db = supabaseAdmin()
   const id = typeof req.query.id === 'string' ? req.query.id : ''

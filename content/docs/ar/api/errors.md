@@ -36,11 +36,11 @@ slug: api/errors
 | `200` | نجاح | — |
 | `400` | حقل إلزامي ناقص أو غير صالح | أصلح الطلب |
 | `401` | المفتاح مفقود أو غير صالح | تحقّق من المفتاح |
-| `403` | الإرسال ممنوع (حد الباقة، أو المستلم ألغى اشتراكه أو محظور) | راجع `code` |
+| `403` | غير مسموح: حد الباقة أو باقة بلا وصول إلى API، أو المفتاح بلا الصلاحية اللازمة، أو دور الفريق لا يسمح، أو المستلم ألغى اشتراكه / محظور | راجع `code` |
 | `404` | لا يوجد رقم متصل، أو نقطة غير معروفة | اربط رقمًا أو صحّح المسار |
 | `405` | طريقة HTTP غير مدعومة | استخدم الطريقة الصحيحة |
-| `422` | تعذّر التسليم خارج نافذة الـ 24 ساعة | أرسل قالبًا معتمدًا صالحًا |
-| `429` | تجاوزت حد الطلبات | انتظر `retryAfter` |
+| `422` | تعذّر التسليم خارج نافذة الـ 24 ساعة (`outside_window`) | أرسل قالبًا معتمدًا صالحًا |
+| `429` | تجاوزت حد الطلبات | انتظر المدة في ترويسة `Retry-After` / الحقل `retryAfter` |
 | `500` | خطأ داخلي | أعد المحاولة لاحقًا |
 | `502` | رفض مزوّد واتساب الرسالة | اقرأ `detail` |
 
@@ -54,6 +54,17 @@ slug: api/errors
 | `opted_out` | `OPTED_OUT` | المستلم ألغى اشتراكه في حسابك |
 | `blocked` | `BLOCKED` | المستلم محظور في حسابك |
 
+## رموز الوصول
+
+| الحالة | `code` | المعنى |
+|---|---|---|
+| `403` | `plan_no_api` | باقتك لا تشمل الوصول إلى API (`/api/v1/*` و`/api/gateway/whatsapp`). رقِّ الباقة |
+| `403` | `permission_denied` | مفتاح API لا يملك الصلاحية التي يتطلبها الإجراء؛ يذكرها الحقل `required` (`send`، `contacts:read`، `contacts:write`، `otp`). راجع [مفاتيح API](/docs/security/api-keys) |
+| `403` | `member_forbidden` | لطلبات لوحة التحكم فقط: دورك في الفريق (`viewer` / `agent`) لا يسمح بهذا التعديل. راجع [أدوار الفريق](/docs/guides/team-roles) |
+| `403` | `plan_limit` | بلغت حدًا من حدود الباقة: الرسائل الشهرية، أو جهات الاتصال (`max_contacts`)، أو الحسابات الفرعية (`max_sub_accounts`)؛ يذكر الحقل `limit` القيمة |
+| `422` | `outside_window` | المستلم خارج نافذة الـ 24 ساعة ولم يُحدَّد قالب. لا تستبدل WABEK بنصّك قالبًا آخر أبدًا |
+| `429` | `rate_limited` | طلبات كثيرة لهذا المفتاح؛ انتظر عدد الثواني في `Retry-After` |
+
 ## رسائل الخطأ حسب النقطة
 
 ### `/api/v1/*`
@@ -65,6 +76,7 @@ slug: api/errors
 | 400 | `otp_id and otp required` |
 | 401 | `Invalid API key` |
 | 403 | `Monthly message limit reached for your plan` / `Recipient has opted out` / `Recipient is blocked` |
+| 403 | `plan_no_api` / `permission_denied` / `plan_limit` (جهات الاتصال) |
 | 404 | `No connected WhatsApp instance` |
 | 404 | `Unknown action` |
 | 422 | `Recipient is outside the 24-hour messaging window` |
@@ -81,7 +93,10 @@ slug: api/errors
 | 400 | `MISSING_MESSAGE` | `Message required (message)` |
 | 401 | `UNAUTHORIZED` | `Invalid API key` |
 | 403 | `PLAN_LIMIT` / `OPTED_OUT` / `BLOCKED` | سبب المنع |
+| 403 | `plan_no_api` / `permission_denied` | الباقة بلا وصول إلى API / المفتاح بلا صلاحية `send` |
 | 404 | `NO_INSTANCE` | `No connected WhatsApp instance found` |
+| 422 | `OUTSIDE_WINDOW` | خارج نافذة الـ 24 ساعة (تُرسل الرموز عبر قالب المصادقة متى أمكن) |
+| 429 | `rate_limited` | طلبات كثيرة |
 | 502 | `SEND_FAILED` | سبب الفشل |
 
 ### `/api/webhooks/trigger`
@@ -90,9 +105,10 @@ slug: api/errors
 |---|---|
 | 400 | `to and message required` |
 | 401 | `API key required` / `Invalid API key` |
-| 403 | سبب المنع |
+| 403 | سبب المنع، أو `permission_denied` |
 | 404 | `No connected WhatsApp instance` |
 | 405 | `Method not allowed` |
+| 422 | `outside_window` |
 | 502 | سبب الفشل |
 
 ### `/api/webhooks/wix`
@@ -104,6 +120,7 @@ slug: api/errors
 | 403 | `Failed to send` مع `code` |
 | 404 | `No connected WhatsApp instance found` |
 | 405 | `Method not allowed` |
+| 422 | `outside_window` |
 | 502 | `Failed to send` |
 
 ## أخطاء Meta الشائعة

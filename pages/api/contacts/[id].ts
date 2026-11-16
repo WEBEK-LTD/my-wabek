@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
+import { onSubscriptionChanged } from '@/lib/opt-out'
 import { z } from 'zod'
 
 const updateSchema = z.object({
@@ -13,7 +14,7 @@ const updateSchema = z.object({
 })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'contacts')
   if (!user) return
   const db = supabaseAdmin()
   const id = typeof req.query.id === 'string' ? req.query.id : ''
@@ -34,6 +35,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (error) {
       console.error('[contacts] update error:', error.message)
       return res.status(500).json({ error: 'Failed to update contact' })
+    }
+    // opted_out toggled → opt_out / opt_in webhook (+ opt_in automations)
+    if (parsed.data.opted_out !== undefined && (contact.opted_out === true) !== parsed.data.opted_out) {
+      await onSubscriptionChanged({ userId: user.userId, phone: contact.phone, contactId: contact.id, optedOut: parsed.data.opted_out, source: 'dashboard' })
     }
     return res.status(200).json({ contact: data })
   }

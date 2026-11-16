@@ -21,13 +21,30 @@ Team members work inside your own account: they see its data and use its numbers
 
 ## Roles
 
-| Role | Intended use |
+| Role | Can do |
 |---|---|
-| **Admin** | Full access to features, team management, all conversations and settings |
-| **Agent** | Read and reply to conversations, send campaigns, manage contacts, without changing settings |
-| **Viewer** | Read conversations and analytics only |
+| **Admin** | Everything a member can do: all features, conversations and settings |
+| **Agent** | View everything; reply in the inbox (text, media, assignments, notes), manage contacts and quick replies |
+| **Viewer** | View only: conversations, contacts, campaigns and analytics. No changes |
 
 You can change a member's role at any time from the menu next to their name.
+
+## What is enforced
+
+Roles are enforced by the server, not only hidden in the interface. A blocked change returns `403` with `code: "member_forbidden"`.
+
+| Area | Admin | Agent | Viewer |
+|---|---|---|---|
+| Inbox: reply, send media, assign, notes | ✅ | ✅ | — |
+| Contacts (create, edit, import, opt-out, block, delete) | ✅ | ✅ | — |
+| Quick replies | ✅ | ✅ | — |
+| Campaigns (create, start, pause, delete) | ✅ | — | — |
+| Automations, chatbot flows, AI settings | ✅ | — | — |
+| Segments, tracked links | ✅ | — | — |
+| WhatsApp numbers (connect, edit, delete) | ✅ | — | — |
+| White label, integrations, webhooks, Wix / WHMCS settings | ✅ | — | — |
+| Viewing any of the above | ✅ | ✅ | ✅ |
+| Own profile, password, devices, notifications | ✅ | ✅ | ✅ |
 
 ## Owner-only actions
 

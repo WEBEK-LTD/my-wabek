@@ -63,6 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (r.error) {
     console.error('[wix webhook] send failed:', r.error)
+    if (r.error === 'outside_window') return res.status(422).json({ error: 'Recipient is outside the 24-hour WhatsApp window', code: 'outside_window' })
     return res.status(r.blocked ? 403 : 502).json({ error: 'Failed to send', code: r.blocked })
   }
   return res.status(200).json({ success: true, event, phone, wa_message_id: r.messageId || '' })

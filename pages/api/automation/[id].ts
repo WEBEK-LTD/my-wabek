@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { checkPlanFeature } from '@/lib/middleware'
 import { automationFlowSchema } from '@/lib/automation-engine'
 
@@ -12,7 +12,7 @@ const updateSchema = automationFlowSchema.extend({
 }).partial()
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'automation')
   if (!user) return
   const db = supabaseAdmin()
   const id = typeof req.query.id === 'string' ? req.query.id : ''

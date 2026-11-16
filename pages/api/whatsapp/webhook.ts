@@ -8,6 +8,8 @@ import { executeAutomationFlow } from '@/lib/automation-engine'
 import { processChatbotMessage } from '@/lib/chatbot-engine'
 import { processAIReply } from '@/lib/ai-engine'
 import { readRawBody, withTimeout } from '@/lib/raw-body'
+import { emitWebhookEvent } from '@/lib/outgoing-webhooks'
+import { handleOptKeyword } from '@/lib/opt-out'
 import { v4 as uuidv4 } from 'uuid'
 
 // Raw body is required to verify X-Hub-Signature-256.
@@ -51,7 +53,22 @@ async function findInstance(cache: Map<string, Resolved | null>, phoneNumberId: 
   return resolved
 }
 
+type Emit = (...args: Parameters<typeof emitWebhookEvent>) => void
+
+/**
+ * Outgoing webhooks run alongside the bot replies (a slow receiver must not
+ * delay them) and are awaited before the message counts as processed.
+ */
 async function handleInbound(msg: WebhookMessage, instances: Map<string, Resolved | null>): Promise<void> {
+  const events: Promise<void>[] = []
+  try {
+    await handleInboundMessage(msg, instances, (...args) => { events.push(emitWebhookEvent(...args)) })
+  } finally {
+    await Promise.allSettled(events)
+  }
+}
+
+async function handleInboundMessage(msg: WebhookMessage, instances: Map<string, Resolved | null>, emit: Emit): Promise<void> {
   const db = supabaseAdmin()
 
   // Ignore broadcast/newsletter senders
@@ -87,6 +104,12 @@ async function handleInbound(msg: WebhookMessage, instances: Map<string, Resolve
       id: uuidv4(), user_id: instance.user_id, phone: msg.from, name: msg.contactName || null, tags: [],
     }).select().maybeSingle()
     contactId = newContact?.id || null
+    if (newContact) {
+      emit(instance.user_id, 'contact_created', {
+        contact_id: newContact.id, phone: newContact.phone, name: newContact.name || null, source: 'inbound_message',
+        instance_id: instance.id,
+      })
+    }
   }
 
   const content = msg.text || `[${msg.type}]`
@@ -143,6 +166,12 @@ async function handleInbound(msg: WebhookMessage, instances: Map<string, Resolve
   // Notification for new message
   await notifyNewMessage(instance.user_id, msg.contactName || msg.from, content)
 
+  emit(instance.user_id, 'message_received', {
+    message_id: msg.messageId, id: inserted.id, from: msg.from, name: msg.contactName || null,
+    message: content, type: resolvedType, media_url: mediaUrl, contact_id: contactId,
+    instance_id: instance.id, provider: 'cloud_api',
+  })
+
   // Auto-create inbox conversation — scoped to this instance (inbox)
   try {
     await db.from('conversation_assignments').upsert({
@@ -157,6 +186,9 @@ async function handleInbound(msg: WebhookMessage, instances: Map<string, Resolve
       review_status:   'active',
     }, { onConflict: 'owner_id,contact_id,instance_id', ignoreDuplicates: false })
   } catch {}
+
+  // STOP / START keywords: record the choice, confirm once, no bot replies
+  if (msg.text && await handleOptKeyword({ userId: instance.user_id, instance, from: msg.from, text: msg.text, contactId })) return
 
   await executeAutomationFlow({
     userId: instance.user_id,
@@ -173,6 +205,7 @@ async function handleInbound(msg: WebhookMessage, instances: Map<string, Resolve
     from: msg.from,
     message: content,
     contactName: msg.contactName,
+    contactId,
   })
 
   // AI fallback — only if chatbot didn't handle it
@@ -189,7 +222,7 @@ async function handleInbound(msg: WebhookMessage, instances: Map<string, Resolve
   }
 }
 
-async function handleStatus(status: WebhookStatus, instances: Map<string, Resolved | null>): Promise<void> {
+async function handleStatus(status: WebhookStatus, instances: Map<string, Resolved | null>, emit: Emit): Promise<void> {
   const db = supabaseAdmin()
   const errorCode = status.errors?.[0]?.code
   const errorMsg = status.errors?.[0]?.message || status.errors?.[0]?.title
@@ -206,7 +239,7 @@ async function handleStatus(status: WebhookStatus, instances: Map<string, Resolv
 
   const { data: msgRows } = await db
     .from('messages')
-    .select('id, campaign_id, contact_id')
+    .select('id, campaign_id, contact_id, status')
     .eq('wa_message_id', status.messageId)
     .in('instance_id', resolved.ids)
     .limit(1)
@@ -223,6 +256,14 @@ async function handleStatus(status: WebhookStatus, instances: Map<string, Resolv
     })
     .eq('wa_message_id', status.messageId)
     .in('instance_id', resolved.ids)
+
+  if (['delivered', 'read', 'failed'].includes(status.status) && msgRow.status !== status.status) {
+    emit(instance.user_id, 'message_status', {
+      message_id: status.messageId, id: msgRow.id, status: status.status, to: recipientPhone,
+      contact_id: msgRow.contact_id || null, campaign_id: msgRow.campaign_id || null, instance_id: instance.id,
+      ...(status.status === 'failed' ? { error: { code: errorCode || null, message: errorMsg || null } } : {}),
+    })
+  }
 
   // Update campaign stats
   if (msgRow.campaign_id) {
@@ -283,9 +324,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       for (const msg of messages) {
         try { await handleInbound(msg, instances) } catch (err) { console.error('[WEBHOOK] message error:', err) }
       }
+      const statusEvents: Promise<void>[] = []
       for (const status of statuses) {
-        try { await handleStatus(status, instances) } catch (err) { console.error('[WEBHOOK] status error:', err) }
+        try {
+          await handleStatus(status, instances, (...args) => { statusEvents.push(emitWebhookEvent(...args)) })
+        } catch (err) { console.error('[WEBHOOK] status error:', err) }
       }
+      await Promise.allSettled(statusEvents)
     } catch (err) {
       console.error('Webhook error:', err)
     }

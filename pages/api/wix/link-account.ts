@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { verifyWixInstance, getWixInstanceParam, linkWixInstance } from '@/lib/wix-auth'
 
 // Link the logged-in WABEK account to a Wix store. Proof of the store is a
@@ -8,7 +8,7 @@ import { verifyWixInstance, getWixInstanceParam, linkWixInstance } from '@/lib/w
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'integrations')
   if (!user) return
 
   const wix = verifyWixInstance(getWixInstanceParam(req))

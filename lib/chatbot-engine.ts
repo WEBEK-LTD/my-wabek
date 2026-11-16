@@ -1,7 +1,7 @@
 import { smartSend, smartSendWAWeb, SmartSendResult } from '@/lib/wa-smart-send'
 import { supabaseAdmin } from './supabase'
 import { isValidAssignee, saveConversationAssignment } from './inbox-access'
-import { sendTextMessage } from './whatsapp'
+import { emitWebhookEvent } from './outgoing-webhooks'
 import { v4 as uuidv4 } from 'uuid'
 
 // ─────────────────────────────────────────────────────────
@@ -42,6 +42,7 @@ export async function processChatbotMessage(params: {
   from: string
   message: string
   contactName?: string
+  contactId?: string | null
 }): Promise<boolean> {
   const { userId, instanceId, instance, from, message, contactName } = params
   const db = supabaseAdmin()
@@ -85,8 +86,22 @@ export async function processChatbotMessage(params: {
     let matched = null
     const msgLower = message.toLowerCase().trim()
 
-    // First: try keyword match (more specific)
+    // `first_message` flows only run on the contact's first ever inbound
+    // message to this instance (the current message is already stored).
+    let firstInbound: boolean | null = null
+    const isFirstInbound = async (): Promise<boolean> => {
+      if (firstInbound !== null) return firstInbound
+      firstInbound = await isFirstInboundMessage(userId, instanceId, from, params.contactId)
+      return firstInbound
+    }
+    const candidates: typeof eligible = []
     for (const flow of eligible) {
+      if (flow.trigger_type === 'first_message' && !(await isFirstInbound())) continue
+      candidates.push(flow)
+    }
+
+    // First: try keyword match (more specific)
+    for (const flow of candidates) {
       const keywords: string[] = flow.trigger_keywords || []
       if (keywords.length > 0) {
         const hit = keywords.some(k => msgLower.includes(k.toLowerCase().trim()))
@@ -94,11 +109,15 @@ export async function processChatbotMessage(params: {
       }
     }
 
-    // Second: fallback to any_message ONLY if no keyword matched
+    // Second: a first_message flow (when this is the first message), then
+    // any_message — ONLY if no keyword matched
     if (!matched) {
-      for (const flow of eligible) {
+      matched = candidates.find(f => f.trigger_type === 'first_message' && !(f.trigger_keywords || []).length) || null
+    }
+    if (!matched) {
+      for (const flow of candidates) {
         const keywords: string[] = flow.trigger_keywords || []
-        if (keywords.length === 0) {
+        if (keywords.length === 0 && flow.trigger_type !== 'first_message') {
           matched = flow
           break
         }
@@ -137,6 +156,11 @@ export async function processChatbotMessage(params: {
     }
 
     await db.from('chatbot_sessions').upsert(newSession, { onConflict: 'user_id,contact_phone' })
+
+    await emitWebhookEvent(userId, 'chatbot_triggered', {
+      flow_id: matched.id, flow_name: matched.name, trigger_type: matched.trigger_type || null,
+      from, instance_id: instanceId, message,
+    })
 
     // 6. Execute from start node
     const replied = await executeNode(startNode, newSession, matched, instance)
@@ -442,6 +466,30 @@ async function sendMsg(node: ChatbotNode, session: Session, instance: Record<str
     return true
   } catch (err) {
     console.error('[CHATBOT] send error:', err)
+    return false
+  }
+}
+
+/**
+ * True when the contact has at most one inbound message on this instance
+ * (the message being processed, already stored by the webhook).
+ */
+async function isFirstInboundMessage(userId: string, instanceId: string, phone: string, contactId?: string | null): Promise<boolean> {
+  try {
+    const db = supabaseAdmin()
+    let ids: string[] = contactId ? [contactId] : []
+    if (!ids.length) {
+      const digits = String(phone || '').replace(/[^0-9]/g, '')
+      const { data: rows } = await db.from('contacts').select('id').eq('user_id', userId)
+        .in('phone', Array.from(new Set([phone, digits, `+${digits}`].filter(Boolean)))).limit(5)
+      ids = (rows || []).map(r => r.id)
+    }
+    if (!ids.length) return true
+    const { count, error } = await db.from('messages').select('id', { count: 'exact', head: true })
+      .eq('user_id', userId).eq('instance_id', instanceId).eq('direction', 'inbound').in('contact_id', ids)
+    if (error || count === null) return false
+    return count <= 1
+  } catch {
     return false
   }
 }

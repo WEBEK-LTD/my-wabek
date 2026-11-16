@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireCron } from '@/lib/security'
+import { retryWebhookDeliveries } from '@/lib/outgoing-webhooks'
 
 // Called every minute by netlify/functions/campaign-runner.mts:
 //   POST /api/campaigns/scheduler   header: x-cron-secret: <CRON_SECRET>
@@ -22,6 +23,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const db = supabaseAdmin()
   const now = new Date().toISOString()
 
+  // Retry failed outgoing webhook deliveries (bounded, ~5s max) — runs on the
+  // same every-minute tick so no extra scheduled function is needed.
+  const webhookRetry = retryWebhookDeliveries(25).catch((e) => {
+    console.error('[scheduler] webhook retry failed:', (e as Error)?.message)
+    return { retried: 0, delivered: 0 }
+  })
+
   const { data: campaigns, error } = await db
     .from('campaigns')
     .select('id')
@@ -32,10 +40,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (error) {
     console.error('[scheduler] query failed:', error.message)
+    await webhookRetry
     return res.status(500).json({ error: 'Query failed' })
   }
   if (!campaigns?.length) {
-    return res.status(200).json({ message: 'No campaigns due', processed: 0 })
+    return res.status(200).json({ message: 'No campaigns due', processed: 0, webhooks: await webhookRetry })
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.URL || 'https://waabek.com'
@@ -64,5 +73,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const started = outcomes.filter(o => o === 'started').length
   const failed = outcomes.length - started
-  return res.status(200).json({ message: `Processed ${outcomes.length} campaigns`, processed: outcomes.length, started, failed })
+  return res.status(200).json({ message: `Processed ${outcomes.length} campaigns`, processed: outcomes.length, started, failed, webhooks: await webhookRetry })
 }

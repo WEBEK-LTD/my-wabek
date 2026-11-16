@@ -1,10 +1,13 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { isCronRequest } from '@/lib/security'
 import { smartSend, smartSendWAWeb, TEMPLATES, resolveProvider } from '@/lib/wa-smart-send'
 import { notifyCampaignComplete } from '@/lib/notifications'
+import { applyCampaignFilter, CampaignContactFilter } from '@/lib/segments'
+import { parseScheduledAt, userTimeZone, personalize, cleanTemplateParam, buildTemplateBodyParams, campaignTemplateFields } from '@/lib/campaign-templates'
+import { emitWebhookEvent } from '@/lib/outgoing-webhooks'
 import { v4 as uuidv4 } from 'uuid'
 
 export const config = {
@@ -20,11 +23,12 @@ const updateSchema = z.object({
   instance_id: z.string().uuid().optional(),
   message: z.string().min(1).optional(),
   media_url: z.string().url().nullable().optional(),
-  scheduled_at: z.string().datetime().nullable().optional(),
+  scheduled_at: z.string().max(40).nullable().optional(),
   delay_seconds: z.number().min(1).max(60).optional(),
-  template_name: z.string().nullable().optional(),
-  template_language: z.string().nullable().optional(),
-  template_variables: z.array(z.string().max(1024)).max(20).nullable().optional(),
+  template_name: campaignTemplateFields.template_name.nullable(),
+  template_language: campaignTemplateFields.template_language.nullable(),
+  template_variables: campaignTemplateFields.template_variables.nullable(),
+  template_param_names: campaignTemplateFields.template_param_names.nullable(),
 })
 
 const STARTABLE = ['draft', 'scheduled', 'paused']
@@ -56,7 +60,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!campaign) return res.status(404).json({ error: 'Campaign not found' })
     userId = campaign.user_id
   } else {
-    const authed = await requireAuth(req, res)
+    const authed = await requireMemberAccess(req, res, 'campaigns')
     if (!authed) return
     userId = authed.userId
     const { data } = await db.from('campaigns').select('*').eq('id', id).eq('user_id', userId).maybeSingle()
@@ -78,13 +82,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!inst) return res.status(400).json({ error: 'Instance not found' })
     }
 
+    let scheduledAt: string | null | undefined = b.scheduled_at === null ? null : undefined
+    if (b.scheduled_at) {
+      scheduledAt = parseScheduledAt(b.scheduled_at, await userTimeZone(db, userId))
+      if (!scheduledAt) return res.status(400).json({ error: 'Invalid scheduled_at (use an ISO date-time)' })
+    }
+    const prevMeta = (campaign.meta as Record<string, unknown>) || {}
+    const nextMeta: Record<string, unknown> = { ...prevMeta }
+    if (b.template_language !== undefined) nextMeta.template_language = b.template_language || undefined
+    if (b.template_param_names !== undefined) nextMeta.template_param_names = b.template_param_names?.length ? b.template_param_names : undefined
+    if (b.template_variables !== undefined) nextMeta.template_variables_explicit = Array.isArray(b.template_variables) || undefined
+
     const { data, error } = await db.from('campaigns').update({
-      name: b.name, message: b.message, media_url: b.media_url, scheduled_at: b.scheduled_at,
+      name: b.name, message: b.message, media_url: b.media_url, scheduled_at: scheduledAt,
       delay_seconds: b.delay_seconds,
       ...(b.instance_id ? { instance_id: b.instance_id } : {}),
-      template_name: b.template_name || null,
-      template_language: b.template_language || 'en',
-      template_variables: b.template_variables || null,
+      ...(b.template_name !== undefined ? { template_name: b.template_name || null } : {}),
+      ...(b.template_language !== undefined ? { template_language: b.template_language || null } : {}),
+      ...(b.template_variables !== undefined ? { template_variables: b.template_variables ?? null } : {}),
+      meta: JSON.parse(JSON.stringify(nextMeta)),
       updated_at: new Date().toISOString(),
     }).eq('id', id).eq('user_id', userId).in('status', ['draft', 'scheduled']).select().maybeSingle()
     if (error) {
@@ -110,12 +126,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: `Instance not connected (status: ${instance.status})` })
       }
 
-      const filter = (campaign.contact_filter as { tags?: string[]; all?: boolean }) || {}
+      // Audience: all contacts, tags, or a segment's rules (copied at creation)
+      const filter = (campaign.contact_filter as CampaignContactFilter) || {}
 
       // Total audience — exact count, no 1000-row truncation
-      let countQuery = db.from('contacts').select('id', { count: 'exact', head: true })
-        .eq('user_id', userId).eq('is_blocked', false).eq('opted_out', false)
-      if (filter.tags?.length) countQuery = countQuery.overlaps('tags', filter.tags)
+      const countQuery = applyCampaignFilter(db.from('contacts').select('id', { count: 'exact', head: true })
+        .eq('user_id', userId).eq('is_blocked', false).eq('opted_out', false), filter)
       const { count: totalCount } = await countQuery
       const totalContacts = totalCount || 0
 
@@ -166,6 +182,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (totalContacts === 0) {
         await db.from('campaigns').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', id)
+        await emitWebhookEvent(userId, 'campaign_completed', {
+          campaign_id: id, name: campaign.name, status: 'completed', total: 0, sent: 0, failed: 0,
+          completed_at: new Date().toISOString(),
+        })
         return res.status(200).json({ success: true, message: 'No contacts found' })
       }
 
@@ -174,11 +194,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const isWAWeb = provider === 'wa_web'
       console.log(`[Campaign] start id=${id} provider=${provider} fresh=${isFreshStart} cursor=${cursor || 'none'} total=${totalContacts}`)
 
-      // Cloud API: use selected template or fall back to marketing_offer
+      // Cloud API: use selected template or fall back to marketing_offer.
+      // The language is left unset (→ 'ar', 'en', 'en_US' are tried) unless
+      // the campaign saved the template's real language.
       if (!isWAWeb && !campaign.template_name) {
-        await db.from('campaigns').update({ template_name: 'marketing_offer', template_language: 'en' }).eq('id', id)
+        await db.from('campaigns').update({ template_name: 'marketing_offer' }).eq('id', id)
         campaign.template_name = 'marketing_offer'
-        campaign.template_language = 'en'
       }
 
       const buildMeta = () => ({
@@ -200,9 +221,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       let exhausted = false
 
       const fetchPage = async (after: string | null): Promise<CampaignContact[]> => {
-        let q = db.from('contacts').select('id, phone, name, variables')
-          .eq('user_id', userId).eq('is_blocked', false).eq('opted_out', false)
-        if (filter.tags?.length) q = q.overlaps('tags', filter.tags)
+        let q = applyCampaignFilter(db.from('contacts').select('id, phone, name, variables')
+          .eq('user_id', userId).eq('is_blocked', false).eq('opted_out', false), filter)
         if (after) q = q.gt('id', after)
         const { data, error } = await q.order('id', { ascending: true }).limit(CONTACT_PAGE_SIZE)
         if (error) throw new Error(`contacts query failed: ${error.message}`)
@@ -224,24 +244,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         let payloadType = 'text'
         try {
-          // Build personalized message
-          let msg = campaign.message || ''
-          msg = msg.replace(/\{\{name\}\}/gi, contact.name || cleanPhone)
-                   .replace(/\{\{phone\}\}/gi, cleanPhone)
-          if (contact.variables) {
-            for (const [k, v] of Object.entries(contact.variables)) {
-              const key = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-              msg = msg.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'gi'), String(v))
-            }
-          }
-          msg = msg.replace(/\{\{[^}]+\}\}/g, '').trim()
+          // Build personalized message ({{name}}, {{phone}}, {{<variable>}})
+          const vars = { name: contact.name, phone: cleanPhone, variables: contact.variables }
+          const msg = personalize(campaign.message || '', vars).trim()
 
-          const templateLang = campaign.template_language || 'en'
-          const templateVars = (campaign.template_variables as string[]) || []
-          const resolvedVars = templateVars.map((v: string) =>
-            v.replace(/\{\{name\}\}/gi, contact.name || cleanPhone)
-             .replace(/\{\{phone\}\}/gi, cleanPhone)
-          )
+          // Saved template language (column, or meta for older rows); unset
+          // → smartSend tries 'ar', 'en', 'en_US'.
+          const templateLang: string | null = campaign.template_language || meta.template_language || null
+          const templateVars: string[] = Array.isArray(campaign.template_variables) ? campaign.template_variables.map(String) : []
+          const paramNames: string[] | null = Array.isArray(meta.template_param_names) ? meta.template_param_names : null
+          const explicitVars = meta.template_variables_explicit === true
 
           if (isWAWeb) {
             const r = await smartSendWAWeb({
@@ -254,27 +266,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             // Campaigns ALWAYS use templates — never text, no 24h window check
             const campaignTemplate = campaign.template_name || TEMPLATES.MARKETING
 
-            // marketing_offer's approved body:
-            //   "Hello {{customer_name}}, {{offer_details}} Thank you, Wabek Team"
-            const contactName = contact.name || 'Customer'
-            // Meta template parameters cannot contain newlines, tabs, or 4+
-            // consecutive spaces, and have a practical length limit.
-            const offerDetails = (msg || 'We have a special offer for you.')
-              .replace(/[\r\n\t]+/g, ' ')
-              .replace(/ {2,}/g, ' ')
-              .trim()
-              .slice(0, 1024)
-
-            let bodyParams: any[]
-            if (resolvedVars.length > 0) {
-              bodyParams = resolvedVars.map((v: string) => ({ type: 'text', parameter_name: 'customer_name', text: v }))
+            let bodyParams: Array<{ type: string; text: string; parameter_name?: string }>
+            if (templateVars.length > 0 || explicitVars) {
+              // Positional {{1}}, {{2}} … or named params, personalised per contact
+              bodyParams = buildTemplateBodyParams(templateVars, vars, paramNames)
             } else if (campaignTemplate === 'marketing_offer') {
+              // marketing_offer's approved body:
+              //   "Hello {{customer_name}}, {{offer_details}} Thank you, Wabek Team"
               bodyParams = [
-                { type: 'text', parameter_name: 'customer_name', text: contactName },
-                { type: 'text', parameter_name: 'offer_details', text: offerDetails },
+                { type: 'text', parameter_name: 'customer_name', text: cleanTemplateParam(contact.name || 'Customer') },
+                { type: 'text', parameter_name: 'offer_details', text: cleanTemplateParam(msg || 'We have a special offer for you.') },
               ]
             } else {
-              bodyParams = [{ type: 'text', parameter_name: 'customer_name', text: contactName }]
+              // Legacy campaigns (no variables saved): one {{customer_name}}
+              bodyParams = [{ type: 'text', parameter_name: 'customer_name', text: cleanTemplateParam(contact.name || 'Customer') }]
             }
             payloadType = 'template'
 
@@ -288,7 +293,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               contactId: contact.id,
               templateKey: 'MARKETING',
               templateNameOverride: campaignTemplate,
-              templateLanguage: templateLang,
+              templateLanguage: templateLang || undefined,
               templateComponents: [{ type: 'body', parameters: bodyParams }],
               forceTemplate: true,
               source: 'campaign',
@@ -364,6 +369,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }).eq('id', id)
           console.log(`[Campaign] COMPLETE id=${id} sent=${sent} failed=${failed} reengagement_blocked=${reengagementBlocked}`)
           await notifyCampaignComplete(userId, campaign.name, sent, failed)
+          await emitWebhookEvent(userId, 'campaign_completed', {
+            campaign_id: id, name: campaign.name, status: 'completed', total: totalContacts, sent, failed,
+            completed_at: new Date().toISOString(),
+          })
           return res.status(200).json({ success: true, sent, failed, done: true, message: `Campaign completed — sent to ${sent} contacts` })
         }
 

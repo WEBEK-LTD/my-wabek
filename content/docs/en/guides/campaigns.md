@@ -16,20 +16,24 @@ A campaign is one message sent to a group of contacts, immediately or at a set t
 
 - A connected number (status **connected**).
 - For **Cloud API** numbers: an approved template (`APPROVED`) in Meta Business Manager.
-- Contacts organized by tags if you want to target a specific group.
+- Contacts organized by tags or a [segment](/docs/guides/contacts) if you want to target a specific group.
 
 ## Create a campaign
 
 1. Open **Campaigns** and click **New Campaign**.
 2. Enter a **campaign name** and choose the sending **number**.
 3. Write the message, start from a ready-made sample, or use the AI message generator.
-4. For Cloud API numbers, choose the **approved template** from the list.
-5. Set the **audience**: leave the tags field empty for all contacts, or enter one or more comma-separated tags.
+4. For Cloud API numbers, choose the **approved template** from the list (each entry shows its language) and fill in its variables.
+5. Set the **audience**: all contacts, a **segment**, or one or more comma-separated tags.
 6. Set the **delay between messages** in seconds (1 to 60, default 3).
-7. Pick a send time, or leave it empty to start manually.
+7. Pick a send time (in your browser's local time), or leave it empty to start manually.
 8. Review the summary and create the campaign.
 
 > **Note:** Blocked and opted-out contacts are always excluded, whatever audience you choose.
+
+### Segments
+
+When you pick a segment, the campaign targets the contacts matching the segment's rules (all rules, or any rule if the segment uses **OR**). The rules are copied into the campaign when it is created, so editing or deleting the segment later does not change who a scheduled campaign is sent to. The count is evaluated again when sending starts, so new contacts that match are included.
 
 ## Variables
 
@@ -39,17 +43,21 @@ Your message is sent as text, with variables replaced:
 
 | Variable | Value |
 |---|---|
-| `{{name}}` | The contact's name (or number if there is no name) |
-| `{{phone}}` | The contact's number |
-| `{{any_key}}` | Any custom field in the contact's variables |
+| `{{name}}` or `{name}` | The contact's name (or number if there is no name) |
+| `{{phone}}` or `{phone}` | The contact's number |
+| `{{any_key}}` or `{any_key}` | Any custom field in the contact's variables |
 
-Variables with no value are removed from the text.
+`{{…}}` variables with no value are removed from the text.
 
 ### Cloud API numbers
 
-The campaign is **always sent as the template**, regardless of the 24-hour window. The customer receives the approved template's text, and WABEK passes the contact's name in the named parameter `customer_name`.
+The campaign is **always sent as the template**, regardless of the 24-hour window. The customer receives the approved template's text with its variables filled in per contact.
 
-> **Warning:** Design campaign templates so the body has exactly one named variable, `{{customer_name}}`, in language `en`. A template with a different number of variables, other variable names, or another language is rejected by Meta and the message counts as failed. If you choose no template, WABEK uses the default marketing template `marketing_offer`, which may not exist on your account.
+**Template variables.** After choosing a template, one field appears per variable in its body — `{{1}}`, `{{2}}` … for positional templates, or the parameter names (for example `{{customer_name}}`) for named ones. Each field can contain fixed text and the per-contact placeholders `{name}`, `{phone}` or any contact variable such as `{city}`. The first field defaults to `{name}`.
+
+**Template language.** The language shown next to the template (for example `ar` or `en_US`) is saved with the campaign and used exactly. Campaigns created without a saved language try `ar`, then `en`, then `en_US`.
+
+> **Warning:** Fill in every variable of the template: Meta rejects a template sent with a different number of parameters, and the message counts as failed. If you choose no template, WABEK uses the default marketing template `marketing_offer` (with `customer_name` and your message as `offer_details`), which may not exist on your account.
 
 ## Running and stopping
 
@@ -77,7 +85,11 @@ Large campaigns are sent in consecutive batches. After each batch the campaign r
 
 ## Tracking results
 
-Open the campaign to see total recipients, sent, failed, and the list of messages with the failure reason for each. You get an in-dashboard notification when the campaign completes.
+Open the campaign to see total recipients, sent, failed, and the list of messages with the failure reason for each. You get an in-dashboard notification when the campaign completes, and the `campaign_completed` [outgoing webhook](/docs/api/outgoing-webhooks) fires.
+
+## Creating campaigns through the API
+
+`POST /api/campaigns` (dashboard session) accepts `segment_id` (or `contact_filter: {"segment_id": "..."}` / `{"tags": [...]}`), `template_name`, `template_language`, `template_variables` (array of values) and, for named-parameter templates, `template_param_names` (array of names in the same order). `scheduled_at` is an ISO 8601 date-time with an offset (`2026-11-20T06:00:00.000Z`); a value without an offset (`2026-11-20T09:00`) is read in the time zone of your profile, or UTC.
 
 ## Plan limits
 

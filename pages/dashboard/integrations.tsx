@@ -9,9 +9,12 @@ import clsx from 'clsx'
 
 const EVENTS = [
   { value: 'message_received', label: '📥 Message Received', desc: 'Fires when a contact sends you a message' },
-  { value: 'message_sent', label: '📤 Message Sent', desc: 'Fires when you send a message via API' },
+  { value: 'message_sent', label: '📤 Message Sent', desc: 'Fires when any outbound message is sent (API, inbox, campaigns, bots)' },
+  { value: 'message_status', label: '✔️ Message Status', desc: 'Fires when an outbound message is delivered, read or failed' },
   { value: 'contact_created', label: '👤 New Contact', desc: 'Fires when a new contact is created' },
   { value: 'campaign_completed', label: '📢 Campaign Completed', desc: 'Fires when a campaign finishes sending' },
+  { value: 'opt_out', label: '🚫 Opt-out', desc: 'Fires when a contact unsubscribes (STOP) or is opted out' },
+  { value: 'opt_in', label: '✅ Opt-in', desc: 'Fires when a contact re-subscribes (START) or is opted in' },
   { value: 'chatbot_triggered', label: '🤖 Chatbot Triggered', desc: 'Fires when a chatbot flow starts' },
   { value: 'link_clicked', label: '🔗 Link Clicked', desc: 'Fires when a tracked link is clicked' },
 ]
@@ -32,6 +35,7 @@ export default function IntegrationsPage() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ target_url: '', event: 'message_received', label: '' })
   const [testingId, setTestingId] = useState(null)
+  const [newSecret, setNewSecret] = useState(null)
 
   const { data, isLoading } = useQuery('zapier-hooks', () => axios.get('/api/webhooks/zapier').then(r => r.data))
   const hooks = data?.hooks || []
@@ -44,8 +48,9 @@ export default function IntegrationsPage() {
   const createMut = useMutation(
     body => axios.post('/api/webhooks/zapier', body),
     {
-      onSuccess: () => {
+      onSuccess: (r) => {
         qc.invalidateQueries('zapier-hooks')
+        if (r?.data?.secret) setNewSecret(r.data.secret)
         setShowForm(false)
         setForm({ target_url: '', event: 'message_received', label: '' })
         toast.success('Webhook created ✅')
@@ -59,24 +64,26 @@ export default function IntegrationsPage() {
     { onSuccess: () => { qc.invalidateQueries('zapier-hooks'); toast.success('Deleted') } }
   )
 
+  // Signed test delivery from the server (same headers as real events)
   const testWebhook = async (hook) => {
     setTestingId(hook.id)
     try {
-      await fetch(hook.target_url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event: hook.event,
-          test: true,
-          timestamp: new Date().toISOString(),
-          data: { from: '201234567890', message: 'Test message from WABEK', name: 'Test Contact' }
-        })
-      })
+      await axios.post('/api/webhooks/zapier', { action: 'test', id: hook.id })
       toast.success('Test payload sent ✅')
-    } catch {
-      toast.error('Failed to reach webhook URL')
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to reach webhook URL')
     }
     setTestingId(null)
+  }
+
+  const rotateSecret = async (hook) => {
+    if (!confirm('Generate a new signing secret? The old one stops working immediately.')) return
+    try {
+      const r = await axios.post('/api/webhooks/zapier', { action: 'rotate_secret', id: hook.id })
+      setNewSecret(r.data.secret)
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed')
+    }
   }
 
   return (
@@ -232,6 +239,15 @@ export default function IntegrationsPage() {
             </div>
           )}
 
+          {newSecret && (
+            <div className="mb-4 p-3 rounded-xl border border-amber-200 bg-amber-50 text-xs">
+              <p className="font-medium text-amber-800 mb-1">Signing secret — copy it now, it is shown only once:</p>
+              <div className="flex items-center gap-1"><code className="font-mono break-all text-slate-800">{newSecret}</code><CopyBtn text={newSecret} /></div>
+              <p className="text-amber-700 mt-1">Verify <code>X-WABEK-Signature: sha256=HMAC_SHA256(secret, X-WABEK-Timestamp + "." + raw body)</code>.</p>
+              <button onClick={() => setNewSecret(null)} className="btn-secondary text-xs mt-2 py-1 px-2">Done</button>
+            </div>
+          )}
+
           {isLoading ? (
             <div className="space-y-2">{[1,2].map(i => <div key={i} className="h-16 skeleton rounded-xl" />)}</div>
           ) : hooks.length === 0 ? (
@@ -263,6 +279,7 @@ export default function IntegrationsPage() {
                     className="btn-secondary text-xs py-1.5 px-3 flex-shrink-0">
                     {testingId === hook.id ? <ArrowPathIcon className="w-3.5 h-3.5 animate-spin" /> : '🧪 Test'}
                   </button>
+                  <button onClick={() => rotateSecret(hook)} className="btn-secondary text-xs py-1.5 px-3 flex-shrink-0">🔑 Secret</button>
                   <button onClick={() => { if (confirm('Delete webhook?')) deleteMut.mutate(hook.id) }}
                     className="p-1.5 text-slate-500 hover:text-red-400 flex-shrink-0">
                     <TrashIcon className="w-4 h-4" />
@@ -274,14 +291,21 @@ export default function IntegrationsPage() {
 
           <div className="mt-4 p-3 bg-[#F8FAFC] rounded-xl border border-slate-200/50">
             <p className="text-xs text-slate-500 font-medium mb-2">📋 Webhook Payload Example (message_received):</p>
-            <pre className="text-xs text-slate-400 font-mono leading-relaxed">{`{
+            <pre className="text-xs text-slate-400 font-mono leading-relaxed">{`POST <your URL>
+X-WABEK-Event: message_received
+X-WABEK-Timestamp: 1735732800
+X-WABEK-Signature: sha256=<hex>
+
+{
   "event": "message_received",
-  "timestamp": "2025-01-01T12:00:00Z",
+  "created_at": "2025-01-01T12:00:00.000Z",
   "data": {
+    "message_id": "wamid.HBgM...",
     "from": "201234567890",
     "name": "Contact Name",
     "message": "Hello!",
     "type": "text",
+    "contact_id": "uuid",
     "instance_id": "uuid"
   }
 }`}</pre>

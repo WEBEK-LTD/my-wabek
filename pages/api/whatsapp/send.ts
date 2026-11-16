@@ -2,7 +2,7 @@ import { smartSend, smartSendWAWeb, smartSendMedia, resolveProvider } from '@/li
 import { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { v4 as uuidv4 } from 'uuid'
 
 const schema = z.object({
@@ -17,7 +17,7 @@ const schema = z.object({
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'inbox')
   if (!user) return
   const db = supabaseAdmin()
 
@@ -60,7 +60,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (result.error === 'outside_window') {
-      return res.status(403).json({ error: 'outside_window', outside_window: true, message: 'Media can only be sent within 24 hours of the customer\'s last message.' })
+      return res.status(403).json({ error: 'outside_window', outside_window: true, message: 'Text and media can only be sent within 24 hours of the customer\'s last message. Outside that window send an approved template.' })
     }
     if (result.error) return res.status(result.blocked ? 403 : 502).json({ error: result.error, code: result.blocked })
     return res.status(200).json({ success: true, wa_message_id: result.messageId })

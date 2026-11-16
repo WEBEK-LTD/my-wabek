@@ -14,6 +14,8 @@ POST /api/v1/send
 
 Sends a message from one of your numbers. WABEK picks the sending method automatically based on the number type and the 24-hour window.
 
+Requires a plan with API access (otherwise `403` `plan_no_api`) and, for keys with restricted permissions, the `send` permission (otherwise `403` `permission_denied`).
+
 ## Headers
 
 | Header | Value |
@@ -29,7 +31,8 @@ Sends a message from one of your numbers. WABEK picks the sending method automat
 | `message` | string | Yes | Message text. |
 | `instance_id` | string | No | ID of the sending number. If omitted, the oldest connected number on your account is used. |
 | `template` | string | No | Name of an approved template used if the recipient is outside the 24-hour window (Cloud API). |
-| `template_params` | object | No | Named template parameters, for example `{"customer_name": "Sara"}`. Used with `template`. |
+| `template_params` | object or array | No | Template body parameters, used with `template`: an object for named parameters (`{"customer_name": "Sara"}`) or an array for positional ones (`["Sara", "1042"]` → `{{1}}`, `{{2}}`). |
+| `template_language` | string | No | The template's approved language code exactly as shown in WhatsApp Manager (for example `ar`, `en`, `en_US`). |
 | `customer_name` | string | No | Customer name for the default template outside the window. Defaults to `Customer`. |
 | `code` | string or number | No | A 4–8 digit verification code. When present, the message is sent through an Authentication template. |
 | `type` | string | No | `otp` means `message` contains a verification code to extract. |
@@ -47,7 +50,7 @@ Sends a message from one of your numbers. WABEK picks the sending method automat
 | Cloud API | Outside the window with `template` | The given template is sent with `template_params` |
 | Cloud API | Outside the window without `template` | The platform's default marketing template is sent, with the customer name in `customer_name` and the `message` text in `offer_details` |
 
-Templates are tried in languages `en`, then `en_US`. See [24-hour window and templates](/docs/getting-started/messaging-window).
+Templates are tried in `template_language` first (when given), then `ar`, `en` and `en_US`; a language in which the template does not exist (Meta error `132001`) is skipped. See [24-hour window and templates](/docs/getting-started/messaging-window).
 
 > **Warning:** Before every send, WABEK checks the monthly message limit and that the recipient is not blocked or opted out. If sending is not allowed, status `403` is returned and the message is not sent.
 
@@ -75,10 +78,10 @@ The message is saved in the inbox as an outbound message.
 |---|---|---|
 | `400` | `{"error": "to and message required"}` | Missing field |
 | `401` | `{"error": "Invalid API key"}` | Invalid key |
-| `403` | `{"error": "Recipient has opted out", "code": "opted_out"}` | Plan limit, opt-out or block |
+| `403` | `{"error": "Recipient has opted out", "code": "opted_out"}` | Plan limit, opt-out or block; also `plan_no_api` / `permission_denied` |
 | `404` | `{"error": "No connected WhatsApp instance"}` | No number on the account |
 | `422` | See below | Outside the window and every template attempt failed |
-| `429` | `{"error": "Too many requests", "retryAfter": 42}` | Request limit exceeded |
+| `429` | `{"error": "Too many requests", "code": "rate_limited", "retryAfter": 60}` + `Retry-After` header | Request limit exceeded |
 | `502` | `{"error": "Failed to send message", "detail": "..."}` | The WhatsApp provider rejected the message |
 
 `422` example:
@@ -184,7 +187,7 @@ else:
 
 ### With a fallback template outside the window
 
-If the customer is inside the window, `message` is sent as text; otherwise the `order_update` template is sent. The template must be approved on the WhatsApp Business Account linked to the number, the `template_params` keys must match the variable names in its body, and its language must be `en` or `en_US`.
+If the customer is inside the window, `message` is sent as text; otherwise the `order_update` template is sent. The template must be approved on the WhatsApp Business Account linked to the number, the `template_params` keys must match the variable names in its body, and `template_language` should be the template's approved language (if omitted, `ar`, `en` and `en_US` are tried).
 
 ```bash
 curl -X POST https://waabek.com/api/v1/send \
@@ -195,6 +198,7 @@ curl -X POST https://waabek.com/api/v1/send \
     "message": "Hi Sara, your order #1042 has shipped.",
     "instance_id": "3f1c2a7e-0000-4000-8000-000000000000",
     "template": "order_update",
+    "template_language": "ar",
     "template_params": { "customer_name": "Sara", "order_id": "1042" }
   }'
 ```

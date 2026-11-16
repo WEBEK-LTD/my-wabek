@@ -13,7 +13,85 @@ import { sendWAWebMessage, sendWAWebMedia } from '@/lib/wa-web'
 import { insertMessage } from '@/lib/message-insert'
 import { assertSafeMediaUrl } from '@/lib/media-storage'
 import { checkPlanLimit } from '@/lib/middleware'
+import { emitWebhookEvent } from '@/lib/outgoing-webhooks'
 import { v4 as uuidv4 } from 'uuid'
+
+// ── Template language fallback ────────────────────────────────
+// A template is approved per language; the language code must match exactly
+// (Meta error 132001 otherwise). Order: the caller's / campaign's saved
+// language → 'ar' → 'en' → 'en_US'.
+export const TEMPLATE_LANGUAGE_FALLBACKS = ['ar', 'en', 'en_US'] as const
+const LANG_RE = /^[a-z]{2,3}(_[A-Z]{2,4})?$/
+
+export function templateLanguageOrder(preferred?: string | null): string[] {
+  const out: string[] = []
+  if (typeof preferred === 'string' && LANG_RE.test(preferred)) out.push(preferred)
+  for (const l of TEMPLATE_LANGUAGE_FALLBACKS) if (!out.includes(l)) out.push(l)
+  return out
+}
+
+/** Meta's "template does not exist in this language" error. */
+export function isTemplateLanguageMissing(err: any): boolean {
+  const code = err?.response?.data?.error?.code
+  return code === 132001
+}
+
+// Last language that worked per (phone number id, template) — saves failing
+// calls on every message of a campaign.
+const workingLangCache = new Map<string, string>()
+
+/**
+ * Send a template, trying the language fallback order on 132001.
+ * Throws the last error when no language works.
+ */
+export async function sendTemplateWithFallback(p: {
+  phoneNumberId: string
+  accessToken: string
+  to: string
+  templateName: string
+  language?: string | null
+  components: unknown[]
+}): Promise<{ result: any; language: string }> {
+  const cacheKey = `${p.phoneNumberId}:${p.templateName}`
+  let order = templateLanguageOrder(p.language)
+  const known = workingLangCache.get(cacheKey)
+  if (known && !p.language) order = [known, ...order.filter(l => l !== known)]
+  let lastErr: unknown = null
+  for (const language of order) {
+    try {
+      const result = await sendTemplateMessage({
+        phoneNumberId: p.phoneNumberId, accessToken: p.accessToken, to: p.to,
+        templateName: p.templateName, languageCode: language, components: p.components,
+      })
+      workingLangCache.set(cacheKey, language)
+      if (workingLangCache.size > 2000) workingLangCache.clear()
+      return { result, language }
+    } catch (e) {
+      lastErr = e
+      if (!isTemplateLanguageMissing(e)) throw e
+    }
+  }
+  throw lastErr
+}
+
+/**
+ * Fire the `message_sent` outgoing webhook (never throws). Campaign batches
+ * keep running for many seconds, so their deliveries are not awaited (a slow
+ * receiver must not eat the batch time budget); single sends await them so
+ * the function is not frozen before the delivery finished.
+ */
+async function emitMessageSent(d: {
+  userId: string; instanceId: string; to: string; messageId: string | null; rowId?: string
+  contactId?: string | null; type: string; content: string; source: string; method: string
+  campaignId?: string | null; template?: string
+}): Promise<void> {
+  const p = emitWebhookEvent(d.userId, 'message_sent', {
+    message_id: d.messageId, id: d.rowId || null, to: d.to, instance_id: d.instanceId,
+    contact_id: d.contactId || null, type: d.type, message: d.content, source: d.source,
+    method: d.method, campaign_id: d.campaignId || null, ...(d.template ? { template: d.template } : {}),
+  })
+  if (d.source !== 'campaign') await p
+}
 
 // ── Provider resolver — single source of truth ────────────────
 export function resolveProvider(instance: { instance_type?: string; type?: string }): 'wa_web' | 'cloud_api' {
@@ -256,10 +334,10 @@ export async function smartSend(params: SmartSendParams): Promise<SmartSendResul
   const db = supabaseAdmin()
   const {
     userId, instanceId, phoneNumberId, accessToken, to, text,
-    contactId, templateKey, templateNameOverride, templateComponents: templateComponentsInput = [], templateLanguage = 'en',
+    contactId, templateKey, templateNameOverride, templateComponents: templateComponentsInput = [], templateLanguage,
     forceTemplate = false, messageType = 'text', sentBy, bypassLimits,
   } = params
-  let templateComponents: unknown[] = templateComponentsInput
+  const templateComponents: unknown[] = templateComponentsInput
 
   const cleanPhone = to.replace(/[^0-9]/g, '')
 
@@ -293,6 +371,7 @@ export async function smartSend(params: SmartSendParams): Promise<SmartSendResul
   let messageId: string | null = null
   let method: SmartSendResult['method'] = 'text'
   let templateUsed: string | undefined
+  let templateLanguageUsed: string | undefined
   let error: string | undefined
 
   try {
@@ -309,15 +388,16 @@ export async function smartSend(params: SmartSendParams): Promise<SmartSendResul
         throw sendErr
       }
     } else {
-      // Outside 24h window — use template
-      // Use provided templateKey OR fallback to broadcast_notification (safe default - only needs customer_name)
-      const fallbackKey = (templateKey || 'BROADCAST') as TemplateKey
-      templateUsed = templateNameOverride || await getTemplateName(fallbackKey) || 'broadcast_notification'
-
-      // If using fallback template and no components provided, add customer_name
-      if (!templateKey && (!templateComponents || (templateComponents as any[]).length === 0)) {
-        templateComponents = [{ type: 'body', parameters: [{ type: 'text', parameter_name: 'customer_name', text: 'Customer' }] }]
+      // Outside the 24h window (or forced): only an approved TEMPLATE can be
+      // delivered. Use the template the caller asked for (templateKey /
+      // templateNameOverride). Without one we do NOT substitute a generic
+      // template — that would deliver a different message than the caller's
+      // text — and report `outside_window` instead.
+      if (!templateKey && !templateNameOverride) {
+        console.log(`[smart-send] OUTSIDE WINDOW and no template given → not sending (outside_window) to ${cleanPhone}`)
+        return { messageId: null, method: 'template', inWindow: false, error: 'outside_window' }
       }
+      templateUsed = templateNameOverride || await getTemplateName(templateKey as TemplateKey)
 
       console.log(`[smart-send] OUTSIDE WINDOW → template "${templateUsed}" to ${cleanPhone}`)
 
@@ -325,18 +405,18 @@ export async function smartSend(params: SmartSendParams): Promise<SmartSendResul
       const hasComponents = Array.isArray(templateComponents) && templateComponents.length > 0 &&
         (templateComponents as any[]).some((c: any) => c?.parameters?.length > 0)
 
-      let result: any
       try {
-        result = await sendTemplateMessage({
+        const { result, language } = await sendTemplateWithFallback({
           phoneNumberId,
           accessToken,
           to: cleanPhone,
           templateName: templateUsed,
-          languageCode: templateLanguage,
+          language: templateLanguage,
           components: hasComponents ? templateComponents : [],
         })
-        messageId = result.messages?.[0]?.id || null
+        messageId = result?.messages?.[0]?.id || null
         method = 'template'
+        templateLanguageUsed = language
       } catch (sendErr: any) {
         const metaErr = sendErr?.response?.data || sendErr?.message
         console.error(`[smart-send] Meta template FAILED status=${sendErr?.response?.status} phone_number_id=${phoneNumberId} body=`, JSON.stringify(metaErr))
@@ -362,8 +442,9 @@ export async function smartSend(params: SmartSendParams): Promise<SmartSendResul
       .maybeSingle()
 
     if (!existing) {
+      const rowId = uuidv4()
       const { error: insertErr } = await db.from('messages').insert({
-        id: uuidv4(),
+        id: rowId,
         user_id: userId,
         instance_id: instanceId,
         contact_id: contactId || null,
@@ -373,10 +454,12 @@ export async function smartSend(params: SmartSendParams): Promise<SmartSendResul
         content: text,
         status: 'sent',
         campaign_id: campaignId || null,
-        meta: { method, source, ...(templateUsed ? { template: templateUsed } : {}), ...(sentBy ? { sent_by: sentBy } : {}) },
+        meta: { method, source, ...(templateUsed ? { template: templateUsed } : {}), ...(templateLanguageUsed ? { template_language: templateLanguageUsed } : {}), ...(sentBy ? { sent_by: sentBy } : {}) },
       })
       if (insertErr) {
         console.error(`[smart-send] DB insert error: ${insertErr.message}`)
+      } else if (templateKey !== 'OTP') {
+        await emitMessageSent({ userId, instanceId, to: cleanPhone, messageId, rowId, contactId, type: messageType, content: text, source, method, campaignId, template: templateUsed })
       }
     } else {
       console.log(`[smart-send] skip duplicate wa_message_id=${messageId}`)
@@ -452,6 +535,7 @@ export async function smartSendWAWeb(params: {
         console.error(`[smart-send] DB insert error:`, insertErr)
       } else {
         console.log(`[smart-send] ✅ message saved to DB wa_message_id=${messageId}`)
+        await emitMessageSent({ userId, instanceId, to: cleanPhone, messageId, contactId, type: messageType, content: text, source, method: 'text', campaignId })
       }
     }
 
@@ -537,6 +621,7 @@ export async function smartSendMedia(params: {
     status: 'sent', meta: { method: 'media', source, ...(sentBy ? { sent_by: sentBy } : {}) },
   })
   if (insertErr) console.error('[smart-send] media DB insert error:', insertErr)
+  else await emitMessageSent({ userId, instanceId: instance.id, to: cleanPhone, messageId, contactId, type: mediaType, content: caption || '', source, method: 'media' })
 
   return { messageId, method: 'media', inWindow }
 }

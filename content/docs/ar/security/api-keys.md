@@ -18,10 +18,30 @@ slug: security/api-keys
 | تتبّع الاستخدام | يظهر تاريخ آخر استخدام | — |
 
 - تُقارن المفاتيح بطريقة ثابتة الزمن.
+- يتطلب الوصول إلى API (`/api/v1/*` و`/api/gateway/whatsapp`) باقة تشمله؛ وإلا تُرفض الطلبات بالحالة `403` والرمز `plan_no_api`.
 - إدارة المفاتيح وعرضها متاحة لصاحب الحساب فقط، لا لأعضاء الفريق.
 - لكل حساب فرعي مفاتيحه الخاصة، ولا يصل مفتاح حساب إلى بيانات حساب آخر.
 
 > **ملاحظة:** لأن المفتاح الافتراضي قابل للإظهار، نوصي باستخدام **مفاتيح مسمّاة** في التكاملات، والاحتفاظ بالمفتاح الافتراضي للاختبار فقط.
+
+## الصلاحيات
+
+يحمل كل مفتاح مسمّى قائمة صلاحيات. تحصل المفاتيح الجديدة على جميعها، والمفتاح القديم الذي لا قائمة صلاحيات له يملك وصولًا كاملًا.
+
+| الصلاحية | تسمح بـ |
+|---|---|
+| `send` | `POST /api/v1/send`، و`GET /api/v1/message-status`، و`GET /api/v1/instances`، و`POST /api/v1/whmcs-webhook`، و`/api/gateway/whatsapp`، و`/api/webhooks/trigger` |
+| `contacts:read` | `GET /api/v1/contacts` |
+| `contacts:write` | `POST /api/v1/contacts`، و`POST /api/v1/contacts-opt-out` (وتشمل `contacts:read`) |
+| `otp` | `POST /api/v1/otp`، و`POST /api/v1/otp-verify` |
+
+القيمة القديمة `contacts` تمنح `contacts:read` و`contacts:write` معًا. والطلب بمفتاح لا يملك الصلاحية يُرفض بالحالة `403`:
+
+```json
+{ "error": "This API key does not have the \"send\" permission", "code": "permission_denied", "required": "send" }
+```
+
+امنح كل تكامل ما يحتاجه فقط؛ فإضافة تسجيل الدخول مثلًا تكفيها `otp`.
 
 ## أفضل الممارسات
 
@@ -52,7 +72,7 @@ slug: security/api-keys
 ### حماية نقاط الاستقبال لديك
 
 - استخدم HTTPS دائمًا.
-- أمّن روابط [Webhooks الصادرة](/docs/api/outgoing-webhooks) برمز سري في الرابط.
+- تحقّق من ترويسة `X-WABEK-Signature` في [Webhooks الصادرة](/docs/api/outgoing-webhooks) باستخدام سرّ الـ webhook.
 - طبّق حدًا لطلبات رموز التحقق على خادمك لكل رقم ولكل مستخدم.
 
 ## حساب WABEK نفسه

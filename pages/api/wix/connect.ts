@@ -1,11 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { verifyWixInstance, getWixInstanceParam, linkWixInstance } from '@/lib/wix-auth'
 
 // WABEK user clicks "Connect Wix" → we save the link between user and Wix instance
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'integrations')
   if (!user) return
 
   if (req.method === 'GET') {
