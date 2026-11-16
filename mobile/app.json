@@ -66,8 +66,14 @@
     "extra": {
       "apiUrl": "https://waabek.com",
       "eas": {
-        "projectId": ""
+        "projectId": "0bc3c56b-cd62-44c5-bee5-bbf8ebec907a"
+      },
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
       }
-    }
+    },
+    "owner": "webekorg"
   }
 }
