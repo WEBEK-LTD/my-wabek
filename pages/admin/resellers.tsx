@@ -1,191 +1,186 @@
-// @ts-nocheck
+import React, { useEffect, useState } from 'react'
 import AdminLayout from '@/components/layout/AdminLayout'
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { useMutation, useQueryClient } from 'react-query'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { format } from 'date-fns'
-import clsx from 'clsx'
-import { CheckCircleIcon, XCircleIcon, UserGroupIcon } from '@heroicons/react/24/outline'
+import {
+  BanknotesIcon, BuildingStorefrontIcon, CalendarDaysIcon, CheckCircleIcon, ClockIcon, CreditCardIcon, DocumentTextIcon, XCircleIcon,
+} from '@heroicons/react/24/outline'
+import {
+  Avatar, Badge, Button, Card, ConfirmDialog, DataTable, EmptyState, Input, Modal, PageHeader, Skeleton, StatCard, Tabs, Tooltip, formatNumber,
+} from '@/components/ui'
+import type { Column } from '@/components/ui'
+import { apiError, useAdminT, usd } from '@/components/admin/i18n'
+import { ErrorState, JsonViewer } from '@/components/admin/shared'
+import { RESELLER_KEYS, useResellers, type ResellerProfile } from '@/components/admin/resellers/types'
+
+type Patch = { user_id: string; is_approved?: boolean; commission_pct?: number }
+
+function CommissionEditor({ value, onSave, saving, label }: { value: number; onSave: (v: number) => void; saving: boolean; label: string }) {
+  const { tr } = useAdminT()
+  const [v, setV] = useState(String(value))
+  useEffect(() => { setV(String(value)) }, [value])
+  const num = parseFloat(v)
+  const valid = Number.isFinite(num) && num >= 0 && num <= 100
+  const dirty = valid && num !== value
+  return (
+    <div className="flex items-center gap-1.5">
+      <Input size="sm" type="number" dir="ltr" min={0} max={100} step={0.5} value={v} onChange={e => setV(e.target.value)} invalid={!valid}
+        aria-label={label} wrapperClassName="w-24" endAdornment={<span className="text-xs text-muted">%</span>}
+        onKeyDown={e => { if (e.key === 'Enter' && dirty) onSave(num) }} />
+      {dirty && <Button size="xs" loading={saving} onClick={() => onSave(num)}>{tr('حفظ', 'Save')}</Button>}
+    </div>
+  )
+}
 
 export default function AdminResellersPage() {
+  const { tr, fmtDate } = useAdminT()
   const qc = useQueryClient()
-  const [commissionInputs, setCommissionInputs] = useState({})
   const [tab, setTab] = useState('pending')
+  const [commission, setCommission] = useState<Record<string, string>>({})
+  const [confirm, setConfirm] = useState<null | { r: ResellerProfile; kind: 'reject' | 'revoke' }>(null)
+  const [details, setDetails] = useState<ResellerProfile | null>(null)
 
-  const { data, isLoading } = useQuery('admin-resellers',
-    () => axios.get('/api/admin/payouts').then(r => r.data)
-  )
-
+  const { data, isLoading, isError, refetch } = useResellers('admin-resellers')
   const resellers = data?.resellers || []
-  const pending  = resellers.filter(r => !r.is_approved)
+  const pending = resellers.filter(r => !r.is_approved)
   const approved = resellers.filter(r => r.is_approved)
+  const pendingBalance = approved.reduce((s, r) => s + (Number(r.balance_pending) || 0), 0)
 
-  const approveMut = useMutation(
-    ({ user_id, is_approved, commission_pct }) =>
-      axios.patch('/api/admin/payouts', { user_id, is_approved, commission_pct }),
+  const mut = useMutation((body: Patch & { msg: string }) => {
+    const { msg, ...payload } = body
+    void msg
+    return axios.patch('/api/admin/payouts', payload)
+  }, {
+    onSuccess: (_, vars) => { RESELLER_KEYS.forEach(k => qc.invalidateQueries(k)); toast.success(vars.msg); setConfirm(null) },
+    onError: e => { toast.error(apiError(e, tr('تعذّر التحديث', 'Update failed'))) },
+  })
+
+  const name = (r: ResellerProfile) => r.user?.name || r.user?.email || tr('غير معروف', 'Unknown')
+  const commissionFor = (r: ResellerProfile) => commission[r.user_id] ?? '10'
+  const validPct = (s: string) => { const n = parseFloat(s); return Number.isFinite(n) && n >= 0 && n <= 100 }
+
+  const cols: Column<ResellerProfile>[] = [
     {
-      onSuccess: (_, vars) => {
-        qc.invalidateQueries('admin-resellers')
-        toast.success(vars.is_approved ? 'Reseller approved ✅' : 'Reseller rejected')
-      },
-      onError: e => toast.error(e?.response?.data?.error || 'Failed'),
-    }
-  )
+      key: 'r', header: tr('الموزّع', 'Reseller'),
+      cell: r => <div className="flex items-center gap-3"><Avatar name={name(r)} size="sm" /><div className="min-w-0"><p className="truncate font-medium text-ink">{r.user?.name || '—'}</p><p dir="ltr" className="truncate text-start text-xs text-muted">{r.user?.email}</p></div></div>,
+    },
+    {
+      key: 'pct', header: tr('العمولة', 'Commission'),
+      cell: r => <CommissionEditor value={Number(r.referral_commission_pct) || 0} saving={mut.isLoading} label={tr(`عمولة ${name(r)}`, `Commission for ${name(r)}`)}
+        onSave={v => mut.mutate({ user_id: r.user_id, commission_pct: v, msg: tr('تم تحديث العمولة', 'Commission updated') })} />,
+    },
+    { key: 'pending', header: tr('الرصيد المعلّق', 'Pending'), align: 'end', cell: r => <span className="tabular font-semibold text-warning" dir="ltr">{usd(r.balance_pending || 0)}</span> },
+    { key: 'paid', header: tr('المدفوع', 'Paid'), align: 'end', hideBelow: 'sm', cell: r => <span className="tabular text-success" dir="ltr">{usd(r.balance_paid || 0)}</span> },
+    { key: 'total', header: tr('الإجمالي', 'All time'), align: 'end', hideBelow: 'md', cell: r => <span className="tabular text-ink" dir="ltr">{usd(r.balance_total || 0)}</span> },
+    { key: 'approved', header: tr('تاريخ الاعتماد', 'Approved'), hideBelow: 'lg', cell: r => <span className="text-xs text-muted">{fmtDate(r.approved_at)}</span> },
+    {
+      key: 'a', header: <span className="sr-only">{tr('إجراءات', 'Actions')}</span>, align: 'end',
+      cell: r => (
+        <div className="flex justify-end gap-1.5">
+          <Button size="xs" variant="secondary" icon={BanknotesIcon} href={`/admin/payouts?reseller=${r.user_id}`} disabled={!(Number(r.balance_pending) > 0)}>{tr('دفع', 'Pay')}</Button>
+          <Button size="xs" variant="danger-soft" onClick={() => setConfirm({ r, kind: 'revoke' })}>{tr('إلغاء الاعتماد', 'Revoke')}</Button>
+        </div>
+      ),
+    },
+  ]
 
   return (
-    <AdminLayout title="Reseller Management">
+    <AdminLayout title={tr('الموزّعون', 'Resellers')}>
+      <PageHeader className="mb-6"
+        eyebrow={tr('الموزّعون', 'Resellers')}
+        title={tr('إدارة الموزّعين', 'Reseller management')}
+        description={tr('راجع طلبات الانضمام، واعتمدها بنسبة عمولة، وعدّل العمولات للموزّعين المعتمدين.', 'Review applications, approve them with a commission rate, and adjust commissions for approved resellers.')}
+        actions={<Button variant="secondary" icon={BanknotesIcon} href="/admin/payouts">{tr('المدفوعات', 'Payouts')}</Button>}
+      >
+        <Tabs idPrefix="resellers" value={tab} onChange={setTab} tabs={[
+          { id: 'pending', label: tr('بانتظار المراجعة', 'Pending review'), icon: ClockIcon, count: pending.length },
+          { id: 'approved', label: tr('المعتمدون', 'Approved'), icon: CheckCircleIcon, count: approved.length },
+        ]} />
+      </PageHeader>
 
-      {/* Summary */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
-        <div className="stat-card">
-          <p className="text-xs text-slate-500 mb-1">Total Resellers</p>
-          <p className="text-2xl font-display font-bold text-slate-900">{resellers.length}</p>
-        </div>
-        <div className="stat-card border-yellow-800/40">
-          <p className="text-xs text-slate-500 mb-1">⏳ Pending</p>
-          <p className="text-2xl font-display font-bold text-yellow-400">{pending.length}</p>
-        </div>
-        <div className="stat-card border-blue-200/40">
-          <p className="text-xs text-slate-500 mb-1">✅ Approved</p>
-          <p className="text-2xl font-display font-bold text-blue-600">{approved.length}</p>
-        </div>
-      </div>
+      {isError ? <ErrorState onRetry={() => refetch()} /> : (
+        <div className="space-y-5">
+          <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+            <StatCard loading={isLoading} icon={BuildingStorefrontIcon} label={tr('إجمالي الموزّعين', 'Total resellers')} value={formatNumber(resellers.length)} />
+            <StatCard loading={isLoading} icon={ClockIcon} label={tr('بانتظار المراجعة', 'Pending review')} value={formatNumber(pending.length)} subTone={pending.length ? 'warning' : 'muted'}
+              sub={pending.length ? tr('تحتاج قرارك', 'Need a decision') : tr('لا شيء معلّق', 'Nothing pending')} />
+            <StatCard loading={isLoading} icon={CheckCircleIcon} label={tr('معتمدون', 'Approved')} value={formatNumber(approved.length)} />
+            <StatCard loading={isLoading} icon={BanknotesIcon} label={tr('أرصدة مستحقة', 'Balances due')} value={<span dir="ltr">{usd(pendingBalance)}</span>} href="/admin/payouts" />
+          </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-slate-200 mb-5">
-        {[
-          { id: 'pending',  label: `⏳ Pending (${pending.length})` },
-          { id: 'approved', label: `✅ Approved (${approved.length})` },
-        ].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={clsx('px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',
-              tab === t.id
-                ? 'border-brand-500 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-700')}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Pending ── */}
-      {tab === 'pending' && (
-        <div className="card">
-          {isLoading ? (
-            <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-16 skeleton rounded-xl" />)}</div>
-          ) : pending.length === 0 ? (
-            <div className="text-center py-12">
-              <CheckCircleIcon className="w-10 h-10 text-blue-600 mx-auto mb-2" />
-              <p className="text-slate-400">No pending resellers 🎉</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {pending.map(r => (
-                <div key={r.id} className="flex flex-wrap items-center gap-4 p-4 bg-[#F8FAFC] rounded-xl border border-yellow-800/30">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-slate-900">{r.user?.name || 'Unknown'}</p>
-                    <p className="text-sm text-slate-500">{r.user?.email}</p>
-                    <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-slate-500">
-                      <span>💳 Payment: <span className="text-slate-700">{r.payment_method || 'platform'}</span></span>
-                      <span>📅 Schedule: <span className="text-slate-700">{r.payout_schedule || 'monthly'}</span></span>
-                      <span>💸 Payout via: <span className="text-slate-700">{r.payout_method || '—'}</span></span>
-                      <span>📆 Applied: <span className="text-slate-700">{r.created_at ? format(new Date(r.created_at), 'MMM d, yyyy') : '—'}</span></span>
-                    </div>
-                    {r.payout_details && typeof r.payout_details === 'object' && Object.keys(r.payout_details).length > 0 && (
-                      <p className="text-xs text-slate-600 mt-1">Details: {JSON.stringify(r.payout_details)}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="number" placeholder="10" min="0" max="100" step="0.5"
-                        value={commissionInputs[r.user_id] ?? '10'}
-                        onChange={e => setCommissionInputs(p => ({ ...p, [r.user_id]: e.target.value }))}
-                        className="input w-20 text-sm py-1.5 text-center"
-                      />
-                      <span className="text-slate-500 text-xs">%</span>
-                    </div>
-                    <button
-                      disabled={approveMut.isLoading}
-                      onClick={() => approveMut.mutate({
-                        user_id: r.user_id,
-                        is_approved: true,
-                        commission_pct: parseFloat(commissionInputs[r.user_id] ?? '10'),
-                      })}
-                      className="flex items-center gap-1.5 text-sm font-medium text-black bg-brand-500 hover:bg-brand-600 px-3 py-1.5 rounded-lg transition-colors">
-                      <CheckCircleIcon className="w-4 h-4" /> Approve
-                    </button>
-                    <button
-                      disabled={approveMut.isLoading}
-                      onClick={() => approveMut.mutate({ user_id: r.user_id, is_approved: false, commission_pct: 0 })}
-                      className="p-1.5 text-slate-500 hover:text-red-400 transition-colors" title="Reject">
-                      <XCircleIcon className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Approved ── */}
-      {tab === 'approved' && (
-        <div className="card overflow-x-auto">
-          {approved.length === 0 ? (
-            <p className="text-slate-500 text-sm text-center py-8">No approved resellers yet</p>
-          ) : (
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-200">
-                  {['Reseller', 'Commission %', 'Pending Balance', 'Total Paid', 'All Time', 'Approved', 'Actions'].map(h => (
-                    <th key={h} className="table-head">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {approved.map(r => (
-                  <tr key={r.id} className="table-row">
-                    <td className="table-cell">
-                      <p className="font-medium text-slate-900 text-sm">{r.user?.name}</p>
-                      <p className="text-xs text-slate-500">{r.user?.email}</p>
-                    </td>
-                    <td className="table-cell">
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="number" min="0" max="100" step="0.5"
-                          defaultValue={r.referral_commission_pct || 0}
-                          onBlur={e => approveMut.mutate({
-                            user_id: r.user_id,
-                            is_approved: true,
-                            commission_pct: parseFloat(e.target.value),
-                          })}
-                          className="input w-20 text-sm py-1"
-                        />
-                        <span className="text-slate-500 text-xs">%</span>
+          {tab === 'pending' && (
+            <div role="tabpanel" id="resellers-panel-pending" aria-labelledby="resellers-tab-pending" className="space-y-3">
+              {isLoading ? [0, 1].map(i => <Skeleton key={i} className="h-28 rounded-card" />) : pending.length === 0 ? (
+                <EmptyState variant="card" icon={CheckCircleIcon} title={tr('لا توجد طلبات معلّقة', 'No pending applications')}
+                  description={tr('ستظهر هنا طلبات الموزّعين الجدد.', 'New reseller applications show up here.')}
+                  action={<Button variant="secondary" size="sm" onClick={() => setTab('approved')}>{tr('عرض المعتمدين', 'View approved')}</Button>} />
+              ) : pending.map(r => {
+                const pct = commissionFor(r)
+                return (
+                  <Card key={r.id} className="flex flex-col gap-4 lg:flex-row lg:items-center">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                      <Avatar name={name(r)} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-ink">{name(r)}</p>
+                          <Badge tone="warning" size="sm" dot>{tr('بانتظار المراجعة', 'Pending')}</Badge>
+                        </div>
+                        <p dir="ltr" className="text-start text-sm text-muted">{r.user?.email}</p>
+                        <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+                          <div className="flex items-center gap-1"><CreditCardIcon className="h-3.5 w-3.5" aria-hidden="true" /><dt>{tr('الدفع:', 'Payment:')}</dt><dd className="text-body">{r.payment_method || 'platform'}</dd></div>
+                          <div className="flex items-center gap-1"><CalendarDaysIcon className="h-3.5 w-3.5" aria-hidden="true" /><dt>{tr('الجدول:', 'Schedule:')}</dt><dd className="text-body">{r.payout_schedule || 'monthly'}</dd></div>
+                          <div className="flex items-center gap-1"><BanknotesIcon className="h-3.5 w-3.5" aria-hidden="true" /><dt>{tr('التحويل عبر:', 'Payout via:')}</dt><dd className="text-body">{r.payout_method || '—'}</dd></div>
+                          <div className="flex items-center gap-1"><ClockIcon className="h-3.5 w-3.5" aria-hidden="true" /><dt>{tr('تاريخ الطلب:', 'Applied:')}</dt><dd className="text-body">{fmtDate(r.created_at)}</dd></div>
+                        </dl>
+                        {!!r.payout_details && typeof r.payout_details === 'object' && Object.keys(r.payout_details as object).length > 0 && (
+                          <Button size="xs" variant="ghost" icon={DocumentTextIcon} className="mt-1 -ms-2" onClick={() => setDetails(r)}>{tr('بيانات التحويل', 'Payout details')}</Button>
+                        )}
                       </div>
-                    </td>
-                    <td className="table-cell font-medium text-yellow-400">${(r.balance_pending || 0).toFixed(2)}</td>
-                    <td className="table-cell font-medium text-blue-600">${(r.balance_paid || 0).toFixed(2)}</td>
-                    <td className="table-cell font-medium text-slate-900">${(r.balance_total || 0).toFixed(2)}</td>
-                    <td className="table-cell text-xs text-slate-500">
-                      {r.approved_at ? format(new Date(r.approved_at), 'MMM d, yyyy') : '—'}
-                    </td>
-                    <td className="table-cell">
-                      <button
-                        onClick={() => approveMut.mutate({ user_id: r.user_id, is_approved: false, commission_pct: 0 })}
-                        className="text-xs text-red-400 hover:text-red-300 px-2 py-1 border border-red-800/40 rounded">
-                        Revoke
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                      <Input size="sm" type="number" dir="ltr" min={0} max={100} step={0.5} value={pct} invalid={!validPct(pct)}
+                        onChange={e => setCommission(p => ({ ...p, [r.user_id]: e.target.value }))}
+                        aria-label={tr('نسبة العمولة', 'Commission rate')} wrapperClassName="w-28" endAdornment={<span className="text-xs text-muted">%</span>} />
+                      <Button size="sm" icon={CheckCircleIcon} disabled={!validPct(pct)} loading={mut.isLoading}
+                        onClick={() => mut.mutate({ user_id: r.user_id, is_approved: true, commission_pct: parseFloat(pct), msg: tr('تم اعتماد الموزّع', 'Reseller approved') })}>
+                        {tr('اعتماد', 'Approve')}
+                      </Button>
+                      <Tooltip content={tr('رفض', 'Reject')}>
+                        <Button size="icon-sm" variant="ghost" icon={XCircleIcon} aria-label={tr(`رفض ${name(r)}`, `Reject ${name(r)}`)} onClick={() => setConfirm({ r, kind: 'reject' })} />
+                      </Tooltip>
+                    </div>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
+
+          {tab === 'approved' && (
+            <Card padding="none" role="tabpanel" id="resellers-panel-approved" aria-labelledby="resellers-tab-approved">
+              <DataTable rows={approved} loading={isLoading} rowKey={r => r.id} columns={cols} minWidth={760} caption={tr('الموزّعون المعتمدون', 'Approved resellers')}
+                empty={<EmptyState size="sm" icon={BuildingStorefrontIcon} title={tr('لا يوجد موزّعون معتمدون بعد', 'No approved resellers yet')} />} />
+            </Card>
           )}
         </div>
       )}
 
+      <ConfirmDialog
+        open={!!confirm}
+        destructive
+        onClose={() => setConfirm(null)}
+        loading={mut.isLoading}
+        title={confirm?.kind === 'reject' ? tr('رفض هذا الطلب؟', 'Reject this application?') : tr('إلغاء اعتماد هذا الموزّع؟', 'Revoke this reseller?')}
+        description={confirm ? (confirm.kind === 'reject'
+          ? tr(`لن يتمكن ${name(confirm.r)} من استخدام نظام الموزّعين.`, `${name(confirm.r)} won’t be able to use the reseller program.`)
+          : tr(`سيفقد ${name(confirm.r)} صلاحيات الموزّع. الأرصدة الحالية لا تتغير.`, `${name(confirm.r)} loses reseller access. Existing balances are unchanged.`)) : undefined}
+        confirmLabel={confirm?.kind === 'reject' ? tr('رفض', 'Reject') : tr('إلغاء الاعتماد', 'Revoke')}
+        onConfirm={() => { if (confirm) mut.mutate({ user_id: confirm.r.user_id, is_approved: false, msg: confirm.kind === 'reject' ? tr('تم رفض الطلب', 'Application rejected') : tr('تم إلغاء الاعتماد', 'Reseller revoked') }) }}
+      />
+
+      <Modal open={!!details} onClose={() => setDetails(null)} title={tr('بيانات التحويل', 'Payout details')} description={details ? name(details) : undefined} icon={DocumentTextIcon}>
+        {details && <JsonViewer value={details.payout_details} />}
+      </Modal>
     </AdminLayout>
   )
 }

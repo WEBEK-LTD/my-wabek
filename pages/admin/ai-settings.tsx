@@ -1,30 +1,43 @@
-// @ts-nocheck
-import { useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import AdminLayout from '@/components/layout/AdminLayout'
-import { useQuery, useMutation, useQueryClient } from 'react-query'
+import { useMutation, useQuery, useQueryClient } from 'react-query'
 import axios from 'axios'
 import toast from 'react-hot-toast'
+import { AdjustmentsHorizontalIcon, BoltIcon, ChartBarIcon, CheckCircleIcon, CpuChipIcon, KeyIcon, SparklesIcon, XCircleIcon } from '@heroicons/react/24/outline'
+import { AreaChart, Badge, Button, Card, CardHeader, Field, Input, PageHeader, ProgressBar, Select, Skeleton, StatCard, Switch, formatNumber } from '@/components/ui'
+import { apiError, useAdminT } from '@/components/admin/i18n'
+import { ErrorState, Notice, SecretField } from '@/components/admin/shared'
+
+const REVIEW_FIELDS = (tr: (a: string, e: string) => string) => [
+  { key: 'ai_review_interval_hours', label: tr('فاصل المراجعة', 'Review interval'), def: '1', suffix: tr('ساعة', 'h'), hint: tr('كل كم ساعة يعمل المجدول', 'How often the scheduler runs') },
+  { key: 'ai_inactivity_hours', label: tr('حد الخمول', 'Inactivity threshold'), def: '2', suffix: tr('ساعة', 'h'), hint: tr('تُعدّ المحادثة منتهية بعد هذا الصمت', 'A conversation counts as ended after this much silence') },
+  { key: 'ai_max_messages', label: tr('أقصى رسائل للتحليل', 'Max messages analysed'), def: '100', suffix: '', hint: tr('لكل محادثة، للتحكم في التكلفة', 'Per conversation, to control cost') },
+  { key: 'ai_daily_limit', label: tr('حد الطلبات اليومي', 'Daily request limit'), def: '500', suffix: '', hint: tr('أقصى طلبات يومية لكل الحسابات', 'Max AI calls per day across all accounts') },
+]
 
 export default function AISettingsPage() {
+  const { tr, fmtShort } = useAdminT()
   const qc = useQueryClient()
+  const fields = useMemo(() => REVIEW_FIELDS(tr), [tr])
   const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState<any>(null)
-  const [showKey, setShowKey] = useState(false)
+  const [testResult, setTestResult] = useState<{ success: boolean; model?: string; provider?: string; error?: string } | null>(null)
   const [newKey, setNewKey] = useState('')
+  const [form, setForm] = useState<Record<string, string>>({})
 
-  const { data, isLoading } = useQuery('admin-ai-settings', () =>
-    axios.get('/api/admin/ai-settings').then(r => r.data)
-  )
-  const settings = data?.settings || {}
+  const { data, isLoading, isError, refetch } = useQuery<{ settings: Record<string, string> }>('admin-ai-settings', () => axios.get('/api/admin/ai-settings').then(r => r.data))
+  const settings = useMemo(() => data?.settings || {}, [data])
+  const initial = useMemo(() => {
+    const f: Record<string, string> = { ai_provider: settings.ai_provider || 'deepseek' }
+    for (const x of fields) f[x.key] = settings[x.key] || x.def
+    return f
+  }, [settings, fields])
+  useEffect(() => { setForm(initial) }, [initial])
+  const changed = Object.keys(form).filter(k => form[k] !== initial[k])
 
-  const saveMut = useMutation(
-    (body) => axios.put('/api/admin/ai-settings', body),
-    {
-      onSuccess: () => { qc.invalidateQueries('admin-ai-settings'); toast.success('Settings saved') },
-      onError: (e: any) => toast.error(e?.response?.data?.error || 'Failed'),
-    }
-  )
-
+  const saveMut = useMutation((body: Record<string, string>) => axios.put('/api/admin/ai-settings', body), {
+    onSuccess: () => { qc.invalidateQueries('admin-ai-settings'); toast.success(tr('حُفظت الإعدادات', 'Settings saved')) },
+    onError: e => { toast.error(apiError(e, tr('تعذّر الحفظ', 'Failed to save'))) },
+  })
   const save = (updates: Record<string, string>) => saveMut.mutate(updates)
 
   const testConnection = async () => {
@@ -32,161 +45,120 @@ export default function AISettingsPage() {
     try {
       const r = await axios.post('/api/admin/ai-settings')
       setTestResult({ success: true, ...r.data })
-      toast.success('Connection successful!')
-    } catch (e: any) {
-      setTestResult({ success: false, error: e?.response?.data?.error || 'Failed' })
-      toast.error('Connection failed')
+      toast.success(tr('الاتصال ناجح', 'Connection successful'))
+    } catch (e) {
+      setTestResult({ success: false, error: apiError(e, tr('فشل الاتصال', 'Failed')) })
+      toast.error(tr('فشل الاتصال', 'Connection failed'))
     }
     setTesting(false)
   }
 
+  const enabled = settings.ai_reviews_enabled === 'true'
+  const hasKey = settings.has_ai_deepseek_api_key === 'true'
   const today = new Date().toISOString().split('T')[0]
-  const dailyUsage = parseInt(settings[`ai_usage_${today}`] || '0')
-  const monthlyUsage = parseInt(settings['ai_monthly_usage'] || '0')
+  const dailyUsage = parseInt(settings[`ai_usage_${today}`] || '0') || 0
+  const monthlyUsage = parseInt(settings.ai_monthly_usage || '0') || 0
+  const dailyLimit = parseInt(settings.ai_daily_limit || '500') || 500
+  // The API returns per-day counters for the last 30 days (ai_usage_YYYY-MM-DD).
+  const series = useMemo(() => {
+    const days: { date: string; v: number }[] = []
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 86400000).toISOString().split('T')[0]
+      days.push({ date: d, v: parseInt(settings[`ai_usage_${d}`] || '0') || 0 })
+    }
+    return days
+  }, [settings])
 
   return (
-    <AdminLayout title="AI Settings">
-      <div className="max-w-2xl space-y-6">
+    <AdminLayout title={tr('إعدادات الذكاء الاصطناعي', 'AI settings')}>
+      <PageHeader className="mb-6"
+        eyebrow={tr('الذكاء الاصطناعي', 'AI')}
+        title={tr('مراجعات الجودة بالذكاء الاصطناعي', 'AI quality reviews')}
+        description={tr('اضبط مزوّد الذكاء الاصطناعي وإعدادات تحليل محادثات الفرق. لا يرى العملاء هذه الصفحة.', 'Configure the AI provider and how team conversations are analysed. Customers can’t see this page.')}
+      />
 
-        {/* Header */}
-        <div className="card border-purple-200/50 bg-purple-50/10">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-purple-600" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
-              </svg>
+      {isError ? <ErrorState onRetry={() => refetch()} /> : (
+        <div className="grid gap-5 lg:grid-cols-5">
+          <div className="space-y-5 lg:col-span-3">
+            <Card variant="deep" padding="lg" className="relative overflow-hidden">
+              <div aria-hidden="true" className="pointer-events-none absolute -end-12 -top-16 h-48 w-48 rounded-full bg-violet opacity-30 blur-3xl" />
+              <div className="relative flex flex-wrap items-center gap-4">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10"><SparklesIcon className="h-6 w-6 text-brand-green" aria-hidden="true" /></span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-lg font-semibold text-white">{tr('المراجعات التلقائية', 'Automatic reviews')}</p>
+                  <p className="text-sm text-deep-muted">{tr('تحليل محادثات الفريق تلقائيًا بالذكاء الاصطناعي', 'Analyse team conversations automatically with AI')}</p>
+                </div>
+                {isLoading ? <Skeleton className="h-7 w-12 opacity-30" /> : (
+                  <Switch checked={enabled} disabled={saveMut.isLoading} onChange={v => save({ ai_reviews_enabled: v ? 'true' : 'false' })} aria-label={tr('تفعيل المراجعات', 'Enable reviews')} />
+                )}
+              </div>
+            </Card>
+
+            <Card className="space-y-4">
+              <CardHeader icon={CpuChipIcon} title={tr('المزوّد', 'Provider')} action={<Badge tone={hasKey ? 'success' : 'warning'} dot>{hasKey ? tr('المفتاح محفوظ', 'Key set') : tr('لا يوجد مفتاح', 'No key')}</Badge>} />
+              {isLoading ? <Skeleton lines={3} /> : (
+                <>
+                  <Field label={tr('مزوّد الذكاء الاصطناعي', 'AI provider')} hint={tr('DeepSeek هو الافتراضي، والنظام يدعم عدة مزوّدين.', 'DeepSeek is the default; the system supports several providers.')}>
+                    <Select value={form.ai_provider || 'deepseek'} onChange={e => setForm(f => ({ ...f, ai_provider: e.target.value }))}
+                      options={[{ value: 'deepseek', label: tr('DeepSeek (افتراضي)', 'DeepSeek (default)') }, { value: 'openai', label: 'OpenAI' }]} />
+                  </Field>
+                  <Field label={tr('مفتاح API', 'API key')} hint={tr('يُخزَّن في قاعدة البيانات ولا يُعرض للعملاء.', 'Stored in the database, never shown to customers.')}>
+                    <SecretField stored={hasKey ? settings.ai_deepseek_api_key_masked : ''} value={newKey || (hasKey ? settings.ai_deepseek_api_key_masked : '')}
+                      onChange={v => setNewKey(v.startsWith('••') ? '' : v)} placeholder="sk-…" />
+                  </Field>
+                  <div className="flex flex-wrap gap-2">
+                    {newKey && <Button icon={KeyIcon} loading={saveMut.isLoading} onClick={() => { save({ ai_deepseek_api_key: newKey }); setNewKey('') }}>{tr('حفظ المفتاح', 'Save key')}</Button>}
+                    <Button variant="secondary" icon={BoltIcon} loading={testing} onClick={testConnection}>{tr('اختبار الاتصال', 'Test connection')}</Button>
+                  </div>
+                  {testResult && (
+                    <Notice tone={testResult.success ? 'success' : 'danger'} icon={testResult.success ? CheckCircleIcon : XCircleIcon}>
+                      {testResult.success ? tr(`متصل — النموذج: ${testResult.model}`, `Connected — model: ${testResult.model}`) : testResult.error}
+                    </Notice>
+                  )}
+                </>
+              )}
+            </Card>
+
+            <Card className="space-y-4">
+              <CardHeader icon={AdjustmentsHorizontalIcon} title={tr('إعدادات المراجعة', 'Review settings')} />
+              {isLoading ? <Skeleton lines={4} /> : (
+                <>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {fields.map(fl => (
+                      <Field key={fl.key} label={fl.label} hint={fl.hint}>
+                        <Input type="number" dir="ltr" min={1} value={form[fl.key] || ''} onChange={e => setForm(f => ({ ...f, [fl.key]: e.target.value }))}
+                          endAdornment={fl.suffix ? <span className="text-xs text-muted">{fl.suffix}</span> : undefined} />
+                      </Field>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-end gap-2 border-t border-line-soft pt-4">
+                    {changed.length > 0 && <Button variant="ghost" onClick={() => setForm(initial)}>{tr('تراجع', 'Discard')}</Button>}
+                    <Button loading={saveMut.isLoading} disabled={!changed.length} onClick={() => save(Object.fromEntries(changed.map(k => [k, form[k]])))}>{tr('حفظ', 'Save')}</Button>
+                  </div>
+                </>
+              )}
+            </Card>
+          </div>
+
+          <div className="space-y-5 lg:col-span-2">
+            <div className="grid grid-cols-2 gap-3.5">
+              <StatCard loading={isLoading} icon={BoltIcon} label={tr('طلبات اليوم', 'Requests today')} value={formatNumber(dailyUsage)} />
+              <StatCard loading={isLoading} icon={ChartBarIcon} label={tr('آخر 30 يومًا', 'Last 30 days')} value={formatNumber(monthlyUsage)} />
             </div>
-            <div>
-              <h2 className="font-display font-semibold text-slate-900">AI Quality Reviews</h2>
-              <p className="text-xs text-slate-400">Configure the AI provider and review settings. Customers cannot see this page.</p>
-            </div>
+            <Card className="space-y-4">
+              <CardHeader title={tr('الاستخدام اليومي', 'Daily usage')} />
+              <ProgressBar size="md" label={tr('من الحد اليومي', 'Of the daily limit')} value={dailyUsage} max={dailyLimit}
+                valueText={`${formatNumber(dailyUsage)} / ${formatNumber(dailyLimit)}`} tone={dailyUsage / dailyLimit > 0.9 ? 'danger' : dailyUsage / dailyLimit > 0.7 ? 'warning' : 'gradient'} />
+              {isLoading ? <Skeleton className="h-40" /> : series.some(d => d.v > 0) ? (
+                <AreaChart height={170} labels={series.map(d => fmtShort(d.date))} series={[{ name: tr('طلبات', 'Requests'), data: series.map(d => d.v), color: '#B59CF5' }]}
+                  ariaLabel={tr('طلبات الذكاء الاصطناعي يوميًا لآخر 30 يومًا', 'AI requests per day, last 30 days')} />
+              ) : (
+                <p className="rounded-xl bg-surface-2 px-4 py-6 text-center text-sm text-muted">{tr('لا توجد طلبات خلال آخر 30 يومًا', 'No requests in the last 30 days')}</p>
+              )}
+            </Card>
           </div>
         </div>
-
-        {isLoading ? (
-          <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-16 skeleton rounded-xl"/>)}</div>
-        ) : (<>
-
-        {/* Enable/Disable */}
-        <div className="card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-slate-900">Enable AI Reviews</p>
-              <p className="text-xs text-slate-400 mt-0.5">Automatically analyze team conversations with AI</p>
-            </div>
-            <button
-              onClick={() => save({ ai_reviews_enabled: settings.ai_reviews_enabled === 'true' ? 'false' : 'true' })}
-              className={`relative w-12 h-6 rounded-full transition-colors ${settings.ai_reviews_enabled === 'true' ? 'bg-brand-500' : 'bg-slate-200'}`}
-            >
-              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.ai_reviews_enabled === 'true' ? 'translate-x-6' : 'translate-x-0.5'}`} />
-            </button>
-          </div>
-        </div>
-
-        {/* AI Provider */}
-        <div className="card space-y-4">
-          <h3 className="font-display font-semibold text-slate-900">AI Provider</h3>
-          <div>
-            <label className="label">Provider</label>
-            <select
-              defaultValue={settings.ai_provider || 'deepseek'}
-              onChange={e => save({ ai_provider: e.target.value })}
-              className="input"
-            >
-              <option value="deepseek">DeepSeek (Default)</option>
-              <option value="openai">OpenAI</option>
-            </select>
-            <p className="text-xs text-slate-400 mt-1">The system is designed to support multiple providers. DeepSeek is the default.</p>
-          </div>
-
-          <div>
-            <label className="label">API Key</label>
-            <div className="flex gap-2">
-              <input
-                type={showKey ? 'text' : 'password'}
-                value={newKey || (showKey ? '' : settings.ai_deepseek_api_key_masked || '')}
-                onChange={e => setNewKey(e.target.value)}
-                placeholder="sk-..."
-                className="input flex-1 font-mono text-sm"
-              />
-              <button onClick={() => setShowKey(v => !v)} className="btn-secondary px-3">
-                {showKey ? '🙈' : '👁️'}
-              </button>
-            </div>
-            {newKey && (
-              <button onClick={() => { save({ ai_deepseek_api_key: newKey }); setNewKey('') }}
-                className="btn-primary text-sm mt-2">
-                Save Key
-              </button>
-            )}
-            <p className="text-xs text-slate-400 mt-1">Stored securely in the database. Never exposed to customers.</p>
-          </div>
-
-          <button
-            onClick={testConnection}
-            disabled={testing}
-            className="btn-secondary w-full"
-          >
-            {testing ? 'Testing...' : '⚡ Test Connection'}
-          </button>
-          {testResult && (
-            <div className={`px-3 py-2 rounded-lg text-sm ${testResult.success ? 'bg-brand-50 text-brand-600' : 'bg-red-50 text-red-500'}`}>
-              {testResult.success ? `✅ Connected — Model: ${testResult.model}` : `❌ ${testResult.error}`}
-            </div>
-          )}
-        </div>
-
-        {/* Review Settings */}
-        <div className="card space-y-4">
-          <h3 className="font-display font-semibold text-slate-900">Review Settings</h3>
-          {[
-            { key: 'ai_review_interval_hours', label: 'Review Interval (hours)', default: '1', hint: 'How often the scheduler runs' },
-            { key: 'ai_inactivity_hours', label: 'Inactivity Threshold (hours)', default: '2', hint: 'Conversation considered ended after X hours of silence' },
-            { key: 'ai_max_messages', label: 'Max Messages to Analyze', default: '100', hint: 'Limit per conversation to control costs' },
-            { key: 'ai_daily_limit', label: 'Daily Request Limit', default: '500', hint: 'Max AI calls per day across all accounts' },
-          ].map(field => (
-            <div key={field.key}>
-              <label className="label">{field.label}</label>
-              <input
-                type="number"
-                defaultValue={settings[field.key] || field.default}
-                onBlur={e => save({ [field.key]: e.target.value })}
-                className="input"
-              />
-              <p className="text-xs text-slate-400 mt-1">{field.hint}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Usage Stats */}
-        <div className="card space-y-3">
-          <h3 className="font-display font-semibold text-slate-900">Usage Statistics</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-[#F8FAFC] rounded-xl p-3 border border-slate-200">
-              <p className="text-2xl font-bold text-slate-900">{dailyUsage}</p>
-              <p className="text-xs text-slate-400 mt-0.5">Requests today</p>
-            </div>
-            <div className="bg-[#F8FAFC] rounded-xl p-3 border border-slate-200">
-              <p className="text-2xl font-bold text-slate-900">{monthlyUsage}</p>
-              <p className="text-xs text-slate-400 mt-0.5">Requests this month</p>
-            </div>
-          </div>
-          <div>
-            <div className="flex justify-between text-xs text-slate-400 mb-1">
-              <span>Daily usage</span>
-              <span>{dailyUsage} / {settings.ai_daily_limit || 500}</span>
-            </div>
-            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-brand-500 rounded-full"
-                style={{ width: `${Math.min((dailyUsage / parseInt(settings.ai_daily_limit || '500')) * 100, 100)}%` }}
-              />
-            </div>
-          </div>
-        </div>
-
-        </>)}
-      </div>
+      )}
     </AdminLayout>
   )
 }
