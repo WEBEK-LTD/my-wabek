@@ -187,6 +187,22 @@ export function handleCors(req: NextApiRequest, res: NextApiResponse): boolean {
   return false
 }
 
+// ── Plan expiry ───────────────────────────────────────────────────────────────
+// Same reading as /api/billing/plan-features:
+//   plan_expires_at set      → expired when it is in the past
+//   no plan_id               → trial logic (trial_ends_at in the past)
+//   plan_id, no expiry date  → active (lifetime / manually assigned plan)
+// A past trial_ends_at must NOT downgrade a paying user whose plan is valid.
+export function isPlanExpired(
+  user: { plan_id?: unknown; plan_expires_at?: string | null; trial_ends_at?: string | null } | null | undefined,
+  now: Date = new Date()
+): boolean {
+  if (!user) return false
+  if (user.plan_expires_at) return new Date(user.plan_expires_at) < now
+  if (!user.plan_id) return !!user.trial_ends_at && new Date(user.trial_ends_at) < now
+  return false
+}
+
 // ── Plan Limit Check ──────────────────────────────────────────────────────────
 // Rules:
 //   -1  → unlimited (always allow)
@@ -220,9 +236,7 @@ export async function checkPlanLimit(
 
     // Plan expired / trial expired → fall back to Free plan's limits
     // (not a hard block — Free plan limits apply instead)
-    const expired =
-      (user.plan_expires_at && new Date(user.plan_expires_at) < new Date()) ||
-      (user.trial_ends_at && new Date(user.trial_ends_at) < new Date())
+    const expired = isPlanExpired(user)
 
     // No plan assigned, or expired → use Free plan's limits.
     // IMPORTANT: previously this returned ALLOW() (unlimited) — meaning Wix
@@ -364,7 +378,7 @@ export async function checkPlanFeature(
     let planId = user?.plan_id
 
     // Plan expired → fall back to Free plan's restrictions
-    const expired = user?.plan_expires_at && new Date(user.plan_expires_at) < new Date()
+    const expired = isPlanExpired(user)
 
     if (!planId || expired) {
       const { data: freePlans, error: freeErr } = await db.from('plans').select('id').ilike('name', 'free').order('id')
@@ -390,7 +404,7 @@ export async function getUserPlan(userId: string): Promise<Record<string, unknow
     const db = supabaseAdmin()
     const { data: user } = await db.from('users').select('plan_id, plan_expires_at').eq('id', userId).maybeSingle()
     if (!user?.plan_id) return null
-    if (user.plan_expires_at && new Date(user.plan_expires_at) < new Date()) return null
+    if (isPlanExpired(user)) return null
     const { data: plan } = await db.from('plans').select('*').eq('id', user.plan_id).maybeSingle()
     return plan
   } catch {
