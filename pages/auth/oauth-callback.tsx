@@ -1,13 +1,16 @@
-// @ts-nocheck
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
-import { useAuthStore } from '@/lib/store'
 import axios from 'axios'
+import { useAuthStore } from '@/lib/store'
+import { AuthStatusScreen } from '@/components/auth/AuthParts'
+import { useAuthCopy } from '@/components/auth/copy'
+import type { AuthCopyKey } from '@/components/auth/copy'
 
 export default function OAuthCallbackPage() {
   const router = useRouter()
   const { setUser, setToken } = useAuthStore()
-  const [status, setStatus] = useState('Completing sign in...')
+  const { c } = useAuthCopy()
+  const [status, setStatus] = useState<AuthCopyKey>('st_completing')
 
   useEffect(() => {
     const hash = window.location.hash.substring(1)
@@ -26,34 +29,23 @@ export default function OAuthCallbackPage() {
       const qParams = new URLSearchParams(window.location.search)
       const code = qParams.get('code')
       if (code) {
-        // Handle PKCE code exchange
-        setStatus('Exchanging code...')
-        axios.post('/api/auth/oauth/exchange-code', { code })
-          .then(({ data }) => {
-            if (data.token) {
-              localStorage.setItem('wabek_token', data.token)
-              setToken(data.token)
-              setUser(data.user)
-              router.replace('/dashboard')
-            } else {
-              router.replace('/auth/login?error=exchange_failed')
-            }
-          })
-          .catch(e => {
-            const msg = e?.response?.data?.error || 'server_error'
-            router.replace(`/auth/login?error=${encodeURIComponent(msg)}`)
-          })
+        // PKCE / code flow: the server-side callback exchanges the code, sets
+        // the httpOnly session cookie and redirects to /auth/oauth-success.
+        setStatus('st_exchanging')
+        window.location.replace(`/api/auth/oauth/callback?code=${encodeURIComponent(code)}`)
         return
       }
       router.replace('/auth/login?error=no_token')
       return
     }
 
-    setStatus('Verifying your account...')
+    // Drop the provider token from the address bar / history.
+    try { window.history.replaceState(null, '', window.location.pathname) } catch {}
+    setStatus('st_verifying')
     axios.post('/api/auth/oauth/exchange', { access_token: accessToken })
       .then(({ data }) => {
         if (data.token) {
-          localStorage.setItem('wabek_token', data.token)
+          // The exchange set the HttpOnly session cookie; the token is kept in memory only.
           setToken(data.token)
           setUser(data.user)
           router.replace('/dashboard')
@@ -69,12 +61,5 @@ export default function OAuthCallbackPage() {
       })
   }, [])
 
-  return (
-    <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-12 h-12 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-slate-400 text-sm">{status}</p>
-      </div>
-    </div>
-  )
+  return <AuthStatusScreen title={c(status)} subtitle={c('st_wait')} />
 }

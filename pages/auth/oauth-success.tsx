@@ -1,44 +1,31 @@
-// @ts-nocheck
 import { useEffect } from 'react'
 import { useRouter } from 'next/router'
 import { useAuthStore } from '@/lib/store'
+import { AuthStatusScreen } from '@/components/auth/AuthParts'
+import { useAuthCopy } from '@/components/auth/copy'
 
+// The OAuth callback sets the httpOnly `wabek_token` cookie; this page never
+// accepts a token from the URL. It loads the session via the cookie only.
 export default function OAuthSuccessPage() {
   const router = useRouter()
-  const { setToken } = useAuthStore()
+  const { c } = useAuthCopy()
 
   useEffect(() => {
-    const { token } = router.query
-    if (!token) {
-      router.replace('/auth/login?error=oauth_failed')
-      return
-    }
+    try { localStorage.removeItem('wabek_token') } catch {}
+    useAuthStore.getState().setToken(null)
 
-    // Set token in localStorage (same as normal login)
-    const tokenStr = decodeURIComponent(token as string)
-    localStorage.setItem('wabek_token', tokenStr)
-    setToken(tokenStr)
-
-    // Fetch user data then redirect
-    fetch('/api/auth/me', {
-      headers: { Authorization: `Bearer ${tokenStr}` }
-    })
-      .then(r => r.json())
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(r => (r.ok ? r.json() : null))
       .then(data => {
-        if (data.user) {
+        if (data?.user) {
           useAuthStore.getState().setUser(data.user)
+          router.replace('/dashboard')
+        } else {
+          router.replace('/auth/login?error=oauth_failed')
         }
-        router.replace('/dashboard')
       })
-      .catch(() => router.replace('/dashboard'))
-  }, [router.query])
+      .catch(() => router.replace('/auth/login?error=oauth_failed'))
+  }, [])
 
-  return (
-    <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-12 h-12 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-slate-400 text-sm">Signing you in...</p>
-      </div>
-    </div>
-  )
+  return <AuthStatusScreen title={c('st_signing_in')} subtitle={c('st_wait')} />
 }

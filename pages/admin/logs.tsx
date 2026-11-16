@@ -1,262 +1,184 @@
-// @ts-nocheck
-import { useState, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import AdminLayout from '@/components/layout/AdminLayout'
 import { useQuery } from 'react-query'
 import axios from 'axios'
-import { MagnifyingGlassIcon, XMarkIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
-import { format } from 'date-fns'
-import clsx from 'clsx'
+import {
+  ClipboardDocumentListIcon, CodeBracketIcon, ComputerDesktopIcon, MagnifyingGlassIcon, UserIcon, XMarkIcon,
+} from '@heroicons/react/24/outline'
+import {
+  Avatar, Badge, Button, Card, DataTable, EmptyState, Input, PageHeader, SearchInput, Select, Tabs, cn, formatNumber,
+} from '@/components/ui'
+import type { Column, Tone } from '@/components/ui'
+import { useAdminT } from '@/components/admin/i18n'
+import { Drawer, ErrorState, InfoTile, JsonViewer, Pagination } from '@/components/admin/shared'
+import type { AdminLog } from '@/components/admin/useAdminStats'
 
-const ACTION_COLORS: Record<string, string> = {
-  login:               'badge-green',
-  register:            'badge-green',
-  login_failed:        'badge-red',
-  logout:              'badge-gray',
-  create_instance:     'badge-yellow',
-  delete_instance:     'badge-red',
-  connect_instance:    'badge-green',
-  disconnect_instance: 'badge-red',
-  send_message:        'badge-yellow',
-  create_campaign:     'badge-yellow',
-  delete_campaign:     'badge-red',
-  create_contact:      'badge-yellow',
-  delete_contact:      'badge-red',
-  create_chatbot:      'badge-yellow',
-  admin_update_user:   'badge-yellow',
-  admin_suspend_user:  'badge-red',
-  update_profile:      'badge-gray',
-  change_password:     'badge-yellow',
-  update_otp:          'badge-yellow',
-}
+const PAGE = 50
+type PickedUser = { id: string; name: string | null; email: string }
 
-// Debounce hook
-function useDebounce(delay = 400) {
-  const timer = useRef<any>(null)
-  return (fn: () => void) => {
-    clearTimeout(timer.current)
-    timer.current = setTimeout(fn, delay)
-  }
+function actionTone(a: string): Tone {
+  if (/fail|delete|suspend|disconnect|revoke|reject|error/.test(a)) return 'danger'
+  if (/^admin_/.test(a)) return 'violet'
+  if (/login|register|connect|approve|create/.test(a)) return 'success'
+  if (/update|change|send|record/.test(a)) return 'warning'
+  return 'neutral'
 }
 
 export default function AdminLogsPage() {
-  const [mode, setMode]               = useState<'system' | 'user'>('system')
-  const [search, setSearch]           = useState('')
-  const [dSearch, setDSearch]         = useState('')
+  const { tr, fmtDateTime } = useAdminT()
+  const [mode, setMode] = useState<'system' | 'user'>('system')
+  const [search, setSearch] = useState('')
+  const [dSearch, setDSearch] = useState('')
   const [actionFilter, setActionFilter] = useState('all')
-  const [dateFrom, setDateFrom]       = useState('')
-  const [dateTo, setDateTo]           = useState('')
-  const [page, setPage]               = useState(1)
-  const [selectedUser, setSelectedUser] = useState<{ id: string; name: string | null; email: string } | null>(null)
-  const [showUserSuggest, setShowUserSuggest] = useState(false)
-  const [expandedLog, setExpandedLog] = useState<string | null>(null)
-  const debounce = useDebounce(400)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [page, setPage] = useState(1)
+  const [selectedUser, setSelectedUser] = useState<PickedUser | null>(null)
+  const [showSuggest, setShowSuggest] = useState(false)
+  const [detail, setDetail] = useState<AdminLog | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout>>()
 
   const handleSearch = (v: string) => {
     setSearch(v)
-    debounce(() => { setDSearch(v); setPage(1) })
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => { setDSearch(v); setPage(1) }, 400)
   }
+  useEffect(() => () => clearTimeout(timer.current), [])
 
-  const params: Record<string, string> = {
-    mode,
-    page: String(page),
-    search: dSearch,
-    action_filter: actionFilter,
-  }
-  if (dateFrom)              params.date_from = dateFrom
-  if (dateTo)                params.date_to   = dateTo
+  const params: Record<string, string> = { mode, page: String(page), search: dSearch, action_filter: actionFilter }
+  if (dateFrom) params.date_from = dateFrom
+  if (dateTo) params.date_to = dateTo
   if (mode === 'user' && selectedUser) params.user_id = selectedUser.id
 
-  const { data, isLoading } = useQuery(
+  const { data, isLoading, isError, refetch, isFetching } = useQuery<{ logs: AdminLog[]; total: number; actions: string[]; userSuggestions: PickedUser[] }>(
     ['admin-logs', mode, dSearch, actionFilter, dateFrom, dateTo, page, selectedUser?.id],
     () => axios.get('/api/admin/logs', { params }).then(r => r.data),
-    { keepPreviousData: true }
+    { keepPreviousData: true },
   )
+  const logs = data?.logs || []
+  const actions = data?.actions || []
+  const suggestions = data?.userSuggestions || []
 
-  const logs            = data?.logs || []
-  const actions         = data?.actions || []
-  const userSuggestions = data?.userSuggestions || []
+  const clearFilters = () => { setSearch(''); setDSearch(''); setActionFilter('all'); setDateFrom(''); setDateTo(''); setSelectedUser(null); setPage(1) }
+  const hasFilters = !!(dSearch || actionFilter !== 'all' || dateFrom || dateTo || selectedUser)
+  const switchMode = (m: string) => { setMode(m as 'system' | 'user'); setPage(1); setSelectedUser(null); setSearch(''); setDSearch('') }
 
-  const clearFilters = () => {
-    setSearch(''); setDSearch(''); setActionFilter('all')
-    setDateFrom(''); setDateTo(''); setSelectedUser(null); setPage(1)
-  }
-
-  const hasFilters = dSearch || actionFilter !== 'all' || dateFrom || dateTo || selectedUser
+  const cols: Column<AdminLog>[] = [
+    { key: 'time', header: tr('الوقت', 'Time'), cell: l => <span className="tabular whitespace-nowrap font-mono text-xs text-muted" dir="ltr">{fmtDateTime(l.created_at)}</span> },
+    { key: 'action', header: tr('الإجراء', 'Action'), cell: l => <Badge tone={actionTone(l.action)} size="sm"><span dir="ltr" className="font-mono">{l.action}</span></Badge> },
+    {
+      key: 'user', header: tr('المستخدم', 'User'),
+      cell: l => l.users ? (
+        <div className="min-w-0"><p className="max-w-[160px] truncate text-xs font-medium text-ink">{l.users.name || '—'}</p><p dir="ltr" className="max-w-[160px] truncate text-start text-2xs text-muted">{l.users.email}</p></div>
+      ) : <span className="text-xs text-muted">{tr('النظام', 'System')}</span>,
+    },
+    {
+      key: 'res', header: tr('المورد', 'Resource'), hideBelow: 'md',
+      cell: l => l.resource ? <span className="text-xs text-body">{l.resource}{l.resource_id && <span dir="ltr" className="font-mono text-muted"> :{l.resource_id.slice(0, 8)}</span>}</span> : <span className="text-muted">—</span>,
+    },
+    { key: 'ip', header: 'IP', hideBelow: 'lg', cell: l => <span dir="ltr" className="font-mono text-xs text-muted">{l.ip_address || '—'}</span> },
+    { key: 'd', header: <span className="sr-only">{tr('التفاصيل', 'Details')}</span>, align: 'end', cell: l => l.details ? <CodeBracketIcon className="ms-auto h-4 w-4 text-brand-ink" aria-label={tr('يحتوي تفاصيل', 'Has details')} /> : null },
+  ]
 
   return (
-    <AdminLayout title="Logs">
+    <AdminLayout title={tr('السجلات', 'Logs')}>
+      <PageHeader className="mb-6"
+        eyebrow={tr('المراقبة', 'Monitoring')}
+        title={tr('سجلات النظام', 'System logs')}
+        description={tr('كل إجراء مهم على المنصة، مع التفاصيل الكاملة بصيغة JSON.', 'Every significant action on the platform, with full JSON details.')}
+        actions={<Badge tone="neutral" className="tabular">{tr(`${formatNumber(data?.total ?? 0)} سجل`, `${formatNumber(data?.total ?? 0)} entries`)}</Badge>}
+      >
+        <Tabs idPrefix="logs" value={mode} onChange={switchMode} tabs={[
+          { id: 'system', label: tr('سجلات النظام', 'System logs'), icon: ComputerDesktopIcon },
+          { id: 'user', label: tr('نشاط مستخدم', 'User activity'), icon: UserIcon },
+        ]} />
+      </PageHeader>
 
-      {/* Mode Tabs */}
-      <div className="flex gap-1 p-1 bg-[#F8FAFC] rounded-xl border border-slate-200 w-fit mb-5">
-        {[
-          { id: 'system', label: '🖥️ System Logs' },
-          { id: 'user',   label: '👤 User Activity' },
-        ].map(t => (
-          <button key={t.id} onClick={() => { setMode(t.id as any); setPage(1); setSelectedUser(null); setSearch(''); setDSearch('') }}
-            className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-              mode === t.id ? 'bg-white text-slate-900 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-900'
-            )}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Card padding="none">
+        <div className="flex flex-col gap-3 border-b border-line-soft p-4 xl:flex-row xl:items-center">
+          <div className="relative xl:w-80">
+            {mode === 'system' ? (
+              <SearchInput size="sm" value={search} onChange={handleSearch} placeholder={tr('ابحث في الإجراء أو IP أو المورد', 'Search action, IP or resource')} />
+            ) : selectedUser ? (
+              <div className="flex h-9 items-center gap-2 rounded-field border border-brand-teal/40 bg-chip/40 px-2.5">
+                <Avatar name={selectedUser.name || selectedUser.email} size="xs" />
+                <span className="min-w-0 flex-1 truncate text-sm text-ink">{selectedUser.name || selectedUser.email}</span>
+                <button type="button" className="text-muted hover:text-ink" aria-label={tr('إزالة المستخدم', 'Clear user')} onClick={() => { setSelectedUser(null); setSearch(''); setDSearch('') }}><XMarkIcon className="h-4 w-4" /></button>
+              </div>
+            ) : (
+              <>
+                <Input size="sm" icon={MagnifyingGlassIcon} value={search} role="combobox" aria-expanded={showSuggest && suggestions.length > 0} aria-controls="log-user-suggest" aria-autocomplete="list"
+                  onChange={e => { handleSearch(e.target.value); setShowSuggest(true) }} onFocus={() => setShowSuggest(true)} onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
+                  placeholder={tr('ابحث عن مستخدم بالاسم أو البريد', 'Find a user by name or email')} aria-label={tr('بحث عن مستخدم', 'Find a user')} />
+                {showSuggest && suggestions.length > 0 && (
+                  <ul id="log-user-suggest" role="listbox" className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-line bg-surface shadow-dropdown">
+                    {suggestions.map(u => (
+                      <li key={u.id} role="option" aria-selected={false}>
+                        <button type="button" className="flex w-full items-center gap-2.5 px-3 py-2.5 text-start hover:bg-surface-2"
+                          onMouseDown={e => e.preventDefault()} onClick={() => { setSelectedUser(u); setSearch(''); setDSearch(''); setShowSuggest(false); setPage(1) }}>
+                          <Avatar name={u.name || u.email} size="xs" />
+                          <span className="min-w-0"><span className="block truncate text-sm text-ink">{u.name || '—'}</span><span dir="ltr" className="block truncate text-start text-xs text-muted">{u.email}</span></span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select size="sm" aria-label={tr('تصفية حسب الإجراء', 'Filter by action')} value={actionFilter} onChange={e => { setActionFilter(e.target.value); setPage(1) }} className="min-w-[170px]"
+              options={[{ value: 'all', label: tr('كل الإجراءات', 'All actions') }, ...actions.map(a => ({ value: a, label: a }))]} />
+            <Input size="sm" type="date" dir="ltr" aria-label={tr('من تاريخ', 'From date')} value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1) }} wrapperClassName="w-40" />
+            <span className="text-xs text-muted">—</span>
+            <Input size="sm" type="date" dir="ltr" aria-label={tr('إلى تاريخ', 'To date')} value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1) }} wrapperClassName="w-40" />
+            {hasFilters && <Button size="sm" variant="ghost" icon={XMarkIcon} onClick={clearFilters}>{tr('مسح', 'Clear')}</Button>}
+          </div>
+        </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 mb-5">
+        {mode === 'user' && selectedUser && (
+          <div className="flex items-center gap-3 border-b border-line-soft bg-chip/30 px-4 py-3">
+            <Avatar name={selectedUser.name || selectedUser.email} size="sm" />
+            <div className="min-w-0 flex-1"><p className="text-sm font-medium text-ink">{selectedUser.name || '—'}</p><p dir="ltr" className="text-start text-xs text-muted">{selectedUser.email}</p></div>
+            <Badge tone="brand" className="tabular">{tr(`${formatNumber(data?.total ?? 0)} نشاط`, `${formatNumber(data?.total ?? 0)} records`)}</Badge>
+          </div>
+        )}
 
-        {/* Search / User picker */}
-        <div className="relative flex-1 min-w-48 max-w-xs">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          {mode === 'system' ? (
-            <input value={search} onChange={e => handleSearch(e.target.value)}
-              placeholder="Search action, IP, resource…" className="input pl-9 w-full" />
-          ) : selectedUser ? (
-            <div className="input pl-9 flex items-center justify-between">
-              <span className="text-sm truncate">{selectedUser.name || selectedUser.email}</span>
-              <button onClick={() => { setSelectedUser(null); setSearch(''); setDSearch('') }} className="ml-2 text-slate-400 hover:text-slate-700">
-                <XMarkIcon className="w-4 h-4" />
-              </button>
+        {isError ? <div className="p-4"><ErrorState onRetry={() => refetch()} /></div> : (
+          <div className={cn('transition-opacity', isFetching && !isLoading && 'opacity-70')}>
+            <DataTable rows={logs} loading={isLoading} skeletonRows={10} rowKey={l => l.id} columns={cols} minWidth={720} dense caption={tr('السجلات', 'Logs')}
+              onRowClick={l => setDetail(l)}
+              empty={<EmptyState size="sm" icon={mode === 'user' && !selectedUser ? UserIcon : ClipboardDocumentListIcon}
+                title={mode === 'user' && !selectedUser ? tr('ابحث عن مستخدم لعرض نشاطه', 'Search for a user to see their activity') : tr('لا توجد سجلات', 'No logs found')}
+                action={hasFilters ? <Button size="sm" variant="secondary" onClick={clearFilters}>{tr('مسح عوامل التصفية', 'Clear filters')}</Button> : undefined} />} />
+          </div>
+        )}
+        <Pagination page={page} total={data?.total || 0} pageSize={PAGE} onChange={setPage} />
+      </Card>
+
+      <Drawer open={!!detail} onClose={() => setDetail(null)} width="lg" title={tr('تفاصيل السجل', 'Log entry')}
+        description={detail ? <span dir="ltr" className="font-mono">{detail.action}</span> : undefined}>
+        {detail && (
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-2.5">
+              <InfoTile label={tr('الوقت', 'Time')} value={<span dir="ltr" className="tabular">{fmtDateTime(detail.created_at)}</span>} />
+              <InfoTile label={tr('الإجراء', 'Action')} value={<Badge tone={actionTone(detail.action)} size="sm"><span dir="ltr" className="font-mono">{detail.action}</span></Badge>} />
+              <InfoTile label={tr('المستخدم', 'User')} value={detail.users ? <span>{detail.users.name || '—'} <span dir="ltr" className="block text-xs text-muted">{detail.users.email}</span></span> : tr('النظام', 'System')} />
+              <InfoTile label="IP" value={<span dir="ltr" className="font-mono text-xs">{detail.ip_address || '—'}</span>} />
+              <InfoTile className="col-span-2" label={tr('المورد', 'Resource')} value={<span dir="ltr" className="break-all font-mono text-xs">{detail.resource || '—'}{detail.resource_id ? ` : ${detail.resource_id}` : ''}</span>} />
             </div>
-          ) : (
-            <>
-              <input value={search} onChange={e => { handleSearch(e.target.value); setShowUserSuggest(true) }}
-                onFocus={() => setShowUserSuggest(true)}
-                placeholder="Search user by name or email…" className="input pl-9 w-full" />
-              {showUserSuggest && userSuggestions.length > 0 && (
-                <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-lg z-20">
-                  {userSuggestions.map(u => (
-                    <button key={u.id} onClick={() => { setSelectedUser(u); setSearch(''); setDSearch(''); setShowUserSuggest(false); setPage(1) }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-[#F8FAFC] text-sm border-b border-slate-100 last:border-0">
-                      <p className="font-medium text-slate-900">{u.name || '—'}</p>
-                      <p className="text-xs text-slate-500">{u.email}</p>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Action filter */}
-        <div className="relative">
-          <select value={actionFilter} onChange={e => { setActionFilter(e.target.value); setPage(1) }}
-            className="input pr-8 appearance-none min-w-36">
-            <option value="all">All actions</option>
-            {actions.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-          <ChevronDownIcon className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-        </div>
-
-        {/* Date range */}
-        <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1) }}
-          className="input text-sm" placeholder="From" />
-        <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1) }}
-          className="input text-sm" placeholder="To" />
-
-        {/* Clear */}
-        {hasFilters && (
-          <button onClick={clearFilters} className="btn-secondary text-sm flex items-center gap-1.5">
-            <XMarkIcon className="w-4 h-4" /> Clear
-          </button>
-        )}
-
-        <div className="text-sm text-slate-400 flex items-center ml-auto">{data?.total || 0} entries</div>
-      </div>
-
-      {/* Selected user banner */}
-      {mode === 'user' && selectedUser && (
-        <div className="mb-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-600">
-            {(selectedUser.name || selectedUser.email)[0].toUpperCase()}
-          </div>
-          <div>
-            <p className="text-sm font-medium text-slate-900">{selectedUser.name || '—'}</p>
-            <p className="text-xs text-slate-500">{selectedUser.email}</p>
-          </div>
-          <span className="ml-auto text-xs text-blue-500">{data?.total || 0} activity records</span>
-        </div>
-      )}
-
-      {/* Table */}
-      <div className="card p-0 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="border-b border-slate-200 bg-[#F8FAFC]/50">
-              <tr>
-                <th className="table-head">Time</th>
-                <th className="table-head">Action</th>
-                <th className="table-head">User</th>
-                <th className="table-head">Resource</th>
-                <th className="table-head">IP</th>
-                <th className="table-head w-8"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? Array.from({ length: 10 }).map((_, i) => (
-                <tr key={i} className="border-b border-slate-200">
-                  {Array.from({ length: 6 }).map((_, j) => (
-                    <td key={j} className="table-cell"><div className="h-4 skeleton rounded w-24" /></td>
-                  ))}
-                </tr>
-              )) : logs.length === 0 ? (
-                <tr><td colSpan={6} className="text-center py-12 text-slate-500">
-                  {mode === 'user' && !selectedUser ? 'Search for a user to see their activity' : 'No logs found'}
-                </td></tr>
-              ) : logs.map(log => (
-                <>
-                  <tr key={log.id} className={clsx('table-row cursor-pointer', expandedLog === log.id && 'bg-blue-50/20')}
-                    onClick={() => setExpandedLog(expandedLog === log.id ? null : log.id)}>
-                    <td className="table-cell text-xs font-mono text-slate-400 whitespace-nowrap">
-                      {format(new Date(log.created_at), 'MMM d, HH:mm:ss')}
-                    </td>
-                    <td className="table-cell">
-                      <span className={clsx('text-xs px-2 py-0.5 rounded font-medium', ACTION_COLORS[log.action] || 'badge-gray')}>
-                        {log.action}
-                      </span>
-                    </td>
-                    <td className="table-cell">
-                      {log.users ? (
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium text-slate-700 truncate max-w-28">{log.users.name || '—'}</p>
-                          <p className="text-[10px] text-slate-400 truncate max-w-28">{log.users.email}</p>
-                        </div>
-                      ) : <span className="text-xs text-slate-300">System</span>}
-                    </td>
-                    <td className="table-cell text-xs text-slate-500">
-                      {log.resource
-                        ? <span>{log.resource}{log.resource_id ? <span className="text-slate-300 font-mono"> :{log.resource_id.slice(0, 8)}</span> : ''}</span>
-                        : '—'}
-                    </td>
-                    <td className="table-cell font-mono text-xs text-slate-400">{log.ip_address || '—'}</td>
-                    <td className="table-cell text-slate-300 text-xs">{log.details ? '▾' : ''}</td>
-                  </tr>
-                  {/* Expanded details row */}
-                  {expandedLog === log.id && log.details && (
-                    <tr key={log.id + '-detail'} className="bg-slate-50 border-b border-slate-200">
-                      <td colSpan={6} className="px-4 py-3">
-                        <pre className="text-xs text-slate-600 font-mono whitespace-pre-wrap break-all bg-white border border-slate-200 rounded-lg p-3 max-h-40 overflow-y-auto">
-                          {JSON.stringify(log.details, null, 2)}
-                        </pre>
-                      </td>
-                    </tr>
-                  )}
-                </>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        {(data?.total || 0) > 50 && (
-          <div className="px-4 py-3 border-t border-slate-200 flex items-center justify-between">
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-              className="btn-secondary text-sm py-1.5 px-3 disabled:opacity-50">← Previous</button>
-            <span className="text-sm text-slate-400">Page {page} of {Math.ceil((data?.total || 0) / 50)}</span>
-            <button onClick={() => setPage(p => p + 1)} disabled={logs.length < 50}
-              className="btn-secondary text-sm py-1.5 px-3 disabled:opacity-50">Next →</button>
+            <div>
+              <p className="mb-2 text-sm font-semibold text-ink">{tr('التفاصيل (JSON)', 'Details (JSON)')}</p>
+              {detail.details ? <JsonViewer value={detail.details} maxHeight={480} /> : <p className="rounded-xl bg-surface-2 px-4 py-6 text-center text-sm text-muted">{tr('لا توجد تفاصيل إضافية', 'No extra details')}</p>}
+            </div>
+            {mode === 'system' && detail.users && (
+              <Button variant="secondary" size="sm" icon={UserIcon} onClick={() => { const u = detail.users!; setMode('user'); setSelectedUser({ id: u.id, name: u.name, email: u.email }); setPage(1); setSearch(''); setDSearch(''); setDetail(null) }}>
+                {tr('عرض كل نشاط هذا المستخدم', 'Show all activity for this user')}
+              </Button>
+            )}
           </div>
         )}
-      </div>
+      </Drawer>
     </AdminLayout>
   )
 }

@@ -1,81 +1,77 @@
-import { smartSend, smartSendWAWeb } from '@/lib/wa-smart-send'
+import { smartSend, smartSendWAWeb, resolveProvider } from '@/lib/wa-smart-send'
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
-import { v4 as uuidv4 } from 'uuid'
+import { verifyWixWebhook, parseMaybeJson, decodeUnverifiedWixWebhook, isWixPublicKeyConfigured } from '@/lib/wix-auth'
+import { readRawBody, withTimeout } from '@/lib/raw-body'
+import { requireEnv } from '@/lib/security'
 
 export const config = { api: { bodyParser: false } }
 
-async function getRawBody(req: NextApiRequest): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let data = ''
-    req.on('data', chunk => { data += chunk.toString() })
-    req.on('end', () => resolve(data))
-    req.on('error', reject)
-  })
-}
+// Wix needs a timely answer; the work (incl. order fetch retries) is bounded.
+const PROCESSING_BUDGET_MS = 8000
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  res.status(200).json({ received: true })
-  if (req.method !== 'POST') return
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
+  let rawBody: string
   try {
-    const rawBody = await getRawBody(req)
-    if (!rawBody) return
+    rawBody = (await readRawBody(req, 1024 * 1024)).toString('utf8')
+  } catch {
+    return res.status(413).json({ error: 'Payload too large' })
+  }
+  if (!rawBody) return res.status(400).json({ error: 'Empty body' })
 
+  // Wix app webhooks are RS256 JWTs signed by Wix — verify before trusting
+  // anything. While WIX_PUBLIC_KEY is not configured (or unusable), ORDER
+  // notifications are still processed unverified, as the previous code did,
+  // so merchants keep getting them. (Billing stays fail-closed.)
+  let jwt: Record<string, any> | null
+  try {
+    jwt = await verifyWixWebhook(rawBody) as Record<string, any> | null
+  } catch (e) {
+    console.error('[wix webhook] ⚠️ SECURITY: WIX_PUBLIC_KEY missing/invalid — accepting UNVERIFIED order webhook. Set WIX_PUBLIC_KEY now.', isWixPublicKeyConfigured() ? (e as Error).message : '')
+    jwt = decodeUnverifiedWixWebhook(rawBody) as Record<string, any> | null
+    if (!jwt) return res.status(400).json({ error: 'Invalid body' })
+  }
+  if (!jwt) {
+    console.error('[wix webhook] invalid signature — rejected')
+    return res.status(401).json({ error: 'Invalid signature' })
+  }
+
+  await withTimeout(processOrderEvent(req, jwt), PROCESSING_BUDGET_MS, undefined)
+  return res.status(200).json({ received: true })
+}
+
+async function processOrderEvent(req: NextApiRequest, jwt: Record<string, any>): Promise<void> {
+  try {
     const event = req.query.event as string || ''
 
-    // Decode JWT
-    let instanceId   = ''
+    let instanceId   = String(jwt.instanceId || jwt.appInstanceId || '')
     let orderId      = ''
     let jwtOrderData: Record<string, unknown> | null = null
 
-    try {
-      const parts = rawBody.trim().split('.')
-      if (parts.length === 3) {
-        const b64    = parts[1].replace(/-/g, '+').replace(/_/g, '/')
-        const pad    = b64.length % 4
-        const jwt    = JSON.parse(Buffer.from(pad ? b64 + '='.repeat(4-pad) : b64, 'base64').toString('utf8'))
-        instanceId   = String(jwt.instanceId || jwt.appInstanceId || '')
-        console.log('[wix webhook] JWT ROOT', JSON.stringify(jwt).slice(0, 500))
+    const d1 = parseMaybeJson(jwt.data)
+    if (d1) {
+      // instanceId for order webhooks lives one level down, inside the
+      // first-decoded `data` field — not at the JWT root.
+      if (!instanceId) instanceId = String(d1.instanceId || d1.metaSiteId || d1.siteId || '')
+      orderId  = String(d1.entityId || d1.id || d1.orderId || '')
 
-        if (jwt.data) {
-          try {
-            const d1 = JSON.parse(typeof jwt.data === 'string' ? jwt.data : JSON.stringify(jwt.data))
-            console.log('[wix webhook] D1', JSON.stringify(d1).slice(0, 500))
-            console.log('[wix webhook] D1 INSTANCE', d1?.instanceId, 'D1 metaSiteId', d1?.metaSiteId || d1?.siteId)
-
-            // instanceId for order webhooks lives one level down, inside
-            // the first-decoded `data` field — not at the JWT root.
-            if (!instanceId) instanceId = String(d1.instanceId || d1.metaSiteId || d1.siteId || '')
-
-            orderId  = String(d1.entityId || d1.id || d1.orderId || '')
-
-            if (d1.data) {
-              const d2 = JSON.parse(typeof d1.data === 'string' ? d1.data : JSON.stringify(d1.data))
-              if (!orderId) orderId = String(d2.entityId || d2.id || d2.orderId || '')
-              if (!instanceId) instanceId = String(d2.instanceId || d2.metaSiteId || d2.siteId || '')
-
-              // Extract order entity from webhook payload
-              if (d2.updatedEvent?.currentEntity) jwtOrderData = d2.updatedEvent.currentEntity
-              else if (d2.createdEvent?.entity)   jwtOrderData = d2.createdEvent.entity
-              else if (d2.entity)                 jwtOrderData = d2.entity
-            }
-
-            if (!jwtOrderData) {
-              if (d1.updatedEvent?.currentEntity) jwtOrderData = d1.updatedEvent.currentEntity
-              else if (d1.createdEvent?.entity)   jwtOrderData = d1.createdEvent.entity
-              else if (d1.entity)                 jwtOrderData = d1.entity
-            }
-          } catch {}
-        }
-      } else {
-        const parsed = JSON.parse(rawBody)
-        instanceId   = String(parsed.instanceId || '')
-        orderId      = String(parsed.entityId || '')
+      const d2 = parseMaybeJson(d1.data)
+      if (d2) {
+        if (!orderId) orderId = String(d2.entityId || d2.id || d2.orderId || '')
+        if (!instanceId) instanceId = String(d2.instanceId || d2.metaSiteId || d2.siteId || '')
+        if (d2.updatedEvent?.currentEntity) jwtOrderData = d2.updatedEvent.currentEntity
+        else if (d2.createdEvent?.entity)   jwtOrderData = d2.createdEvent.entity
+        else if (d2.entity)                 jwtOrderData = d2.entity
       }
-    } catch { return }
 
-    if (!instanceId) instanceId = String(req.query.instance_id || '')
+      if (!jwtOrderData) {
+        if (d1.updatedEvent?.currentEntity) jwtOrderData = d1.updatedEvent.currentEntity
+        else if (d1.createdEvent?.entity)   jwtOrderData = d1.createdEvent.entity
+        else if (d1.entity)                 jwtOrderData = d1.entity
+      }
+    }
 
     console.log('[wix webhook] instanceId:', instanceId, 'orderId:', orderId, 'event:', event, 'hasJWT:', !!jwtOrderData)
 
@@ -94,22 +90,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const metaSiteId = install?.meta_site_id || ''
 
     // Get token if needed
-    if (!accessToken) {
+    if (!accessToken && (!process.env.WIX_APP_ID || !process.env.WIX_APP_SECRET)) {
+      console.error('[wix webhook] Wix app not configured (WIX_APP_ID / WIX_APP_SECRET) — using the order data in the webhook only')
+    } else if (!accessToken) {
       try {
         const tokenRes = await fetch('https://www.wixapis.com/oauth2/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             grant_type:    'client_credentials',
-            client_id:     process.env.WIX_APP_ID     || '48cfce94-1e3d-4d09-a34d-e5f41e5b0469',
-            client_secret: process.env.WIX_APP_SECRET || 'eaf03696-cfc8-4fe0-92e6-d0e00d1f5e76',
+            client_id:     requireEnv('WIX_APP_ID'),
+            client_secret: requireEnv('WIX_APP_SECRET'),
             instance_id:   instanceId,
           }),
         })
         const td = await tokenRes.json()
         accessToken = td.access_token || ''
         console.log('[wix webhook] token status:', tokenRes.status, 'hasToken:', !!accessToken)
-      } catch (e) { console.log('[wix webhook] token error:', e) }
+      } catch (e) { console.log('[wix webhook] token error:', (e as Error)?.message) }
     }
 
     // Use JWT order data if available, otherwise fetch from API
@@ -123,9 +121,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (metaSiteId) headers['wix-site-id'] = metaSiteId
 
       // order_placed needs retry — order may not be ready in API yet
-      const maxAttempts = event === 'order_placed' ? 4 : 1
+      const maxAttempts = event === 'order_placed' ? 3 : 1
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        if (attempt > 0) await new Promise(r => setTimeout(r, 3000))
+        if (attempt > 0) await new Promise(r => setTimeout(r, 2000))
         try {
           const r = await fetch(`https://www.wixapis.com/ecom/v1/orders/${orderId}`, { headers })
           console.log(`[wix webhook] order fetch attempt ${attempt + 1}:`, r.status)
@@ -204,8 +202,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!instance) { console.log('[wix webhook] no WA instance for:', userId); return }
 
     // Templates
-    const { data: tplRow } = await db.from('system_settings').select('value').eq('key', `wix_templates_${instanceId}`).maybeSingle()
-    const templates = (tplRow?.value || {}) as Record<string, string>
+    // Custom texts: the dashboard saves them per WABEK user
+    // (wix_templates_<userId>); older rows / the Wix panel per Wix instance
+    // (wix_templates_<instanceId>). The user's own texts win per event.
+    const { data: tplRows } = await db.from('system_settings').select('key, value')
+      .in('key', [`wix_templates_${userId}`, `wix_templates_${instanceId}`])
+    const byKey = new Map((tplRows || []).map(r => [r.key as string, (r.value || {}) as Record<string, string>]))
+    const templates: Record<string, string> = {
+      ...(byKey.get(`wix_templates_${instanceId}`) || {}),
+      ...Object.fromEntries(Object.entries(byKey.get(`wix_templates_${userId}`) || {}).filter(([, v]) => typeof v === 'string' && v.trim())),
+    }
 
     // Build message vars
     const buyerName   = `${buyerInfo.contactDetails?.firstName || buyerInfo.firstName || ''}`.trim() || 'Customer'
@@ -259,22 +265,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!message) { console.log('[wix webhook] no message for:', finalEvent); return }
 
-    // Send
-    const isWAWeb = (instance.instance_type || instance.type) === 'wa_web'
-    let waMessageId = ''
-    if (isWAWeb) {
-      const r = await smartSendWAWeb({ userId: userId, instanceId: instance.id, to: phone, text: message })
-      waMessageId = r?.messageId || ''
-    } else {
-      const r = await smartSend({ userId: userId, instanceId: instance?.id || '', phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: phone, text: message, forceTemplate: false })
-      waMessageId = r?.messageId || ''
-    }
-
-    await db.from('messages').insert({
-      id: uuidv4(), user_id: userId, instance_id: instance.id,
-      direction: 'outbound', type: 'text', content: message,
-      wa_message_id: waMessageId, status: 'sent',
-    })
+    // Send (smartSend / smartSendWAWeb insert the outbound message row)
+    const r = resolveProvider(instance) === 'wa_web'
+      ? await smartSendWAWeb({ userId, instanceId: instance.id, to: phone, text: message, source: 'notification' })
+      : await smartSend({ userId, instanceId: instance.id, phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: phone, text: message, forceTemplate: false, source: 'notification' })
+    if (r.error) { console.log('[wix webhook] send failed:', r.error); return }
     console.log('[wix webhook] ✅ sent to', phone, 'event:', finalEvent)
 
   } catch (err) {

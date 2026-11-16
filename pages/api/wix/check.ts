@@ -1,16 +1,10 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { supabaseAdmin } from '@/lib/supabase'
+import { verifyWixInstance, getLinkedUserId, wixAppConfigured } from '@/lib/wix-auth'
 
+// Only answers for a SIGNED Wix instance (no probing of arbitrary instance ids).
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const instance = req.query.instance as string
-  if (!instance) return res.status(200).json({ connected: false })
-
-  const db = supabaseAdmin()
-  const { data } = await db
-    .from('wix_user_links')
-    .select('user_id')
-    .eq('wix_instance_id', instance)
-    .maybeSingle()
-
-  return res.status(200).json({ connected: !!data })
+  if (!wixAppConfigured(res)) return
+  const wix = verifyWixInstance(req.headers['x-wix-instance'] || req.query.instance)
+  if (!wix) return res.status(200).json({ connected: false })
+  return res.status(200).json({ connected: !!(await getLinkedUserId(wix.instanceId)) })
 }

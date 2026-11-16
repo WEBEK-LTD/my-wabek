@@ -1,9 +1,9 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'inbox')
   if (!user) return
   const db = supabaseAdmin()
   const isOwner = !user.actualUserId
@@ -11,8 +11,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // ── GET: fetch reviews ───────────────────────────────────
   if (req.method === 'GET') {
-    const { member_id, page = '1', limit = '20' } = req.query
-    const offset = (parseInt(page as string) - 1) * parseInt(limit as string)
+    const pageNum = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1)
+    const limitNum = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '20'), 10) || 20))
+    const limit = String(limitNum)
+    const offset = (pageNum - 1) * limitNum
+    // Aggregates are computed over the most recent items only
+    const STATS_SAMPLE = 1000
 
     if (isOwner) {
       // Owner sees all reviews
@@ -39,6 +43,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const { data: stats } = await db.from('ai_review_items')
         .select('member_user_id, member_name, score_overall, issues, strengths')
         .eq('owner_id', ownerId)
+        .order('created_at', { ascending: false })
+        .limit(STATS_SAMPLE)
 
       const memberStats: Record<string, any> = {}
       for (const item of stats || []) {
@@ -89,7 +95,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .select('score_overall, score_professionalism, score_clarity, score_empathy, issues, strengths, created_at')
         .eq('owner_id', ownerId)
         .eq('member_user_id', memberId)
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: false })
+        .limit(STATS_SAMPLE)
+      allItems?.reverse() // chronological for the trend
 
       const scores = (allItems || []).map(i => i.score_overall).filter(Boolean)
       const avgScore = scores.length > 0
@@ -119,16 +127,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // ── PUT: add manual comment ──────────────────────────────
   if (req.method === 'PUT') {
     if (!isOwner) return res.status(403).json({ error: 'Owner only' })
-    const { item_id, manual_comment } = req.body
+    const { item_id, manual_comment } = req.body || {}
     if (!item_id) return res.status(400).json({ error: 'item_id required' })
+    const comment = manual_comment ? String(manual_comment).slice(0, 5000) : null
 
     const { data, error } = await db.from('ai_review_items')
-      .update({ manual_comment: manual_comment || null, manual_comment_at: new Date().toISOString() })
-      .eq('id', item_id)
+      .update({ manual_comment: comment, manual_comment_at: new Date().toISOString() })
+      .eq('id', String(item_id))
       .eq('owner_id', ownerId)
       .select().single()
 
-    if (error) return res.status(500).json({ error: error.message })
+    if (error) {
+      console.error('[ai/reviews] update error:', error.message)
+      return res.status(500).json({ error: 'Failed to save comment' })
+    }
     return res.status(200).json({ item: data })
   }
 

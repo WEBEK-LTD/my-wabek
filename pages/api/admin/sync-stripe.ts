@@ -1,13 +1,13 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireAdmin } from '@/lib/auth'
+import { logAction, getClientIp } from '@/lib/middleware'
 import { supabaseAdmin } from '@/lib/supabase'
 import Stripe from 'stripe'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-  const user = await requireAuth(req, res)
+  const user = await requireAdmin(req, res)
   if (!user) return
-  if (user.role !== 'admin') return res.status(403).json({ error: 'Admin only' })
 
   const stripeKey = process.env.STRIPE_SECRET_KEY
   if (!stripeKey) return res.status(400).json({ error: 'STRIPE_SECRET_KEY not configured' })
@@ -48,52 +48,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         productId = product.id
       }
 
-      // Handle monthly price
-      let monthlyPriceId = plan.stripe_price_id_monthly
-      if (!monthlyPriceId && plan.price_monthly > 0) {
-        // Check for existing active monthly price
-        const existingPrices = await stripe.prices.list({
-          product: productId,
-          active: true,
-          recurring: { interval: 'month' },
-        })
-
-        if (existingPrices.data.length > 0) {
-          monthlyPriceId = existingPrices.data[0].id
-        } else {
-          const price = await stripe.prices.create({
-            product: productId,
-            unit_amount: Math.round(plan.price_monthly * 100),
-            currency: 'usd',
-            recurring: { interval: 'month' },
-            metadata: { wabek_plan_id: plan.id, billing_cycle: 'monthly' },
-          })
-          monthlyPriceId = price.id
+      // Reuse the stored price only if it is still active and matches the
+      // plan's current amount; otherwise find/create a matching one. Existing
+      // subscribers keep their old price (it still maps to the plan via
+      // price/product metadata wabek_plan_id in the webhook).
+      const ensurePrice = async (storedId: string | null, amount: number, interval: 'month' | 'year', cycle: string) => {
+        if (!(amount > 0)) return storedId || null
+        const cents = Math.round(amount * 100)
+        if (storedId) {
+          try {
+            const p = await stripe.prices.retrieve(storedId)
+            if (p.active && p.unit_amount === cents && p.recurring?.interval === interval) return storedId
+          } catch { /* missing -> recreate */ }
         }
+        const existing = await stripe.prices.list({ product: productId, active: true, recurring: { interval }, limit: 100 })
+        const match = existing.data.find(p => p.unit_amount === cents && p.currency === 'usd')
+        if (match) return match.id
+        const price = await stripe.prices.create({
+          product: productId,
+          unit_amount: cents,
+          currency: 'usd',
+          recurring: { interval },
+          metadata: { wabek_plan_id: plan.id, billing_cycle: cycle },
+        })
+        return price.id
       }
 
-      // Handle yearly price
-      let yearlyPriceId = plan.stripe_price_id_yearly
-      if (!yearlyPriceId && plan.price_yearly > 0) {
-        const existingYearlyPrices = await stripe.prices.list({
-          product: productId,
-          active: true,
-          recurring: { interval: 'year' },
-        })
-
-        if (existingYearlyPrices.data.length > 0) {
-          yearlyPriceId = existingYearlyPrices.data[0].id
-        } else {
-          const price = await stripe.prices.create({
-            product: productId,
-            unit_amount: Math.round(plan.price_yearly * 100),
-            currency: 'usd',
-            recurring: { interval: 'year' },
-            metadata: { wabek_plan_id: plan.id, billing_cycle: 'yearly' },
-          })
-          yearlyPriceId = price.id
-        }
-      }
+      const monthlyPriceId = await ensurePrice(plan.stripe_price_id_monthly, Number(plan.price_monthly), 'month', 'monthly')
+      const yearlyPriceId = await ensurePrice(plan.stripe_price_id_yearly, Number(plan.price_yearly), 'year', 'yearly')
 
       // Update plan in Supabase with Stripe IDs
       await db.from('plans').update({
@@ -108,14 +90,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         yearly: yearlyPriceId || null,
       })
     } catch (err) {
+      console.error(`[sync-stripe] plan ${plan.id} failed:`, err instanceof Error ? err.message : err)
       results.push({
         plan: plan.name,
         status: 'error',
-        error: err instanceof Error ? err.message : String(err),
+        error: 'Stripe sync failed for this plan',
       })
     }
   }
 
+  await logAction({ userId: user.userId, action: 'admin_sync_stripe', resource: 'plan', details: { results: results.map(r => ({ plan: r.plan, status: r.status })) }, ipAddress: getClientIp(req) })
   return res.status(200).json({
     success: true,
     synced: results.filter(r => r.status === 'synced').length,

@@ -1,34 +1,44 @@
 // @ts-nocheck
-import { usePlanGuard } from '@/hooks/usePlanFeature'
-import UpgradeWall from '@/components/UpgradeWall'
 import { useState } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { PlusIcon, UserIcon, ArrowPathIcon, NoSymbolIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
-import { format } from 'date-fns'
-import clsx from 'clsx'
+import {
+  PlusIcon, UserGroupIcon, NoSymbolIcon, CheckCircleIcon, SignalIcon, UsersIcon, ChatBubbleLeftRightIcon,
+  ShieldCheckIcon, BookOpenIcon,
+} from '@heroicons/react/24/outline'
+import {
+  Avatar, Badge, Button, Card, ConfirmDialog, EmptyState, Field, Input, Modal, PageHeader, StatCard,
+} from '@/components/ui'
+import { CardsSkeleton, ErrorState, PlanGate, apiError } from '@/components/settings/Shared'
+import { fmtDate, fmtLimit } from '@/components/settings/format'
+
+const EMPTY_FORM = { name: '', email: '', password: '', max_contacts: -1, max_instances: 1, max_messages_month: 1000 }
 
 export default function SubAccountsPage() {
-  const { blocked, isLoading: planLoading } = usePlanGuard('allow_sub_accounts')
-  if (planLoading) return null
-  if (blocked) return <UpgradeWall feature="allow_sub_accounts" />
+  return <PlanGate feature="allow_sub_accounts"><SubAccountsContent /></PlanGate>
+}
 
+function SubAccountsContent() {
   const qc = useQueryClient()
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ name: '', email: '', password: '', max_contacts: -1, max_instances: 1, max_messages_month: 1000 })
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [toSuspend, setToSuspend] = useState(null)
 
-  const { data, isLoading } = useQuery('sub-accounts', () => axios.get('/api/sub-accounts').then(r => r.data))
+  const { data, isLoading, isError, error, refetch } = useQuery('sub-accounts', () => axios.get('/api/sub-accounts').then(r => r.data))
   const accounts = data?.accounts || []
+  const activeCount = accounts.filter(a => a.user?.is_active).length
 
   const suspendMut = useMutation(
     id => axios.delete(`/api/sub-accounts/${id}`),
-    { onSuccess: () => { qc.invalidateQueries('sub-accounts'); toast.success('Account suspended') } }
+    { onSuccess: () => { qc.invalidateQueries('sub-accounts'); setToSuspend(null); toast.success('تم إيقاف الحساب') },
+      onError: e => toast.error(apiError(e, 'تعذّر إيقاف الحساب')) }
   )
   const activateMut = useMutation(
     id => axios.put(`/api/sub-accounts/${id}`, { is_active: true }),
-    { onSuccess: () => { qc.invalidateQueries('sub-accounts'); toast.success('Account activated') } }
+    { onSuccess: () => { qc.invalidateQueries('sub-accounts'); toast.success('تم تفعيل الحساب') },
+      onError: e => toast.error(apiError(e, 'تعذّر تفعيل الحساب')) }
   )
 
   const createMut = useMutation(
@@ -37,123 +47,157 @@ export default function SubAccountsPage() {
       onSuccess: () => {
         qc.invalidateQueries('sub-accounts')
         setShowForm(false)
-        setForm({ name: '', email: '', password: '', max_contacts: -1, max_instances: 1, max_messages_month: 1000 })
-        toast.success('Sub-account created! ✅')
+        setForm(EMPTY_FORM)
+        toast.success('تم إنشاء الحساب الفرعي')
       },
-      onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
+      onError: (e) => toast.error(e?.response?.data?.error || 'تعذّر إنشاء الحساب'),
     }
   )
 
+  const num = (k) => e => setForm(f => ({ ...f, [k]: parseInt(e.target.value) }))
+
   return (
     <DashboardLayout title="Sub-Accounts">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <p className="text-slate-400 text-sm">{accounts.length} sub-accounts</p>
-        </div>
-        <button onClick={() => setShowForm(v => !v)} className="btn-primary">
-          <PlusIcon className="w-4 h-4" /> New Sub-Account
-        </button>
-      </div>
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="الإعدادات"
+          title="الحسابات الفرعية"
+          description="أنشئ لكل عميل لوحة تحكم مستقلة بحدود تحددها أنت، وأدرها كلها من هنا."
+          actions={
+            <>
+              <Button variant="secondary" icon={BookOpenIcon} href="/docs/guides/sub-accounts">الدليل</Button>
+              <Button icon={PlusIcon} onClick={() => setShowForm(true)}>حساب فرعي جديد</Button>
+            </>
+          }
+        />
 
-      {showForm && (
-        <div className="card mb-6 space-y-4">
-          <h3 className="font-display font-semibold text-slate-900">Create Sub-Account</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="label">Full Name</label>
-              <input value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} placeholder="Client Name" className="input" />
-            </div>
-            <div>
-              <label className="label">Email</label>
-              <input type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} placeholder="client@example.com" className="input" />
-            </div>
-            <div>
-              <label className="label">Password</label>
-              <input type="password" value={form.password} onChange={e => setForm(f => ({...f, password: e.target.value}))} placeholder="Min 8 characters" className="input" />
-            </div>
-            <div>
-              <label className="label">Max Instances</label>
-              <input type="number" value={form.max_instances} onChange={e => setForm(f => ({...f, max_instances: parseInt(e.target.value)}))} min={1} className="input" />
-            </div>
-            <div>
-              <label className="label">Max Contacts (-1 = unlimited)</label>
-              <input type="number" value={form.max_contacts} onChange={e => setForm(f => ({...f, max_contacts: parseInt(e.target.value)}))} className="input" />
-            </div>
-            <div>
-              <label className="label">Max Messages/Month</label>
-              <input type="number" value={form.max_messages_month} onChange={e => setForm(f => ({...f, max_messages_month: parseInt(e.target.value)}))} className="input" />
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <button onClick={() => createMut.mutate(form)} disabled={createMut.isLoading || !form.name || !form.email || !form.password} className="btn-primary">
-              {createMut.isLoading ? <><ArrowPathIcon className="w-4 h-4 animate-spin" /> Creating...</> : 'Create Sub-Account'}
-            </button>
-            <button onClick={() => setShowForm(false)} className="btn-secondary">Cancel</button>
-          </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-3.5">
+          <StatCard label="جميع الحسابات" value={String(accounts.length)} icon={UserGroupIcon} loading={isLoading} />
+          <StatCard label="نشطة" value={String(activeCount)} icon={CheckCircleIcon} loading={isLoading} />
+          <StatCard label="موقوفة" value={String(accounts.length - activeCount)} icon={NoSymbolIcon} loading={isLoading}
+            subTone={accounts.length - activeCount > 0 ? 'warning' : 'muted'} />
         </div>
-      )}
 
-      {isLoading ? (
-        <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="skeleton h-20 rounded-xl" />)}</div>
-      ) : accounts.length === 0 && !showForm ? (
-        <div className="card text-center py-16">
-          <UserIcon className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-          <h3 className="font-display font-semibold text-slate-900 mb-2">No sub-accounts yet</h3>
-          <p className="text-slate-400 text-sm mb-4">Create accounts for your clients — each gets their own dashboard</p>
-          <button onClick={() => setShowForm(true)} className="btn-primary mx-auto"><PlusIcon className="w-4 h-4" /> Create First Sub-Account</button>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {accounts.map(acc => (
-            <div key={acc.id} className="card hover:border-wabek-muted transition-colors">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-full bg-blue-50 border border-blue-200/50 flex items-center justify-center font-bold text-blue-600 flex-shrink-0">
-                  {acc.user?.name?.[0]?.toUpperCase() || '?'}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <p className="font-medium text-slate-900">{acc.user?.name}</p>
-                    <span className={clsx('text-xs px-2 py-0.5 rounded', acc.user?.is_active ? 'bg-blue-50/30 text-blue-600' : 'bg-red-900/30 text-red-400')}>
-                      {acc.user?.is_active ? 'Active' : 'Suspended'}
-                    </span>
+        {isLoading ? (
+          <CardsSkeleton count={3} className="h-48" />
+        ) : isError ? (
+          <ErrorState message={apiError(error, 'تعذّر تحميل الحسابات')} onRetry={() => refetch()} />
+        ) : accounts.length === 0 ? (
+          <EmptyState
+            variant="card"
+            icon={UserGroupIcon}
+            title="لا توجد حسابات فرعية بعد"
+            description="أنشئ حسابات لعملائك؛ يحصل كل منهم على لوحة تحكم وتسجيل دخول مستقلين."
+            action={<Button icon={PlusIcon} onClick={() => setShowForm(true)}>إنشاء أول حساب فرعي</Button>}
+          />
+        ) : (
+          <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr))]">
+            {accounts.map(acc => {
+              const active = !!acc.user?.is_active
+              return (
+                <Card key={acc.id} padding="none" interactive className={active ? '' : 'opacity-80'}>
+                  <div className="flex items-start gap-3 p-5">
+                    <Avatar name={acc.user?.name || acc.user?.email || '?'} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate font-semibold text-ink">{acc.user?.name || '—'}</p>
+                        <Badge tone={active ? 'success' : 'danger'} size="sm" dot>{active ? 'نشط' : 'موقوف'}</Badge>
+                      </div>
+                      <p className="truncate text-sm text-muted"><span dir="ltr">{acc.user?.email}</span></p>
+                      <p className="mt-0.5 text-xs text-muted">أُنشئ {fmtDate(acc.user?.created_at)}</p>
+                    </div>
                   </div>
-                  <p className="text-sm text-slate-500">{acc.user?.email}</p>
-                  <p className="text-xs text-slate-600 mt-0.5">Created {acc.user?.created_at ? format(new Date(acc.user.created_at), 'MMM d, yyyy') : '—'}</p>
-                </div>
-                <div className="text-right text-xs text-slate-500 space-y-1 flex-shrink-0">
-                  <p>📱 {acc.max_instances} instance{acc.max_instances !== 1 ? 's' : ''}</p>
-                  <p>👥 {acc.max_contacts === -1 ? '∞' : acc.max_contacts} contacts</p>
-                  <p>💬 {acc.max_messages_month.toLocaleString()} msgs/mo</p>
-                  <div className="flex gap-1 mt-2 justify-end">
-                    {acc.user?.is_active ? (
-                      <button onClick={() => { if(confirm('Suspend this account?')) suspendMut.mutate(acc.id) }}
-                        className="text-xs text-red-400 hover:text-red-300 px-2 py-1 border border-red-900/50 rounded-lg">
-                        Suspend
-                      </button>
+                  <dl className="grid grid-cols-3 divide-x divide-line-soft border-y border-line-soft bg-surface-2/50 text-center rtl:divide-x-reverse">
+                    {[
+                      { icon: SignalIcon, label: 'أرقام', value: fmtLimit(acc.max_instances) },
+                      { icon: UsersIcon, label: 'جهات اتصال', value: fmtLimit(acc.max_contacts) },
+                      { icon: ChatBubbleLeftRightIcon, label: 'رسالة/شهر', value: fmtLimit(acc.max_messages_month) },
+                    ].map(s => (
+                      <div key={s.label} className="px-2 py-3">
+                        <dt className="flex items-center justify-center gap-1 text-[11px] text-muted"><s.icon className="h-3.5 w-3.5" aria-hidden="true" />{s.label}</dt>
+                        <dd className="mt-0.5 text-sm font-semibold text-ink tabular">{s.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <div className="flex justify-end px-5 py-3">
+                    {active ? (
+                      <Button size="sm" variant="danger-soft" icon={NoSymbolIcon} onClick={() => setToSuspend(acc)}>إيقاف</Button>
                     ) : (
-                      <button onClick={() => activateMut.mutate(acc.id)}
-                        className="text-xs text-blue-600 hover:text-blue-500 px-2 py-1 border border-blue-200/50 rounded-lg">
-                        Activate
-                      </button>
+                      <Button size="sm" variant="secondary" icon={CheckCircleIcon} loading={activateMut.isLoading && activateMut.variables === acc.id} onClick={() => activateMut.mutate(acc.id)}>تفعيل</Button>
                     )}
                   </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+                </Card>
+              )
+            })}
+          </div>
+        )}
 
-      <div className="card mt-6 border-slate-200">
-        <h3 className="font-semibold text-slate-900 text-sm mb-3">ℹ️ About Sub-Accounts</h3>
-        <ul className="space-y-1.5 text-xs text-slate-400">
-          <li>✅ Each sub-account gets their own dashboard and login</li>
-          <li>✅ You can set custom limits per account</li>
-          <li>✅ Sub-accounts are isolated — they can't see each other's data</li>
-          <li>✅ You can manage all sub-accounts from this page</li>
-          <li>⚠️ Sub-accounts require the Pro or Business plan</li>
-        </ul>
+        <Card variant="muted">
+          <div className="flex items-start gap-3">
+            <ShieldCheckIcon className="mt-0.5 h-5 w-5 shrink-0 text-brand-ink" aria-hidden="true" />
+            <ul className="grid flex-1 gap-x-8 gap-y-1.5 text-sm text-body sm:grid-cols-2">
+              <li>لكل حساب فرعي لوحة تحكم وتسجيل دخول مستقلان.</li>
+              <li>تحدد حدودًا مخصصة لكل حساب.</li>
+              <li>الحسابات معزولة؛ لا يرى أي منها بيانات غيره.</li>
+              <li>تتطلب الحسابات الفرعية باقة تتضمن هذه الميزة.</li>
+            </ul>
+          </div>
+        </Card>
       </div>
+
+      <Modal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        size="lg"
+        icon={UserGroupIcon}
+        title="حساب فرعي جديد"
+        description="سيتمكن العميل من الدخول ببريده وكلمة المرور التي تحددها."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowForm(false)}>إلغاء</Button>
+            <Button type="submit" form="sub-form" loading={createMut.isLoading} disabled={!form.name || !form.email || !form.password}>إنشاء الحساب</Button>
+          </>
+        }
+      >
+        <form id="sub-form" className="space-y-5" onSubmit={e => { e.preventDefault(); createMut.mutate(form) }}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="الاسم الكامل" required>
+              <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="اسم العميل" />
+            </Field>
+            <Field label="البريد الإلكتروني" required>
+              <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="client@example.com" dir="ltr" />
+            </Field>
+            <Field label="كلمة المرور" hint="8 أحرف على الأقل" required className="sm:col-span-2">
+              <Input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} autoComplete="new-password" />
+            </Field>
+          </div>
+          <fieldset className="rounded-card border border-line-soft bg-surface-2/60 p-4">
+            <legend className="px-1 text-sm font-medium text-ink">الحدود</legend>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field label="أرقام واتساب">
+                <Input type="number" min={1} value={form.max_instances} onChange={num('max_instances')} dir="ltr" />
+              </Field>
+              <Field label="جهات الاتصال" hint="-1 = غير محدود">
+                <Input type="number" value={form.max_contacts} onChange={num('max_contacts')} dir="ltr" />
+              </Field>
+              <Field label="رسائل شهريًا">
+                <Input type="number" value={form.max_messages_month} onChange={num('max_messages_month')} dir="ltr" />
+              </Field>
+            </div>
+          </fieldset>
+        </form>
+      </Modal>
+
+      <ConfirmDialog
+        destructive
+        open={!!toSuspend}
+        onClose={() => setToSuspend(null)}
+        onConfirm={() => { if (toSuspend) suspendMut.mutate(toSuspend.id) }}
+        loading={suspendMut.isLoading}
+        title="إيقاف هذا الحساب؟"
+        description={`لن يتمكن ${toSuspend?.user?.name || 'العميل'} من الدخول حتى تعيد تفعيله.`}
+        confirmLabel="إيقاف الحساب"
+      />
     </DashboardLayout>
   )
 }

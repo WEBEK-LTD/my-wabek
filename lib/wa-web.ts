@@ -3,6 +3,7 @@
 // Run the Baileys server separately on a VPS — see docs/baileys-server.md
 
 import { supabaseAdmin } from './supabase'
+import { assertSafeMediaUrl } from './media-storage'
 
 export interface WAWebSession {
   instanceId: string
@@ -27,15 +28,22 @@ export async function getInstanceStatus(instanceId: string): Promise<WAWebSessio
   }
 }
 
-async function callWAServer(path: string, body?: object): Promise<unknown> {
+/** Only instance ids we generate (UUIDs) may appear in Baileys URL paths. */
+export function isValidInstanceId(id: unknown): id is string {
+  return typeof id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(id)
+}
+
+export async function callWAServer(path: string, body?: object, opts: { method?: string } = {}): Promise<unknown> {
   const waServerUrl = process.env.WA_WEB_SERVER_URL
   if (!waServerUrl) throw new Error('WA_WEB_SERVER_URL not configured')
+  const secret = process.env.WA_WEB_SERVER_SECRET
+  if (!secret) throw new Error('WA_WEB_SERVER_SECRET not configured')
 
-  const fullUrl = `${waServerUrl}${path}`
-  const method  = body ? 'POST' : 'GET'
+  const fullUrl = `${waServerUrl.replace(/\/+$/, '')}${path}`
+  const method  = opts.method || (body ? 'POST' : 'GET')
 
-  // Detailed request log — omit X-Secret from output
-  console.log(`[wa-web] ${method} ${fullUrl}`, body ? JSON.stringify(body).slice(0, 800) : '')
+  // Request log — never the secret, never message bodies
+  console.log(`[wa-web] ${method} ${path}`)
 
   let res: Response
   try {
@@ -43,7 +51,7 @@ async function callWAServer(path: string, body?: object): Promise<unknown> {
       method,
       headers: {
         'Content-Type': 'application/json',
-        'X-Secret': process.env.WA_WEB_SERVER_SECRET || '',
+        'X-Secret': secret,
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
     })
@@ -53,7 +61,7 @@ async function callWAServer(path: string, body?: object): Promise<unknown> {
   }
 
   const rawText = await res.text()
-  console.log(`[wa-web] RESPONSE ${res.status} ${fullUrl}:`, rawText.slice(0, 500))
+  console.log(`[wa-web] RESPONSE ${res.status} ${path}`)
 
   if (!res.ok) {
     let errMsg = `Server error ${res.status}`
@@ -61,7 +69,8 @@ async function callWAServer(path: string, body?: object): Promise<unknown> {
       const parsed = JSON.parse(rawText)
       errMsg = parsed?.error || parsed?.message || errMsg
     } catch {}
-    throw new Error(`[wa-web] ${method} ${path} failed (${res.status}): ${errMsg} | body=${rawText.slice(0, 300)}`)
+    console.error(`[wa-web] ${method} ${path} failed (${res.status}): ${rawText.slice(0, 300)}`)
+    throw new Error(`[wa-web] ${method} ${path} failed (${res.status}): ${errMsg}`)
   }
 
   try {
@@ -73,6 +82,7 @@ async function callWAServer(path: string, body?: object): Promise<unknown> {
 
 export async function requestQRCode(instanceId: string, userId: string): Promise<{ qrCode?: string; message: string }> {
   const db = supabaseAdmin()
+  if (!isValidInstanceId(instanceId)) throw new Error('Invalid instance id')
 
   try {
     const data = await callWAServer(`/instance/${instanceId}/qr`, { instanceId, userId }) as { qrCode?: string }
@@ -95,6 +105,7 @@ export async function requestQRCode(instanceId: string, userId: string): Promise
 
 export async function disconnectWAWeb(instanceId: string): Promise<void> {
   const db = supabaseAdmin()
+  if (!isValidInstanceId(instanceId)) throw new Error('Invalid instance id')
   try {
     await callWAServer(`/instance/${instanceId}/disconnect`)
   } catch {}
@@ -102,6 +113,7 @@ export async function disconnectWAWeb(instanceId: string): Promise<void> {
 }
 
 export async function sendWAWebMessage(params: { instanceId: string; to: string; text: string }): Promise<{ messageId: string }> {
+  if (!isValidInstanceId(params.instanceId)) throw new Error('Invalid instance id')
   try {
     const data = await callWAServer(`/instance/${params.instanceId}/send`, { to: params.to, text: params.text }) as { messageId: string }
     return data
@@ -135,9 +147,13 @@ export async function sendWAWebMedia(params: {
   filename?: string
   mimetype?: string
 }): Promise<{ messageId: string }> {
+  if (!isValidInstanceId(params.instanceId)) throw new Error('Invalid instance id')
+  // SSRF guard: the Baileys server fetches this URL, so only public https
+  // URLs (or our own storage) may be passed on.
+  const mediaUrl = await assertSafeMediaUrl(params.mediaUrl)
   const data = await callWAServer(`/instance/${params.instanceId}/send-media`, {
     to: params.to,
-    mediaUrl: params.mediaUrl,
+    mediaUrl,
     mediaType: params.mediaType,
     caption: params.caption,
     filename: params.filename,

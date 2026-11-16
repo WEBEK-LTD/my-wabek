@@ -1,21 +1,20 @@
-import { smartSend, smartSendWAWeb } from '@/lib/wa-smart-send'
+import { smartSend, smartSendWAWeb, resolveProvider } from '@/lib/wa-smart-send'
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
-import { notifyInvoiceCreated, notifyInvoiceOverdue, notifyPaymentReminder, notifyServiceNotification, sendNotification } from '@/lib/wa-notifications'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'integrations')
   if (!user) return
   const db = supabaseAdmin()
 
-  const { phone, event } = req.body
-  if (!phone) return res.status(400).json({ error: 'phone required' })
+  const { phone, event } = req.body || {}
+  if (!phone || typeof phone !== 'string') return res.status(400).json({ error: 'phone required' })
 
   const { data: instances } = await db
     .from('whatsapp_instances')
-    .select('*')
+    .select('id, user_id, display_name, phone_number, instance_type, type, phone_number_id, access_token')
     .eq('user_id', user.userId)
     .eq('status', 'connected')
     .limit(1)
@@ -36,20 +35,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const message = templates[event] || templates['invoice_paid']
 
-  try {
-    if (instance.type === 'wa_web' || instance.type === 'baileys') {
-      await smartSendWAWeb({ userId: user.userId, instanceId: instance.id, to: phone, text: message })
-    } else {
-      await smartSend({ userId: user.userId, instanceId: instance?.id || inst?.id || '', phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: phone, text: message, forceTemplate: false })
-    }
-    return res.status(200).json({ 
-      success: true, 
-      message: `Test sent to ${phone}`,
-      instance: instance.display_name || instance.phone_number,
-    })
-  } catch (err: unknown) {
-    const msg = (err as Error).message
-    console.error('WHMCS test send error:', msg)
-    return res.status(500).json({ error: msg || 'Send failed — check your WhatsApp instance is connected' })
+  // smartSend / smartSendWAWeb return errors instead of throwing
+  const r = resolveProvider(instance) === 'wa_web' || instance.type === 'baileys'
+    ? await smartSendWAWeb({ userId: user.userId, instanceId: instance.id, to: phone, text: message })
+    : await smartSend({ userId: user.userId, instanceId: instance.id, phoneNumberId: instance.phone_number_id, accessToken: instance.access_token, to: phone, text: message, forceTemplate: false })
+  if (r.error) {
+    console.error('WHMCS test send error:', r.error)
+    return res.status(r.blocked ? 403 : 502).json({ error: r.error || 'Send failed — check your WhatsApp instance is connected' })
   }
+  return res.status(200).json({
+    success: true,
+    message: `Test sent to ${phone}`,
+    instance: instance.display_name || instance.phone_number,
+  })
 }

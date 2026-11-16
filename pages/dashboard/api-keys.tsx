@@ -1,31 +1,52 @@
-// @ts-nocheck
-import { usePlanGuard } from '@/hooks/usePlanFeature'
-import UpgradeWall from '@/components/UpgradeWall'
 import { useState } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { PlusIcon, ClipboardIcon, TrashIcon, XMarkIcon, KeyIcon, EyeIcon, EyeSlashIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
-import { useAuthStore } from '@/lib/store'
-import { format } from 'date-fns'
+import {
+  PlusIcon, KeyIcon, TrashIcon, ShieldCheckIcon, BookOpenIcon, LockClosedIcon, ExclamationTriangleIcon,
+} from '@heroicons/react/24/outline'
+import {
+  Badge, Button, Card, CardHeader, ConfirmDialog, EmptyState, Field, Input, Modal, PageHeader,
+  Skeleton, Table, TBody, TD, TH, THead, TR, Tooltip,
+} from '@/components/ui'
+import { CopyField, ErrorState, Notice, PlanGate, apiError, apiStatus } from '@/components/settings/Shared'
+import { ApiQuickStart } from '@/components/settings/ApiQuickStart'
+import { fmtDate, fmtRelative } from '@/components/settings/format'
+
+interface ApiKeyRow {
+  id: string
+  name: string
+  key_prefix: string
+  permissions?: string[] | null
+  last_used_at?: string | null
+  is_active: boolean
+  created_at: string
+}
+
+const PERMISSION_LABELS: Record<string, string> = { send: 'الإرسال', contacts: 'جهات الاتصال', otp: 'رموز التحقق' }
 
 export default function ApiKeysPage() {
-  const { blocked, isLoading: planLoading } = usePlanGuard('allow_api_access')
-  if (planLoading) return null
-  if (blocked) return <UpgradeWall feature="allow_api_access" />
+  return <PlanGate feature="allow_api_access"><ApiKeysContent /></PlanGate>
+}
 
-  const { user } = useAuthStore()
+function ApiKeysContent() {
   const qc = useQueryClient()
   const [showNew, setShowNew] = useState(false)
   const [newKeyName, setNewKeyName] = useState('')
-  const [newKey, setNewKey] = useState(null)
-  const [showDefaultKey, setShowDefaultKey] = useState(false)
+  const [newKey, setNewKey] = useState<string | null>(null)
+  const [toRevoke, setToRevoke] = useState<ApiKeyRow | null>(null)
 
-  const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://your-site.netlify.app'
+  const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://waabek.com'
 
-  const { data } = useQuery('api-keys', () => axios.get('/api/settings/api-keys').then(r => r.data))
-  const keys = data?.keys || []
+  const keysQ = useQuery('api-keys', () => axios.get('/api/settings/api-keys').then(r => r.data), { retry: false })
+  // The default key is not part of the user object (owner-only endpoint).
+  const defaultQ = useQuery('default-api-key',
+    () => axios.get('/api/settings/default-api-key').then(r => r.data), { retry: false, staleTime: Infinity })
+  const defaultApiKey: string | null = defaultQ.data?.api_key || null
+  const keys: ApiKeyRow[] = keysQ.data?.keys || []
+  const ownerOnly = apiStatus(keysQ.error) === 403 || apiStatus(defaultQ.error) === 403
+  const activeCount = keys.filter(k => k.is_active).length
 
   const createMut = useMutation(
     () => axios.post('/api/settings/api-keys', { name: newKeyName }).then(r => r.data),
@@ -35,189 +56,194 @@ export default function ApiKeysPage() {
         setNewKey(data.key)
         setNewKeyName('')
         setShowNew(false)
-        toast.success('API key created!')
+        toast.success('تم إنشاء المفتاح')
       },
-      onError: () => toast.error('Failed to create key'),
+      onError: (e) => void toast.error(apiError(e, 'تعذّر إنشاء المفتاح')),
     }
   )
 
   const deleteMut = useMutation(
-    (id) => axios.delete(`/api/settings/api-keys/${id}`),
-    { onSuccess: () => { qc.invalidateQueries('api-keys'); toast.success('Key revoked') } }
+    (id: string) => axios.delete(`/api/settings/api-keys/${id}`),
+    {
+      onSuccess: () => { qc.invalidateQueries('api-keys'); setToRevoke(null); toast.success('تم إلغاء المفتاح') },
+      onError: (e) => void toast.error(apiError(e, 'تعذّر إلغاء المفتاح')),
+    }
   )
-
-  const copy = (text) => { navigator.clipboard.writeText(text); toast.success('Copied!') }
-
-  const endpoints = [
-    { method: 'POST', path: '/api/v1/send', desc: 'Send WhatsApp message', body: '{"to":"+1234567890","message":"Hello!"}' },
-    { method: 'GET',  path: '/api/v1/contacts', desc: 'List contacts', body: '' },
-    { method: 'POST', path: '/api/v1/contacts', desc: 'Create/update contact', body: '{"phone":"+1234567890","name":"John"}' },
-    { method: 'POST', path: '/api/v1/otp', desc: 'Send OTP via WhatsApp', body: '{"phone":"+1234567890","purpose":"verification"}' },
-    { method: 'POST', path: '/api/v1/otp-verify', desc: 'Verify OTP', body: '{"otp_id":"uuid","otp":"123456"}' },
-    { method: 'POST', path: '/api/v1/whmcs-webhook', desc: 'WHMCS webhook receiver', body: '{"action":"InvoicePaid","invoiceid":"42","userid":"7"}' },
-  ]
 
   return (
     <DashboardLayout title="API Keys">
-      <div className="max-w-3xl space-y-6">
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="التكاملات"
+          title="مفاتيح API"
+          description="أنشئ مفتاحًا مستقلًا لكل تكامل (WHMCS أو ووردبريس أو تطبيقك)، وألغِه فورًا عند الحاجة دون التأثير على البقية."
+          actions={
+            <>
+              <Button variant="secondary" icon={BookOpenIcon} href="/docs/api/authentication">توثيق المصادقة</Button>
+              {!ownerOnly && <Button icon={PlusIcon} onClick={() => setShowNew(true)}>مفتاح جديد</Button>}
+            </>
+          }
+        />
 
-        {/* Default API key */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h3 className="font-display font-semibold text-slate-900">Default API Key</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Auto-generated for your account — keep it secret</p>
-            </div>
-            <span className="badge-green">Active</span>
-          </div>
-          <div className="flex items-center gap-2 bg-[#F8FAFC] rounded-lg px-4 py-3 border border-slate-200">
-            <code className="flex-1 text-blue-600 text-sm font-mono truncate text-slate-800">
-              {showDefaultKey ? (user?.api_key || 'Loading…') : '••••••••••••••••••••••••••••••••'}
-            </code>
-            <button onClick={() => setShowDefaultKey(v => !v)} className="text-slate-400 hover:text-slate-900 p-1">
-              {showDefaultKey ? <EyeSlashIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
-            </button>
-            <button onClick={() => user?.api_key && copy(user.api_key)} className="text-slate-400 hover:text-slate-900 p-1">
-              <ClipboardIcon className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
+        {ownerOnly && (
+          <Notice tone="info" icon={LockClosedIcon} title="إدارة المفاتيح متاحة لمالك الحساب فقط">
+            يمكنك استخدام التكاملات التي أعدّها المالك، لكن إنشاء المفاتيح وعرضها وإلغاءها يقتصر عليه. تواصل معه إذا احتجت إلى مفتاح.
+          </Notice>
+        )}
 
-        {/* Named API keys */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-display font-semibold text-slate-900">Named API Keys</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Create separate keys for different integrations</p>
-            </div>
-            <button onClick={() => setShowNew(true)} className="btn-primary text-sm">
-              <PlusIcon className="w-4 h-4" /> New Key
-            </button>
-          </div>
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+          {/* Keys table */}
+          <Card padding="none" className="order-2 lg:order-1">
+            <CardHeader
+              icon={KeyIcon}
+              title="المفاتيح المسمّاة"
+              subtitle={keys.length ? `${activeCount} نشط من ${keys.length}` : 'مفتاح لكل تكامل'}
+              action={!ownerOnly && keys.length > 0 ? <Button size="sm" variant="secondary" icon={PlusIcon} onClick={() => setShowNew(true)}>مفتاح جديد</Button> : undefined}
+              divider
+            />
+            {keysQ.isLoading ? (
+              <div className="space-y-3 p-5">{[0, 1, 2].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
+            ) : ownerOnly ? (
+              <EmptyState size="sm" icon={LockClosedIcon} title="لا يمكنك عرض المفاتيح" description="تظهر المفاتيح لمالك الحساب فقط." />
+            ) : keysQ.isError ? (
+              <ErrorState className="m-5" message={apiError(keysQ.error)} onRetry={() => keysQ.refetch()} />
+            ) : keys.length === 0 ? (
+              <EmptyState
+                size="sm"
+                icon={KeyIcon}
+                title="لا توجد مفاتيح مسمّاة بعد"
+                description="أنشئ مفتاحًا لكل تكامل لتعرف مصدر كل طلب وتلغيه منفردًا."
+                action={<Button size="sm" icon={PlusIcon} onClick={() => setShowNew(true)}>إنشاء أول مفتاح</Button>}
+              />
+            ) : (
+              <Table minWidth={720} caption="المفاتيح المسمّاة">
+                <THead>
+                  <TR>
+                    <TH>الاسم</TH>
+                    <TH>البادئة</TH>
+                    <TH>الصلاحيات</TH>
+                    <TH>آخر استخدام</TH>
+                    <TH>تاريخ الإنشاء</TH>
+                    <TH align="end"><span className="sr-only">إجراءات</span></TH>
+                  </TR>
+                </THead>
+                <TBody>
+                  {keys.map(k => (
+                    <TR key={k.id} className={k.is_active ? undefined : 'opacity-60'}>
+                      <TD>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-ink">{k.name}</span>
+                          {!k.is_active && <Badge tone="danger" size="sm">ملغى</Badge>}
+                        </div>
+                      </TD>
+                      <TD><code dir="ltr" className="font-mono text-[13px] text-muted">{k.key_prefix}••••</code></TD>
+                      <TD>
+                        <div className="flex flex-wrap gap-1">
+                          {(k.permissions || []).length === 0
+                            ? <span className="text-xs text-muted">—</span>
+                            : (k.permissions || []).map(p => <Badge key={p} tone="neutral" size="sm">{PERMISSION_LABELS[p] || p}</Badge>)}
+                        </div>
+                      </TD>
+                      <TD className="whitespace-nowrap text-sm text-muted">{k.last_used_at ? fmtRelative(k.last_used_at) : 'لم يُستخدم'}</TD>
+                      <TD className="whitespace-nowrap text-sm text-muted">{fmtDate(k.created_at)}</TD>
+                      <TD align="end">
+                        {k.is_active && (
+                          <Tooltip content="إلغاء المفتاح">
+                            <Button size="icon-sm" variant="ghost" icon={TrashIcon} aria-label={`إلغاء المفتاح ${k.name}`} className="text-muted hover:text-danger" onClick={() => setToRevoke(k)} />
+                          </Tooltip>
+                        )}
+                      </TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            )}
+          </Card>
 
-          {/* New key reveal */}
-          {newKey && (
-            <div className="mb-4 p-4 bg-blue-50/20 border border-blue-200 rounded-xl">
-              <div className="flex items-start gap-3">
-                <CheckCircleIcon className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-blue-600 mb-1">⚠️ Copy this key now — won't be shown again!</p>
-                  <div className="flex items-center gap-2 bg-slate-100 rounded-lg px-3 py-2 mt-2">
-                    <code className="text-sm text-slate-900 font-mono flex-1 break-all">{newKey}</code>
-                    <button onClick={() => copy(newKey)} className="text-blue-600 hover:text-blue-500 flex-shrink-0">
-                      <ClipboardIcon className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <button onClick={() => setNewKey(null)} className="text-xs text-slate-500 hover:text-slate-900 mt-2">Dismiss</button>
+          {/* Default key */}
+          <Card className="order-1 h-fit lg:order-2" variant="deep" padding="lg">
+            <div aria-hidden="true" className="pointer-events-none absolute -end-10 -top-10 h-40 w-40 rounded-full bg-brand-green/20 blur-3xl" />
+            <div className="relative space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-gradient text-[#04282C]">
+                  <ShieldCheckIcon className="h-6 w-6" aria-hidden="true" />
+                </span>
+                <div>
+                  <h2 className="font-semibold text-deep-ink">المفتاح الافتراضي</h2>
+                  <p className="text-xs text-deep-muted">أُنشئ تلقائيًا لحسابك</p>
                 </div>
               </div>
+              {defaultQ.isLoading ? (
+                <Skeleton className="h-11 w-full bg-white/10" />
+              ) : apiStatus(defaultQ.error) === 403 ? (
+                <p className="rounded-field bg-white/[0.06] px-3 py-2.5 text-sm text-deep-muted">يستطيع مالك الحساب وحده عرض هذا المفتاح.</p>
+              ) : defaultApiKey ? (
+                <CopyField value={defaultApiKey} secret className="border-white/10 bg-white/[0.06] [&_code]:text-deep-ink [&_button]:text-deep-muted" />
+              ) : (
+                <p className="rounded-field bg-white/[0.06] px-3 py-2.5 text-sm text-deep-muted">لا يوجد مفتاح افتراضي لهذا الحساب.</p>
+              )}
+              <p className="text-xs leading-relaxed text-deep-muted">احفظه في مكان آمن ولا تضعه في رابط أو في كود يعمل داخل المتصفح.</p>
             </div>
-          )}
-
-          {keys.length === 0 ? (
-            <p className="text-slate-500 text-sm text-center py-6">No named keys yet</p>
-          ) : (
-            <div className="space-y-2">
-              {keys.map((key) => (
-                <div key={key.id} className="flex items-center gap-3 py-3 border-b border-slate-200 last:border-0">
-                  <div className="w-8 h-8 rounded-lg bg-[#F8FAFC] flex items-center justify-center flex-shrink-0">
-                    <KeyIcon className="w-4 h-4 text-slate-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-900">{key.name}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <code className="text-xs text-slate-500 font-mono text-slate-800">{key.key_prefix}••••••••</code>
-                      <span className={key.is_active ? 'badge-green' : 'badge-red'}>
-                        {key.is_active ? 'Active' : 'Revoked'}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-xs text-slate-500">Created {format(new Date(key.created_at), 'MMM d')}</p>
-                    {key.last_used_at && <p className="text-xs text-slate-600">Used {format(new Date(key.last_used_at), 'MMM d')}</p>}
-                  </div>
-                  <button onClick={() => { if (confirm('Revoke this key?')) deleteMut.mutate(key.id) }}
-                    className="p-1.5 text-slate-500 hover:text-red-400 transition-colors">
-                    <TrashIcon className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+          </Card>
         </div>
 
-        {/* REST API Reference */}
-        <div className="card">
-          <h3 className="font-display font-semibold text-slate-900 mb-4">📡 REST API Reference</h3>
-          <p className="text-sm text-slate-400 mb-4">
-            Authenticate with header: <code className="bg-[#F8FAFC] px-2 py-0.5 rounded text-xs text-blue-600">X-API-Key: YOUR_KEY</code>
-          </p>
-          <div className="space-y-3">
-            {endpoints.map(ep => (
-              <div key={ep.path} className="bg-[#F8FAFC] rounded-xl border border-slate-200 overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${ep.method === 'GET' ? 'bg-blue-900 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
-                      {ep.method}
-                    </span>
-                    <code className="text-sm text-slate-700 font-mono text-slate-800">{ep.path}</code>
-                  </div>
-                  <button onClick={() => {
-                    const cmd = `curl -X ${ep.method} ${appUrl}${ep.path} \\\n  -H "X-API-Key: ${user?.api_key || 'YOUR_KEY'}"${ep.body ? ` \\\n  -H "Content-Type: application/json" \\\n  -d '${ep.body}'` : ''}`
-                    copy(cmd)
-                  }} className="text-xs text-slate-400 hover:text-blue-600 flex items-center gap-1">
-                    <ClipboardIcon className="w-3.5 h-3.5" /> Copy curl
-                  </button>
-                </div>
-                <div className="px-4 py-2.5">
-                  <p className="text-xs text-slate-400">{ep.desc}</p>
-                  {ep.body && (
-                    <code className="text-xs text-slate-500 font-mono mt-1 block">Body: {ep.body}</code>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* WHMCS webhook */}
-        <div className="card">
-          <h3 className="font-display font-semibold text-slate-900 mb-3">🏢 WHMCS Webhook URL</h3>
-          <div className="flex items-center gap-2 bg-[#F8FAFC] rounded-lg px-4 py-3 border border-slate-200">
-            <code className="flex-1 text-blue-600 text-xs font-mono break-all">
-              {appUrl}/api/v1/whmcs-webhook?api_key={user?.api_key || 'YOUR_KEY'}
-            </code>
-            <button onClick={() => copy(`${appUrl}/api/v1/whmcs-webhook?api_key=${user?.api_key}`)} className="text-slate-400 hover:text-slate-900 flex-shrink-0">
-              <ClipboardIcon className="w-4 h-4" />
-            </button>
-          </div>
-          <p className="text-xs text-slate-500 mt-2">Paste this URL in WHMCS Admin → Setup → API → Hooks</p>
-        </div>
+        <ApiQuickStart baseUrl={appUrl} apiKey={newKey || 'YOUR_API_KEY'} />
       </div>
 
-      {/* New key modal */}
-      {showNew && (
-        <div className="modal-backdrop" onClick={() => setShowNew(false)}>
-          <div className="modal-panel max-w-sm" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-5 border-b border-slate-200">
-              <h3 className="font-display font-semibold text-slate-900">New API Key</h3>
-              <button onClick={() => setShowNew(false)} className="text-slate-400 hover:text-slate-900"><XMarkIcon className="w-5 h-5" /></button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div>
-                <label className="label">Key name</label>
-                <input value={newKeyName} onChange={e => setNewKeyName(e.target.value)} placeholder="e.g. WHMCS Production, Mobile App" className="input" onKeyDown={e => e.key === 'Enter' && newKeyName && createMut.mutate()} />
-              </div>
-              <div className="flex justify-end gap-3">
-                <button onClick={() => setShowNew(false)} className="btn-secondary">Cancel</button>
-                <button onClick={() => createMut.mutate()} disabled={!newKeyName || createMut.isLoading} className="btn-primary">
-                  {createMut.isLoading ? 'Creating…' : 'Create Key'}
-                </button>
-              </div>
-            </div>
-          </div>
+      {/* Create */}
+      <Modal
+        open={showNew}
+        onClose={() => setShowNew(false)}
+        size="sm"
+        icon={KeyIcon}
+        title="مفتاح API جديد"
+        description="سمِّ المفتاح باسم التكامل الذي سيستخدمه."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowNew(false)}>إلغاء</Button>
+            <Button loading={createMut.isLoading} disabled={!newKeyName.trim()} onClick={() => createMut.mutate()}>إنشاء المفتاح</Button>
+          </>
+        }
+      >
+        <Field label="اسم المفتاح" required>
+          <Input
+            value={newKeyName}
+            onChange={e => setNewKeyName(e.target.value)}
+            placeholder="مثل: WHMCS Production"
+            maxLength={100}
+            autoFocus
+            onKeyDown={e => { if (e.key === 'Enter' && newKeyName.trim()) createMut.mutate() }}
+          />
+        </Field>
+      </Modal>
+
+      {/* Reveal once */}
+      <Modal
+        open={!!newKey}
+        onClose={() => setNewKey(null)}
+        icon={ShieldCheckIcon}
+        title="انسخ المفتاح الآن"
+        description="هذه هي المرة الوحيدة التي يظهر فيها المفتاح كاملًا."
+        footer={<Button onClick={() => setNewKey(null)}>نسخته واحتفظت به</Button>}
+      >
+        <div className="space-y-4">
+          <CopyField value={newKey || ''} className="py-2.5" />
+          <Notice tone="warning" icon={ExclamationTriangleIcon} title="لن نتمكن من عرضه مرة أخرى">
+            نحتفظ ببصمة المفتاح فقط. إن فقدته فأنشئ مفتاحًا جديدًا وألغِ القديم.
+          </Notice>
         </div>
-      )}
+      </Modal>
+
+      <ConfirmDialog
+        destructive
+        open={!!toRevoke}
+        onClose={() => setToRevoke(null)}
+        onConfirm={() => { if (toRevoke) deleteMut.mutate(toRevoke.id) }}
+        loading={deleteMut.isLoading}
+        title={`إلغاء المفتاح «${toRevoke?.name || ''}»؟`}
+        description="ستُرفض فورًا كل الطلبات التي تستخدم هذا المفتاح. لا يمكن التراجع عن الإلغاء."
+        confirmLabel="إلغاء المفتاح"
+      />
     </DashboardLayout>
   )
 }

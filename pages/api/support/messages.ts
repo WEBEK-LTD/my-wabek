@@ -1,9 +1,9 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'inbox')
   if (!user) return
   const db = supabaseAdmin()
 
@@ -53,8 +53,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    const { ticket_id, content } = req.body
-    if (!ticket_id || !content) return res.status(400).json({ error: 'ticket_id and content required' })
+    const { ticket_id, content } = req.body || {}
+    if (!ticket_id || !content || typeof content !== 'string') return res.status(400).json({ error: 'ticket_id and content required' })
+    if (content.length > 10000) return res.status(400).json({ error: 'Message too long' })
     const { data: ticket } = await db
       .from('support_tickets').select('id')
       .eq('id', ticket_id).eq('user_id', user.userId).maybeSingle()
@@ -63,7 +64,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { data: msg, error } = await db.from('support_messages').insert({
       ticket_id, sender_type: 'user', sender_id: user.userId, content,
     }).select().single()
-    if (error) return res.status(500).json({ error: error.message })
+    if (error) {
+      console.error('[support/messages] insert error:', error.message)
+      return res.status(500).json({ error: 'Failed to send message' })
+    }
 
     await db.from('support_tickets').update({
       status: 'open', updated_at: new Date().toISOString()

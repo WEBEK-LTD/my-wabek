@@ -1,226 +1,135 @@
-// @ts-nocheck
-import { useState } from 'react'
-import DashboardLayout from '@/components/layout/DashboardLayout'
-import { useMutation } from 'react-query'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { useMutation, useQuery } from 'react-query'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { ShieldCheckIcon, PaperAirplaneIcon, CheckCircleIcon, ClipboardIcon, CodeBracketIcon } from '@heroicons/react/24/outline'
-import { useAuthStore } from '@/lib/store'
+import {
+  ArrowPathIcon, CheckCircleIcon, ClipboardDocumentIcon, CodeBracketIcon, EyeIcon, EyeSlashIcon, KeyIcon,
+  PaperAirplaneIcon, PhoneIcon, ShieldCheckIcon, CheckIcon,
+} from '@heroicons/react/24/outline'
+import DashboardLayout from '@/components/layout/DashboardLayout'
+import { Badge, Button, Card, CardHeader, Field, Input, PageHeader, Select, Switch, Tabs, cn } from '@/components/ui'
+import { apiError } from '@/components/analytics/format'
 
-export default function OTPPage() {
-  const { user } = useAuthStore()
-  const [phone, setPhone] = useState('')
-  const [purpose, setPurpose] = useState('verification')
-  const [otpId, setOtpId] = useState('')
-  const [otp, setOtp] = useState('')
-  const [step, setStep] = useState<'send' | 'verify' | 'done'>('send')
-  const [verifyResult, setVerifyResult] = useState(null)
+type Step = 'send' | 'verify' | 'done'
 
-  const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://your-site.netlify.app'
-  const copy = (text) => { navigator.clipboard.writeText(text); toast.success('Copied!') }
+const PURPOSES = [
+  { value: 'verification', label: 'تحقق' },
+  { value: 'login', label: 'تسجيل الدخول' },
+  { value: 'transaction', label: 'عملية مالية' },
+]
 
-  const sendMut = useMutation(
-    () => axios.post('/api/v1/otp', { phone, purpose }).then(r => r.data),
-    {
-      onSuccess: (data) => {
-        setOtpId(data.otpId)
-        setStep('verify')
-        toast.success('OTP sent via WhatsApp!')
-      },
-      onError: (e) => toast.error(e?.response?.data?.error || 'Failed to send OTP'),
-    }
-  )
+const VERIFY_REASONS: Record<string, string> = {
+  'OTP not found': 'الرمز غير موجود',
+  'OTP already used': 'استُخدم هذا الرمز من قبل',
+  'OTP expired': 'انتهت صلاحية الرمز',
+  'Too many attempts': 'محاولات كثيرة، اطلب رمزًا جديدًا',
+  'Invalid OTP': 'الرمز غير صحيح',
+}
 
-  const verifyMut = useMutation(
-    () => axios.post('/api/v1/otp-verify', { otp_id: otpId, otp }).then(r => r.data),
-    {
-      onSuccess: (data) => {
-        setVerifyResult(data)
-        if (data.valid) { setStep('done'); toast.success('OTP verified successfully!') }
-        else toast.error(`Invalid: ${data.reason}`)
-      },
-      onError: () => toast.error('Verification failed'),
-    }
-  )
+const SEND_ERRORS: Record<string, string> = {
+  no_instance: 'لا يوجد رقم واتساب متصل لإرسال الرمز. اربط رقمًا أولًا.',
+}
 
+function CodeBlock({ code, label }: { code: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+  const copy = () => {
+    navigator.clipboard?.writeText(code).then(() => {
+      setCopied(true); toast.success('تم النسخ')
+      setTimeout(() => setCopied(false), 1500)
+    }, () => toast.error('تعذّر النسخ'))
+  }
   return (
-    <DashboardLayout title="OTP System">
-      <div className="max-w-3xl space-y-6">
+    <div className="relative overflow-hidden rounded-card border border-white/10 bg-[#04282C]">
+      <Button size="xs" variant="on-deep-ghost" icon={copied ? CheckIcon : ClipboardDocumentIcon} onClick={copy}
+        className="absolute end-2 top-2" aria-label={`نسخ ${label}`}>
+        {copied ? 'نُسخ' : 'نسخ'}
+      </Button>
+      <pre dir="ltr" className="scrollbar-none overflow-x-auto p-4 pt-11 text-start font-mono text-[12.5px] leading-relaxed text-[#EAF7F5]"><code>{code}</code></pre>
+    </div>
+  )
+}
 
-        {/* Header */}
-        <div className="card border-blue-200/50 bg-blue-50/10">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-              <ShieldCheckIcon className="w-5 h-5 text-blue-600" />
-            </div>
-            <div>
-              <h3 className="font-display font-semibold text-slate-900">WhatsApp OTP System</h3>
-              <p className="text-sm text-slate-400">Send one-time passwords via WhatsApp for verification</p>
-            </div>
-          </div>
-        </div>
+const LANGS = [
+  { id: 'curl', label: 'cURL' },
+  { id: 'node', label: 'Node.js' },
+  { id: 'php', label: 'PHP' },
+  { id: 'python', label: 'Python' },
+]
 
-        {/* Live Test */}
-        <div className="card">
-          <h3 className="font-display font-semibold text-slate-900 mb-4">🧪 Live Test</h3>
-
-          {step === 'send' && (
-            <div className="space-y-4">
-              <div>
-                <label className="label">Phone Number</label>
-                <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+905551234567" className="input" />
-              </div>
-              <div>
-                <label className="label">Purpose</label>
-                <select value={purpose} onChange={e => setPurpose(e.target.value)} className="input">
-                  <option value="verification">Verification</option>
-                  <option value="login">Login</option>
-                  <option value="transaction">Transaction</option>
-                </select>
-              </div>
-              <button onClick={() => sendMut.mutate()} disabled={!phone || sendMut.isLoading} className="btn-primary">
-                <PaperAirplaneIcon className="w-4 h-4" />
-                {sendMut.isLoading ? 'Sending…' : 'Send OTP via WhatsApp'}
-              </button>
-            </div>
-          )}
-
-          {step === 'verify' && (
-            <div className="space-y-4">
-              <div className="bg-blue-50/20 border border-blue-200 rounded-lg p-3 text-sm text-blue-600">
-                ✅ OTP sent to <strong>{phone}</strong> — check WhatsApp!
-              </div>
-              <div>
-                <label className="label">OTP ID (auto-filled)</label>
-                <input value={otpId} readOnly className="input opacity-60 font-mono text-xs" />
-              </div>
-              <div>
-                <label className="label">Enter the 6-digit OTP</label>
-                <input value={otp} onChange={e => setOtp(e.target.value)} placeholder="123456" maxLength={6} className="input font-mono text-xl tracking-[0.5em] text-center" />
-              </div>
-              <div className="flex gap-3">
-                <button onClick={() => verifyMut.mutate()} disabled={otp.length < 6 || verifyMut.isLoading} className="btn-primary flex-1">
-                  <CheckCircleIcon className="w-4 h-4" />
-                  {verifyMut.isLoading ? 'Verifying…' : 'Verify OTP'}
-                </button>
-                <button onClick={() => { setStep('send'); setOtp(''); setOtpId('') }} className="btn-secondary">
-                  Resend
-                </button>
-              </div>
-            </div>
-          )}
-
-          {step === 'done' && (
-            <div className="text-center py-6">
-              <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-3">
-                <CheckCircleIcon className="w-8 h-8 text-blue-600" />
-              </div>
-              <p className="font-display font-bold text-xl text-slate-900 mb-1">OTP Verified! ✅</p>
-              <p className="text-slate-400 text-sm mb-4">The OTP was valid and has been marked as used.</p>
-              <button onClick={() => { setStep('send'); setPhone(''); setOtp(''); setOtpId('') }} className="btn-secondary">
-                Test Another
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* API Reference */}
-        <div className="card">
-          <h3 className="font-display font-semibold text-slate-900 mb-4 flex items-center gap-2">
-            <CodeBracketIcon className="w-5 h-5 text-blue-600" />
-            API Integration
-          </h3>
-          <div className="space-y-4">
-
-            {/* Step 1: Send OTP */}
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Step 1 — Send OTP</p>
-              <div className="bg-[#F8FAFC] rounded-xl border border-slate-200 overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-600">POST</span>
-                    <code className="text-sm text-slate-800 font-mono text-slate-800">/api/v1/otp</code>
-                  </div>
-                  <button onClick={() => copy(`curl -X POST ${appUrl}/api/v1/otp \\\n  -H "X-API-Key: ${user?.api_key}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"phone": "+905551234567", "purpose": "verification"}'`)} className="text-xs text-blue-600 hover:text-blue-500 flex items-center gap-1">
-                    <ClipboardIcon className="w-3.5 h-3.5" /> Copy
-                  </button>
-                </div>
-                <pre className="px-4 py-3 text-xs text-slate-800 font-mono overflow-x-auto bg-white rounded-lg border border-slate-200">{`curl -X POST ${appUrl}/api/v1/otp \\
-  -H "X-API-Key: ${user?.api_key || 'YOUR_API_KEY'}" \\
+function snippets(appUrl: string, key: string) {
+  const send = {
+    curl: `curl -X POST ${appUrl}/api/v1/otp \\
+  -H "X-API-Key: ${key}" \\
   -H "Content-Type: application/json" \\
   -d '{"phone": "+905551234567", "purpose": "verification"}'
 
-// Response:
-{
-  "success": true,
-  "otpId": "uuid-of-otp-record"
-}`}</pre>
-              </div>
-            </div>
+# Response:
+# { "success": true, "otpId": "uuid-of-otp-record" }`,
+    node: `const res = await fetch('${appUrl}/api/v1/otp', {
+  method: 'POST',
+  headers: { 'X-API-Key': '${key}', 'Content-Type': 'application/json' },
+  body: JSON.stringify({ phone: '+905551234567', purpose: 'verification' }),
+})
+const { success, otpId } = await res.json()
+// Store otpId — you need it to verify the code.`,
+    php: `<?php
+$ch = curl_init('${appUrl}/api/v1/otp');
+curl_setopt_array($ch, [
+  CURLOPT_POST           => 1,
+  CURLOPT_POSTFIELDS     => json_encode(['phone' => '+905551234567', 'purpose' => 'verification']),
+  CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'X-API-Key: ${key}'],
+  CURLOPT_RETURNTRANSFER => true,
+]);
+$res = json_decode(curl_exec($ch), true);
+curl_close($ch);
+$otpId = $res['otpId'] ?? '';`,
+    python: `import requests
 
-            {/* Step 2: Verify OTP */}
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Step 2 — Verify OTP</p>
-              <div className="bg-[#F8FAFC] rounded-xl border border-slate-200 overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-600">POST</span>
-                    <code className="text-sm text-slate-800 font-mono text-slate-800">/api/v1/otp-verify</code>
-                  </div>
-                  <button onClick={() => copy(`curl -X POST ${appUrl}/api/v1/otp-verify \\\n  -H "X-API-Key: ${user?.api_key}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"otp_id": "uuid-from-step-1", "otp": "123456"}'`)} className="text-xs text-blue-600 hover:text-blue-500 flex items-center gap-1">
-                    <ClipboardIcon className="w-3.5 h-3.5" /> Copy
-                  </button>
-                </div>
-                <pre className="px-4 py-3 text-xs text-slate-800 font-mono overflow-x-auto bg-white rounded-lg border border-slate-200">{`curl -X POST ${appUrl}/api/v1/otp-verify \\
-  -H "X-API-Key: ${user?.api_key || 'YOUR_API_KEY'}" \\
+res = requests.post(
+    "${appUrl}/api/v1/otp",
+    headers={"X-API-Key": "${key}"},
+    json={"phone": "+905551234567", "purpose": "verification"},
+)
+otp_id = res.json()["otpId"]`,
+  }
+  const verify = {
+    curl: `curl -X POST ${appUrl}/api/v1/otp-verify \\
+  -H "X-API-Key: ${key}" \\
   -H "Content-Type: application/json" \\
   -d '{"otp_id": "uuid-from-step-1", "otp": "123456"}'
 
-// Response (valid):
-{ "valid": true }
-
-// Response (invalid):
-{ "valid": false, "reason": "OTP expired" }`}</pre>
-              </div>
-            </div>
-
-            {/* WHMCS Integration */}
-            <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">WHMCS Hook Integration (PHP)</p>
-              <div className="bg-[#F8FAFC] rounded-xl border border-slate-200 overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200">
-                  <span className="text-xs text-slate-400">hooks/wabek_otp.php — paste in WHMCS /includes/hooks/</span>
-                  <button onClick={() => copy(`<?php
-add_hook('ClientLogin', 1, function($vars) {
-  $phone = $vars['client']['phonenumber'];
-  $apiKey = 'YOUR_WABEK_API_KEY';
-  $url = '${appUrl}/api/v1/otp';
-
-  $ch = curl_init($url);
-  curl_setopt($ch, CURLOPT_POST, 1);
-  curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
-    'phone'   => $phone,
-    'purpose' => 'login',
-  ]));
-  curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    'Content-Type: application/json',
-    'X-API-Key: ' . $apiKey,
-  ]);
-  curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-  $response = json_decode(curl_exec($ch), true);
-  curl_close($ch);
-
-  // Store OTP ID in session for verification step
-  $_SESSION['wabek_otp_id'] = $response['otpId'] ?? '';
-});`)} className="text-xs text-blue-600 hover:text-blue-500 flex items-center gap-1">
-                    <ClipboardIcon className="w-3.5 h-3.5" /> Copy
-                  </button>
-                </div>
-                <pre className="px-4 py-3 text-xs text-slate-800 font-mono overflow-x-auto bg-white rounded-lg border border-slate-200">{`<?php
+# Response (valid):   { "valid": true }
+# Response (invalid): { "valid": false, "reason": "OTP expired" }`,
+    node: `const res = await fetch('${appUrl}/api/v1/otp-verify', {
+  method: 'POST',
+  headers: { 'X-API-Key': '${key}', 'Content-Type': 'application/json' },
+  body: JSON.stringify({ otp_id: otpId, otp: codeFromUser }),
+})
+const { valid, reason } = await res.json()`,
+    php: `<?php
+$ch = curl_init('${appUrl}/api/v1/otp-verify');
+curl_setopt_array($ch, [
+  CURLOPT_POST           => 1,
+  CURLOPT_POSTFIELDS     => json_encode(['otp_id' => $otpId, 'otp' => $_POST['code']]),
+  CURLOPT_HTTPHEADER     => ['Content-Type: application/json', 'X-API-Key: ${key}'],
+  CURLOPT_RETURNTRANSFER => true,
+]);
+$res = json_decode(curl_exec($ch), true);
+curl_close($ch);
+if (!empty($res['valid'])) { /* verified */ }`,
+    python: `res = requests.post(
+    "${appUrl}/api/v1/otp-verify",
+    headers={"X-API-Key": "${key}"},
+    json={"otp_id": otp_id, "otp": code_from_user},
+)
+data = res.json()  # {"valid": True} or {"valid": False, "reason": "..."}`,
+  }
+  const whmcs = `<?php
 // WHMCS Hook: Send OTP on client login
 add_hook('ClientLogin', 1, function($vars) {
   $phone  = $vars['client']['phonenumber'];
-  $apiKey = '${user?.api_key || 'YOUR_WABEK_API_KEY'}';
+  $apiKey = '${key}';
 
   $ch = curl_init('${appUrl}/api/v1/otp');
   curl_setopt_array($ch, [
@@ -236,10 +145,9 @@ add_hook('ClientLogin', 1, function($vars) {
   $_SESSION['wabek_otp_id'] = $res['otpId'] ?? '';
 });
 
-// WHMCS Hook: Send OTP on invoice creation
+// WHMCS Hook: Notify on invoice creation
 add_hook('InvoiceCreated', 1, function($vars) {
-  // Notify client via WHMCS webhook (handled automatically)
-  $apiKey  = '${user?.api_key || 'YOUR_WABEK_API_KEY'}';
+  $apiKey  = '${key}';
   $payload = [
     'action'    => 'InvoiceCreated',
     'invoiceid' => $vars['invoiceid'],
@@ -254,33 +162,243 @@ add_hook('InvoiceCreated', 1, function($vars) {
   ]);
   curl_exec($ch);
   curl_close($ch);
-});`}</pre>
-              </div>
+});`
+  return { send, verify, whmcs }
+}
+
+function StepDot({ n, label, state }: { n: number; label: string; state: 'done' | 'current' | 'todo' }) {
+  return (
+    <li className="flex items-center gap-2">
+      <span className={cn('flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-colors',
+        state === 'done' ? 'bg-brand-gradient text-[#04282C]' : state === 'current' ? 'bg-ink text-canvas' : 'bg-surface-3 text-muted')}>
+        {state === 'done' ? <CheckIcon className="h-4 w-4" aria-hidden="true" /> : n}
+      </span>
+      <span className={cn('text-[13px]', state === 'todo' ? 'text-muted' : 'font-medium text-ink')}>{label}</span>
+    </li>
+  )
+}
+
+/** Arabic count of minutes with the correct noun form. */
+function arabicMinutes(n: number): string {
+  if (n === 1) return 'دقيقة واحدة'
+  if (n === 2) return 'دقيقتان'
+  if (n >= 3 && n <= 10) return `${n} دقائق`
+  return `${n} دقيقة`
+}
+
+export default function OTPPage() {
+  // The default API key is fetched on demand (owner-only), not from the user object.
+  const { data: defaultKeyData, isLoading: keyLoading } = useQuery<{ api_key: string | null }>('default-api-key',
+    () => axios.get('/api/settings/default-api-key').then(r => r.data), { retry: false, staleTime: Infinity })
+  const apiKey = defaultKeyData?.api_key || null
+  // Real server-side OTP settings (OTP_EXPIRY_MINUTES).
+  const otpConfigQ = useQuery<{ expiry_minutes: number; code_length: number }>('otp-config',
+    () => axios.get('/api/settings/otp-config').then(r => r.data), { retry: false, staleTime: 300000 })
+
+  const [phone, setPhone] = useState('')
+  const [purpose, setPurpose] = useState('verification')
+  const [otpId, setOtpId] = useState('')
+  const [otp, setOtp] = useState('')
+  const [step, setStep] = useState<Step>('send')
+  const [verifyError, setVerifyError] = useState('')
+  const [lang, setLang] = useState('curl')
+  const [docTab, setDocTab] = useState('send')
+  const [showKey, setShowKey] = useState(false)
+
+  // Set after mount so server and client render the same markup.
+  const [appUrl, setAppUrl] = useState('https://your-site.netlify.app')
+  useEffect(() => { setAppUrl(window.location.origin) }, [])
+  const keyInCode = showKey && apiKey ? apiKey : 'YOUR_API_KEY'
+  const code = snippets(appUrl, keyInCode)
+
+  const sendMut = useMutation(
+    () => axios.post('/api/v1/otp', { phone, purpose }).then(r => r.data),
+    {
+      onSuccess: (data: { otpId: string }) => {
+        setOtpId(data.otpId)
+        setOtp(''); setVerifyError('')
+        setStep('verify')
+        toast.success('أُرسل الرمز عبر واتساب')
+      },
+      onError: (e: unknown) => {
+        const errCode = (e as { response?: { data?: { code?: string } } })?.response?.data?.code
+        toast.error((errCode && SEND_ERRORS[errCode]) || apiError(e, 'تعذّر إرسال الرمز'))
+      },
+    },
+  )
+
+  const verifyMut = useMutation(
+    () => axios.post('/api/v1/otp-verify', { otp_id: otpId, otp }).then(r => r.data),
+    {
+      onSuccess: (data: { valid: boolean; reason?: string }) => {
+        if (data.valid) { setStep('done'); setVerifyError(''); toast.success('تم التحقق من الرمز بنجاح') }
+        else {
+          const msg = (data.reason && VERIFY_REASONS[data.reason]) || data.reason || 'الرمز غير صالح'
+          setVerifyError(msg)
+          toast.error(msg)
+        }
+      },
+      onError: () => { toast.error('تعذّر التحقق') },
+    },
+  )
+
+  const reset = () => { setStep('send'); setOtp(''); setOtpId(''); setVerifyError('') }
+
+  const copyKey = () => apiKey && navigator.clipboard?.writeText(apiKey).then(() => toast.success('نُسخ المفتاح'), () => toast.error('تعذّر النسخ'))
+  const maskedKey = apiKey ? `${apiKey.slice(0, 6)}${'•'.repeat(18)}${apiKey.slice(-4)}` : ''
+
+  return (
+    <DashboardLayout title="OTP System">
+      <div className="flex flex-col gap-6">
+        <PageHeader
+          eyebrow="الحملات"
+          title="رموز التحقق (OTP)"
+          description="أرسل رموز تحقق لمرة واحدة إلى عملائك عبر واتساب، وتحقّق منها من موقعك أو تطبيقك عبر واجهة برمجية بسيطة."
+          actions={<Button variant="secondary" icon={KeyIcon} href="/dashboard/api-keys">مفاتيح API</Button>}
+        />
+
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
+          {/* Live test */}
+          <Card padding="lg" className="lg:col-span-3">
+            <CardHeader className="!p-0" title="تجربة مباشرة" subtitle="أرسل رمزًا إلى رقمك ثم أدخله للتحقق." icon={ShieldCheckIcon} />
+            <ol className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2" aria-label="مراحل التجربة">
+              <StepDot n={1} label="إرسال الرمز" state={step === 'send' ? 'current' : 'done'} />
+              <span className="hidden h-px w-8 bg-line sm:block" aria-hidden="true" />
+              <StepDot n={2} label="إدخال الرمز" state={step === 'verify' ? 'current' : step === 'done' ? 'done' : 'todo'} />
+              <span className="hidden h-px w-8 bg-line sm:block" aria-hidden="true" />
+              <StepDot n={3} label="تم التحقق" state={step === 'done' ? 'done' : 'todo'} />
+            </ol>
+
+            <div className="mt-6">
+              {step === 'send' && (
+                <form className="flex flex-col gap-4" onSubmit={e => { e.preventDefault(); if (phone) sendMut.mutate() }}>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="رقم الهاتف" hint="بالصيغة الدولية، مثل ‎+905551234567" required>
+                      <Input dir="ltr" type="tel" icon={PhoneIcon} value={phone} onChange={e => setPhone(e.target.value)} placeholder="+905551234567" />
+                    </Field>
+                    <Field label="الغرض">
+                      <Select value={purpose} onChange={e => setPurpose(e.target.value)} options={PURPOSES} />
+                    </Field>
+                  </div>
+                  <div>
+                    <Button type="submit" icon={PaperAirplaneIcon} loading={sendMut.isLoading} disabled={!phone}>إرسال الرمز عبر واتساب</Button>
+                  </div>
+                </form>
+              )}
+
+              {step === 'verify' && (
+                <form className="flex flex-col gap-4" onSubmit={e => { e.preventDefault(); if (otp.length === 6) verifyMut.mutate() }}>
+                  <div className="flex items-start gap-3 rounded-card bg-chip p-4 text-sm text-chip-ink">
+                    <CheckCircleIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                    <p>أُرسل الرمز إلى <strong dir="ltr">{phone}</strong>. افتح واتساب وأدخل الرمز المكوّن من 6 أرقام.</p>
+                  </div>
+                  <Field label="معرّف الرمز (otp_id)" hint="يُملأ تلقائيًا — هذا ما تحفظه في نظامك بعد الخطوة الأولى.">
+                    <Input dir="ltr" readOnly value={otpId} className="font-mono text-xs text-muted" />
+                  </Field>
+                  <Field label="الرمز المكوّن من 6 أرقام" error={verifyError || undefined}>
+                    <Input dir="ltr" inputMode="numeric" autoComplete="one-time-code" value={otp} maxLength={6} placeholder="123456" size="lg"
+                      className="text-center font-mono text-xl tracking-[0.5em]"
+                      onChange={e => { setOtp(e.target.value.replace(/\D/g, '').slice(0, 6)); setVerifyError('') }} />
+                  </Field>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="submit" icon={CheckCircleIcon} loading={verifyMut.isLoading} disabled={otp.length < 6}>تحقّق من الرمز</Button>
+                    <Button type="button" variant="secondary" icon={ArrowPathIcon} onClick={reset}>إعادة الإرسال</Button>
+                  </div>
+                </form>
+              )}
+
+              {step === 'done' && (
+                <div className="flex flex-col items-center gap-3 py-6 text-center">
+                  <span className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-gradient text-[#04282C] shadow-glow">
+                    <CheckCircleIcon className="h-8 w-8" aria-hidden="true" />
+                  </span>
+                  <p className="text-xl font-bold text-ink">تم التحقق من الرمز</p>
+                  <p className="text-sm text-muted">كان الرمز صالحًا، وقد عُلّم الآن بأنه مستخدم.</p>
+                  <Button variant="secondary" onClick={() => { reset(); setPhone('') }}>تجربة رقم آخر</Button>
+                </div>
+              )}
             </div>
+          </Card>
+
+          {/* Settings + key */}
+          <div className="flex min-w-0 flex-col gap-5 lg:col-span-2">
+            <Card padding="lg">
+              <CardHeader className="!p-0" title="مفتاح API الافتراضي" icon={KeyIcon} />
+              <div className="mt-4">
+                {keyLoading ? <div className="skeleton h-11 w-full rounded-field" /> : apiKey ? (
+                  <div className="flex items-center gap-2">
+                    <code dir="ltr" className="min-w-0 flex-1 truncate rounded-field border border-line bg-surface-2 px-3 py-2.5 font-mono text-[13px] text-ink">{showKey ? apiKey : maskedKey}</code>
+                    <Button size="icon" variant="secondary" icon={showKey ? EyeSlashIcon : EyeIcon} aria-label={showKey ? 'إخفاء المفتاح' : 'إظهار المفتاح'} onClick={() => setShowKey(v => !v)} />
+                    <Button size="icon" variant="secondary" icon={ClipboardDocumentIcon} aria-label="نسخ المفتاح" onClick={copyKey} />
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted">لا يظهر المفتاح الافتراضي إلا لمالك الحساب. يمكنك إنشاء مفتاح من صفحة <Link href="/dashboard/api-keys" className="text-link hover:text-link-hover">مفاتيح API</Link>.</p>
+                )}
+                {apiKey && (
+                  <Switch size="sm" className="mt-4" checked={showKey} onChange={setShowKey}
+                    label="إظهار مفتاحي في أمثلة الكود" description="أبقِه مخفيًا عند مشاركة الشاشة." />
+                )}
+              </div>
+            </Card>
+
+            <Card padding="lg">
+              <CardHeader className="!p-0" title="إعدادات الرموز" />
+              <dl className="mt-3 divide-y divide-line-soft text-sm">
+                {[
+                  { label: 'طول الرمز', value: '6 أرقام' },
+                  { label: 'مدة الصلاحية', value: otpConfigQ.data ? arabicMinutes(otpConfigQ.data.expiry_minutes) : '…' },
+                  { label: 'الاستخدام', value: 'مرة واحدة فقط' },
+                  { label: 'التخزين', value: 'مُشفّر بـ SHA-256' },
+                  { label: 'الإرسال', value: 'عبر رقم واتساب المتصل' },
+                ].map(s => (
+                  <div key={s.label} className="flex items-center justify-between gap-3 py-2.5">
+                    <dt className="text-muted">{s.label}</dt>
+                    <dd className="font-medium text-ink">{s.value}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="mt-3 text-xs text-muted">لتغيير مدة الصلاحية عدّل متغير البيئة <code dir="ltr" className="rounded bg-surface-3 px-1 font-mono">OTP_EXPIRY_MINUTES</code> في Netlify.</p>
+            </Card>
           </div>
         </div>
 
-        {/* OTP Settings */}
-        <div className="card">
-          <h3 className="font-display font-semibold text-slate-900 mb-3">⚙️ OTP Settings</h3>
-          <div className="space-y-2 text-sm">
-            {[
-              { label: 'OTP Length', value: '6 digits' },
-              { label: 'Expiry', value: `${process.env.NEXT_PUBLIC_OTP_EXPIRY || 10} minutes` },
-              { label: 'One-time use', value: 'Yes — invalidated after first use' },
-              { label: 'Storage', value: 'SHA-256 hashed in database' },
-              { label: 'Delivery', value: 'Via connected WhatsApp instance' },
-            ].map(s => (
-              <div key={s.label} className="flex items-center justify-between py-2 border-b border-slate-200 last:border-0">
-                <span className="text-slate-400">{s.label}</span>
-                <span className="text-slate-700 font-medium">{s.value}</span>
-              </div>
-            ))}
+        {/* API docs */}
+        <Card padding="none">
+          <div className="px-5 pt-5 sm:px-6 sm:pt-6">
+            <CardHeader className="!p-0" title="الربط عبر الواجهة البرمجية" subtitle="خطوتان: أرسل الرمز واحفظ otpId، ثم تحقّق من الرمز الذي يدخله العميل." icon={CodeBracketIcon} />
           </div>
-          <p className="text-xs text-slate-500 mt-3">
-            Change expiry via <code className="bg-[#F8FAFC] px-1 rounded">OTP_EXPIRY_MINUTES</code> environment variable in Netlify
-          </p>
-        </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-b border-line-soft px-5 sm:px-6">
+            <Tabs idPrefix="otp-doc" value={docTab} onChange={setDocTab} aria-label="أقسام التوثيق"
+              tabs={[{ id: 'send', label: '1 · إرسال الرمز' }, { id: 'verify', label: '2 · التحقق' }, { id: 'whmcs', label: 'WHMCS' }]} />
+          </div>
+          <div className="flex flex-col gap-4 p-5 sm:p-6">
+            {docTab !== 'whmcs' ? (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Badge tone="brand" size="md">POST</Badge>
+                    <code dir="ltr" className="font-mono text-sm text-ink">{docTab === 'send' ? '/api/v1/otp' : '/api/v1/otp-verify'}</code>
+                  </div>
+                  <Tabs variant="segmented" size="sm" value={lang} onChange={setLang} tabs={LANGS} aria-label="لغة البرمجة" />
+                </div>
+                {docTab === 'send' ? (
+                  <p className="text-sm text-muted">
+                    الحقول: <code dir="ltr" className="font-mono text-ink">phone</code> (إلزامي) و<code dir="ltr" className="font-mono text-ink">purpose</code> (verification | login | transaction).
+                    اختياريًا: <code dir="ltr" className="font-mono text-ink">instance_id</code> لاختيار رقم الإرسال، و<code dir="ltr" className="font-mono text-ink">brand_name</code>.
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted">أرسل <code dir="ltr" className="font-mono text-ink">otp_id</code> من الخطوة الأولى مع <code dir="ltr" className="font-mono text-ink">otp</code> الذي أدخله العميل. يُرفض الرمز بعد استخدامه أو انتهاء صلاحيته.</p>
+                )}
+                <CodeBlock label="المثال" code={(docTab === 'send' ? code.send : code.verify)[lang as keyof typeof code.send]} />
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted">ضع الملف في مجلد <code dir="ltr" className="font-mono text-ink">/includes/hooks/</code> في WHMCS باسم <code dir="ltr" className="font-mono text-ink">wabek_otp.php</code>.</p>
+                <CodeBlock label="ملف WHMCS" code={code.whmcs} />
+              </>
+            )}
+          </div>
+        </Card>
       </div>
     </DashboardLayout>
   )

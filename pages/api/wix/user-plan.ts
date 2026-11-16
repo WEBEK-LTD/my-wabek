@@ -1,14 +1,16 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
+import { resolveWixCaller } from '@/lib/wix-auth'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const userId = req.query.user_id as string
-  if (!userId) return res.status(400).json({ plan: null })
+  // user_id in the query is ignored: the account comes from the verified caller
+  const caller = await resolveWixCaller(req, res)
+  if (!caller) return
 
   const db = supabaseAdmin()
   const { data: user } = await db.from('users')
     .select('plan_id, plan_expires_at')
-    .eq('id', userId).maybeSingle()
+    .eq('id', caller.userId).maybeSingle()
 
   if (!user?.plan_id) return res.status(200).json({ plan: null })
 

@@ -1,168 +1,194 @@
-// @ts-nocheck
+import React, { useEffect, useMemo, useState } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
-import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
-import PublicNav from '@/components/PublicNav'
-import PublicFooter from '@/components/PublicFooter'
+import { ArrowRightIcon, DocumentMagnifyingGlassIcon } from '@heroicons/react/24/outline'
 import { useWhiteLabel } from '@/hooks/useWhiteLabel'
-import { t, getStoredLang } from '@/lib/i18n'
+import { Button, EmptyState, Skeleton } from '@/components/ui'
+import { cn } from '@/components/ui/utils'
+import { MarketingPage, Section } from '@/components/marketing/MarketingPage'
+import { CategoryPill, PostCard, PostCover, PostMeta, postView } from '@/components/marketing/blog'
+import { Prose, withHeadingIds } from '@/components/marketing/Prose'
+import { usePublicLang } from '@/components/marketing/usePublicLang'
 import { posts } from '@/lib/blog-posts'
 import { getPostContent } from '@/lib/blog-translations'
-
-const POST_KEYS = [
-  { tk: 'post1_title', ek: 'post1_excerpt', cat: 'blog_cat_guides' },
-  { tk: 'post2_title', ek: 'post2_excerpt', cat: 'blog_cat_automation' },
-  { tk: 'post3_title', ek: 'post3_excerpt', cat: 'blog_cat_ai' },
-  { tk: 'post4_title', ek: 'post4_excerpt', cat: 'blog_cat_marketing' },
-  { tk: 'post5_title', ek: 'post5_excerpt', cat: 'blog_cat_guides' },
-  { tk: 'post6_title', ek: 'post6_excerpt', cat: 'blog_cat_reseller' },
-  { tk: 'post7_title', ek: 'post7_excerpt', cat: 'blog_cat_integrations' },
-]
-
-const CAT_COLORS: Record<string,string> = {
-  blog_cat_guides: '#25D366', blog_cat_automation: '#0EA5E9',
-  blog_cat_ai: '#8B5CF6', blog_cat_marketing: '#F59E0B',
-  blog_cat_reseller: '#6366F1', blog_cat_integrations: '#EF4444',
-}
 
 export default function BlogPost() {
   const { brandName } = useWhiteLabel()
   const name = brandName || 'WABEK'
   const router = useRouter()
   const { slug } = router.query
-  const [lang, setLang] = useState<string>(() => typeof window !== 'undefined' ? localStorage.getItem('lang') || 'en' : 'en')
-  useEffect(() => {
-    setLang(getStoredLang())
-    const h = (e: any) => setLang(e.detail)
-    window.addEventListener('langchange', h)
-    return () => window.removeEventListener('langchange', h)
-  }, [])
-  const isRTL = lang === 'ar'
-  const dir = isRTL ? 'rtl' : 'ltr'
+  const { lang, setLang, dir, t } = usePublicLang()
+  const [current, setCurrent] = useState('')
 
   const postIndex = posts.findIndex(p => p.slug === slug)
   const post = posts[postIndex]
-  const keys = POST_KEYS[postIndex] || { tk: '', ek: '', cat: 'blog_cat_guides' }
-  const related = posts.filter((_,i) => i !== postIndex).slice(0, 3).map((p, i) => {
-    const relIdx = posts.findIndex(x => x.slug === p.slug)
-    return { post: p, keys: POST_KEYS[relIdx] || POST_KEYS[0] }
-  })
+  const view = post ? postView(post, postIndex, t) : null
 
-  if (!post) return (
-    <>
-      <PublicNav active="/blog" onLangChange={setLang} />
-      <div style={{maxWidth:600,margin:'120px auto',textAlign:'center',padding:'0 20px'}}>
-        <div style={{fontSize:64,marginBottom:20}}>📄</div>
-        <h1 style={{fontSize:28,fontWeight:800,marginBottom:12}}>Article not found</h1>
-        <Link href="/blog" style={{color:'#25D366',fontWeight:700}}>{t(lang,'blog_back')}</Link>
-      </div>
-      <PublicFooter lang={lang} />
-    </>
+  // Article HTML is repository-authored (lib/blog-posts.ts, lib/blog-translations.ts), never user input.
+  const translatedContent = post ? getPostContent(post.slug, lang) : null
+  const { html, headings } = useMemo(
+    () => withHeadingIds(post ? translatedContent || post.content : ''),
+    [post, translatedContent],
+  )
+  const contentDir = translatedContent ? dir : 'ltr'
+  const toc = headings.filter(h => h.level === 2)
+
+  // Related: same category first, then the most recent others.
+  const related = useMemo(() => {
+    if (!view) return []
+    const all = posts.map((p, i) => postView(p, i, t)).filter(v => v.post.slug !== view.post.slug)
+    return [...all.filter(v => v.keys.cat === view.keys.cat), ...all.filter(v => v.keys.cat !== view.keys.cat)].slice(0, 3)
+  }, [view?.post.slug, view?.keys.cat, t]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!toc.length || typeof IntersectionObserver === 'undefined') return
+    const els = toc.map(h => document.getElementById(h.id)).filter(Boolean) as HTMLElement[]
+    const io = new IntersectionObserver(
+      entries => {
+        const visible = entries.filter(e => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
+        if (visible[0]) setCurrent(visible[0].target.id)
+      },
+      { rootMargin: '-96px 0px -65% 0px' },
+    )
+    els.forEach(el => io.observe(el))
+    return () => io.disconnect()
+  }, [html]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const back = (
+    <Link href="/blog" className="inline-flex items-center gap-1.5 text-sm font-medium text-muted hover:text-ink">
+      <ArrowRightIcon className="h-4 w-4 ltr:rotate-180" aria-hidden="true" />
+      {t('blog_back')}
+    </Link>
   )
 
-  const displayTitle = t(lang, keys.tk) || post.title
-  const displayExcerpt = t(lang, keys.ek) || post.excerpt
-  const displayCat = t(lang, keys.cat)
-  const translatedContent = getPostContent(post.slug, lang)
+  if (!router.isReady) {
+    return (
+      <MarketingPage active="/blog" lang={lang} dir={dir} onLangChange={setLang}>
+        <div className="mx-auto max-w-3xl px-4 py-16" aria-busy="true">
+          <Skeleton className="mb-4 h-5 w-32" />
+          <Skeleton className="mb-6 h-10 w-full" />
+          <Skeleton className="mb-8 aspect-[16/9] w-full" />
+          <Skeleton lines={6} />
+        </div>
+      </MarketingPage>
+    )
+  }
+
+  if (!post || !view) {
+    return (
+      <>
+        <Head>
+          <link rel="icon" href="/brand/favicon-32.png" />
+          <title>{`${t('mk_article_not_found')} | ${name}`}</title>
+        </Head>
+        <MarketingPage active="/blog" lang={lang} dir={dir} onLangChange={setLang}>
+          <Section narrow>
+            <EmptyState
+              variant="card"
+              icon={DocumentMagnifyingGlassIcon}
+              title={t('mk_article_not_found')}
+              description={t('mk_article_not_found_body')}
+              action={<Button href="/blog" variant="secondary">{t('blog_back')}</Button>}
+            />
+          </Section>
+        </MarketingPage>
+      </>
+    )
+  }
 
   return (
     <>
       <Head>
-        <link rel="icon" href="https://res.cloudinary.com/dkl7ntpgw/image/upload/f_auto,q_auto/%D8%AA%D8%B5%D9%85%D9%8A%D9%85_%D8%A8%D8%AF%D9%88%D9%86_%D8%B9%D9%86%D9%88%D8%A7%D9%86_1_kejdrs" />
-        <title>{displayTitle} | {name}</title>
-        <meta name="description" content={displayExcerpt} />
-        <meta property="og:title" content={displayTitle} />
-        <meta property="og:description" content={displayExcerpt} />
+        <link rel="icon" href="/brand/favicon-32.png" />
+        <title>{`${view.title} | ${name}`}</title>
+        <meta name="description" content={view.excerpt} />
+        <meta property="og:title" content={view.title} />
+        <meta property="og:description" content={view.excerpt} />
       </Head>
-      <style>{`
-        *{margin:0;padding:0;box-sizing:border-box}
-        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fff;color:#111b21}
-        a{text-decoration:none;color:inherit}
-        .prose{font-size:16px;line-height:1.85;color:#374151}
-        .prose h2{font-size:24px;font-weight:800;color:#111b21;margin:40px 0 16px;line-height:1.2}
-        .prose h3{font-size:19px;font-weight:700;color:#111b21;margin:28px 0 12px}
-        .prose p{margin-bottom:18px}
-        .prose ul,.prose ol{padding-inline-start:24px;margin-bottom:18px}
-        .prose li{margin-bottom:8px}
-        .prose strong{font-weight:700;color:#111b21}
-        .prose a{color:#25D366;font-weight:600}
-        .prose a:hover{text-decoration:underline}
-        .prose blockquote{border-inline-start:4px solid #25D366;padding:12px 20px;background:#f0fdf4;border-radius:0 8px 8px 0;margin:24px 0;font-style:italic}
-        .tag{display:inline-block;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:700;color:#fff}
-        .rcard{background:#fff;border:1px solid #e9edef;border-radius:12px;overflow:hidden;transition:all .2s;display:flex;flex-direction:column}
-        .rcard:hover{border-color:#25D366;box-shadow:0 4px 16px rgba(37,211,102,.1)}
-        .rgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-        @media(max-width:700px){.rgrid{grid-template-columns:1fr}}
-      `}</style>
-
-      <PublicNav active="/blog" onLangChange={setLang} />
-
-      <article style={{maxWidth:740,margin:'0 auto',padding:'48px 20px 80px',direction:dir}}>
-
-        <Link href="/blog" style={{display:'inline-flex',alignItems:'center',gap:6,color:'#54656f',fontSize:14,marginBottom:32,fontWeight:500,textDecoration:'none'}}>
-          {t(lang,'blog_back')}
-        </Link>
-
-        <div style={{marginBottom:32}}>
-          <span className="tag" style={{background: CAT_COLORS[keys.cat]||'#25D366',marginBottom:14}}>{displayCat}</span>
-          <h1 style={{fontSize:'clamp(24px,5vw,38px)',fontWeight:900,lineHeight:1.15,marginBottom:18,color:'#111b21'}}>{displayTitle}</h1>
-          <div style={{display:'flex',alignItems:'center',gap:14,fontSize:13,color:'#8696a0',marginBottom:24}}>
-            <span>{post.date}</span><span>·</span>
-            <span>{post.readTime} {t(lang,'blog_min_read')}</span>
-          </div>
-          <div style={{borderRadius:16,overflow:'hidden',marginBottom:28,maxHeight:420,background:'linear-gradient(135deg,#f0fdf4,#dcfce7)',display:'flex',alignItems:'center',justifyContent:'center'}}>
-            {post.image
-              ? <img src={post.image} alt={displayTitle}
-                  style={{width:'100%',height:'100%',objectFit:'cover',display:'block',minHeight:320,maxHeight:420}} />
-              : <span style={{fontSize:72,padding:'40px 0'}}>{post.emoji}</span>
-            }
-          </div>
-          <p style={{fontSize:17,color:'#54656f',lineHeight:1.7,fontStyle:'italic',borderInlineStart:'4px solid #25D366',paddingInlineStart:16}}>{displayExcerpt}</p>
-        </div>
-
-        <div className="prose" dangerouslySetInnerHTML={{ __html: translatedContent || post.content }} />
-
-        <div style={{background:'linear-gradient(135deg,#25D366,#1da851)',borderRadius:16,padding:'32px',textAlign:'center',marginTop:48}}>
-          <h3 style={{fontSize:22,fontWeight:800,color:'#0F172A',marginBottom:10}}>{t(lang,'about_cta_title')}</h3>
-          <p style={{fontSize:15,color:'rgba(255,255,255,.85)',marginBottom:24}}>{name} — {t(lang,'hero_note')}</p>
-          <Link href="/auth/register" style={{background:'#fff',color:'#25D366',padding:'12px 32px',borderRadius:9,fontSize:15,fontWeight:700,display:'inline-block'}}>{t(lang,'get_started')} →</Link>
-        </div>
-      </article>
-
-      {related.length > 0 && (
-        <section style={{background:'#f9fafb',padding:'48px 20px 64px',direction:dir}}>
-          <div style={{maxWidth:1000,margin:'0 auto'}}>
-            <h2 style={{fontSize:20,fontWeight:800,marginBottom:24}}>{t(lang,'blog_all')}</h2>
-            <div className="rgrid">
-              {related.map(({ post: p, keys: k }) => (
-                <Link key={p.slug} href={`/blog/${p.slug}`}>
-                  <div className="rcard">
-                    <div style={{height:120,background:'linear-gradient(135deg,#f0fdf4,#dcfce7)',overflow:'hidden',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                      {p.image
-                        ? <img src={p.image} alt={t(lang,k.tk)||p.title}
-                            style={{width:'100%',height:'100%',objectFit:'cover',transition:'transform .3s'}}
-                            onMouseOver={e=>(e.currentTarget.style.transform='scale(1.06)')}
-                            onMouseOut={e=>(e.currentTarget.style.transform='scale(1)')} />
-                        : <span style={{fontSize:40}}>{p.emoji}</span>
-                      }
-                    </div>
-                    <div style={{padding:14,flex:1}}>
-                      <span className="tag" style={{background: CAT_COLORS[k.cat]||'#25D366',marginBottom:8}}>{t(lang,k.cat)}</span>
-                      <h3 style={{fontSize:13,fontWeight:700,lineHeight:1.4,marginBottom:8,color:'#111b21'}}>{t(lang,k.tk) || p.title}</h3>
-                      <div style={{fontSize:11,color:'#8696a0',display:'flex',justifyContent:'space-between'}}>
-                        <span>{p.date}</span><span>{p.readTime} {t(lang,'blog_min_read')}</span>
-                      </div>
-                    </div>
+      <MarketingPage active="/blog" lang={lang} dir={dir} onLangChange={setLang}>
+        <article>
+          {/* Header */}
+          <header className="mx-auto max-w-[1180px] px-4 pt-8 sm:px-8 sm:pt-12">
+            <div className="mx-auto max-w-3xl">
+              {back}
+              <div className="mt-6 flex flex-col gap-4">
+                <CategoryPill cat={view.keys.cat} label={view.category} />
+                <h1 className="text-[30px] font-bold leading-[1.3] text-ink sm:text-[42px] sm:leading-[1.25]">{view.title}</h1>
+                <p className="text-lg leading-[1.85] text-body">{view.excerpt}</p>
+                <div className="flex items-center gap-3 border-y border-line py-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-gradient text-xs font-bold text-[#04282C]" aria-hidden="true">{name.slice(0, 1)}</span>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-ink">{name}</span>
+                    <PostMeta post={post} lang={lang} t={t} />
                   </div>
-                </Link>
-              ))}
+                </div>
+              </div>
             </div>
-          </div>
-        </section>
-      )}
+            <PostCover post={post} alt={view.title} className="mx-auto mt-8 aspect-[21/9] max-w-5xl rounded-panel shadow-hero" />
+          </header>
 
-      <PublicFooter lang={lang} />
+          {/* Body + TOC */}
+          <div className={cn('mx-auto grid max-w-[1180px] gap-10 px-4 py-12 sm:px-8 sm:py-16', toc.length > 1 && 'lg:grid-cols-[minmax(0,1fr)_240px]')}>
+            <div className={cn('min-w-0', toc.length <= 1 && 'mx-auto w-full max-w-3xl')}>
+              {toc.length > 1 && (
+                <details className="group mb-8 rounded-card border border-line bg-surface lg:hidden">
+                  <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-ink">{t('mk_toc')}</summary>
+                  <ol className="border-t border-line-soft p-2">
+                    {toc.map(h => (
+                      <li key={h.id}><a href={`#${h.id}`} className="block rounded-lg px-3 py-1.5 text-[13px] text-muted hover:bg-surface-3 hover:text-ink" dir={contentDir}>{h.text}</a></li>
+                    ))}
+                  </ol>
+                </details>
+              )}
+              <Prose dir={contentDir} className="mx-auto max-w-[720px]" dangerouslySetInnerHTML={{ __html: html }} />
+
+              <div className="relative mx-auto mt-14 max-w-[720px] overflow-hidden rounded-panel bg-[#04282C] p-8 text-center text-deep-ink">
+                <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_120%_at_100%_0%,#0E6C72,rgba(14,108,114,0)_60%)]" />
+                <div className="relative flex flex-col items-center gap-3">
+                  <h2 className="text-2xl font-bold text-deep-ink">{t('about_cta_title')}</h2>
+                  <p className="text-[15px] text-deep-muted">{name} — {t('hero_note')}</p>
+                  <Button href="/auth/register" size="lg" className="mt-2 rounded-[14px] px-8">{t('get_started')}</Button>
+                </div>
+              </div>
+            </div>
+
+            {toc.length > 1 && (
+              <aside className="hidden lg:block">
+                <nav aria-label={t('mk_toc')} className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto">
+                  <p className="mb-3 px-3 text-xs font-semibold text-muted">{t('mk_toc')}</p>
+                  <ol className="flex flex-col gap-0.5" dir={contentDir}>
+                    {toc.map(h => (
+                      <li key={h.id}>
+                        <a
+                          href={`#${h.id}`}
+                          aria-current={current === h.id ? 'true' : undefined}
+                          className={cn(
+                            'block rounded-lg border-s-2 px-3 py-1.5 text-[13px] leading-snug transition-colors',
+                            current === h.id ? 'border-brand-teal bg-chip/60 font-medium text-ink' : 'border-transparent text-muted hover:bg-surface-3 hover:text-ink',
+                          )}
+                        >
+                          {h.text}
+                        </a>
+                      </li>
+                    ))}
+                  </ol>
+                </nav>
+              </aside>
+            )}
+          </div>
+        </article>
+
+        {related.length > 0 && (
+          <div className="border-t border-line bg-surface-2">
+            <Section align="start" title={t('mk_related')} action={<Link href="/blog" className="text-sm font-semibold">{t('blog_all')}</Link>}>
+              <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {related.map(v => <li key={v.post.slug}><PostCard view={v} lang={lang} t={t} /></li>)}
+              </ul>
+            </Section>
+          </div>
+        )}
+      </MarketingPage>
     </>
   )
 }

@@ -1,10 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { verifyWixInstance, getWixInstanceParam, linkWixInstance, wixAppConfigured } from '@/lib/wix-auth'
 
 // WABEK user clicks "Connect Wix" → we save the link between user and Wix instance
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'integrations')
   if (!user) return
 
   if (req.method === 'GET') {
@@ -36,31 +37,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    const { wix_instance_id } = req.body
-    if (!wix_instance_id) return res.status(400).json({ error: 'wix_instance_id required' })
+    // Proof of the store is a SIGNED Wix instance; a bare wix_instance_id is not accepted
+    if (!wixAppConfigured(res)) return
+    const wix = verifyWixInstance(getWixInstanceParam(req))
+    if (!wix) return res.status(400).json({ error: 'A valid Wix session is required. Please open the app from your Wix dashboard.' })
 
-    const db = supabaseAdmin()
-
-    // Verify the installation exists
-    const { data: install } = await db
-      .from('wix_installations')
-      .select('id')
-      .eq('wix_instance_id', wix_instance_id)
-      .maybeSingle()
-
-    if (!install) return res.status(404).json({ error: 'Wix installation not found' })
-
-    await db.from('wix_user_links').upsert({
-      user_id:          user.userId,
-      wix_instance_id,
-      connected_at:     new Date().toISOString(),
-    }, { onConflict: 'user_id,wix_instance_id' })
-
+    const result = await linkWixInstance(user.userId, wix.instanceId)
+    if (result === 'taken') return res.status(409).json({ error: 'This Wix store is already linked to another account' })
     return res.status(200).json({ success: true })
   }
 
   if (req.method === 'DELETE') {
-    const { wix_instance_id } = req.body
+    const { wix_instance_id } = req.body || {}
+    if (!wix_instance_id || typeof wix_instance_id !== 'string') return res.status(400).json({ error: 'wix_instance_id required' })
     const db = supabaseAdmin()
     await db.from('wix_user_links')
       .delete()

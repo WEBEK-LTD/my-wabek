@@ -1,22 +1,31 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { GRAPH_BASE_URL } from '@/lib/whatsapp'
+import { checkSendAllowed } from '@/lib/wa-smart-send'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'inbox')
   if (!user) return
   const db = supabaseAdmin()
 
   if (req.method === 'POST') {
     const { instance_id, to, catalog_id, product_ids, header_text, body_text, footer_text } = req.body
 
-    if (!instance_id || !to) return res.status(400).json({ error: 'instance_id and to required' })
+    if (!instance_id || !to || typeof to !== 'string') return res.status(400).json({ error: 'instance_id and to required' })
+    if (!catalog_id || !/^\d{1,30}$/.test(String(catalog_id))) return res.status(400).json({ error: 'valid catalog_id required' })
+    if (product_ids !== undefined && (!Array.isArray(product_ids) || product_ids.length > 30)) {
+      return res.status(400).json({ error: 'product_ids must be an array (max 30)' })
+    }
 
     const { data: instance } = await db.from('whatsapp_instances')
       .select('type, phone_number_id, access_token')
       .eq('id', instance_id).eq('user_id', user.userId).eq('type', 'cloud_api').single()
 
     if (!instance) return res.status(404).json({ error: 'Cloud API instance not found (catalog requires Cloud API)' })
+
+    const guard = await checkSendAllowed(user.userId, to)
+    if (!guard.allowed) return res.status(403).json({ error: guard.error, code: guard.code })
 
     // Send interactive catalog message via Meta API
     const payload: Record<string, unknown> = {
@@ -33,13 +42,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           catalog_id,
           sections: [{
             title: 'Products',
-            product_items: (product_ids || []).map((id: string) => ({ product_retailer_id: id }))
+            product_items: (product_ids || []).map((id: unknown) => ({ product_retailer_id: String(id) }))
           }]
         }
       }
     }
 
-    const response = await fetch(`https://graph.facebook.com/v21.0/${instance.phone_number_id}/messages`, {
+    const response = await fetch(`${GRAPH_BASE_URL}/${instance.phone_number_id}/messages`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${instance.access_token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

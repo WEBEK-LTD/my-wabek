@@ -1,36 +1,68 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase'
-import { requireAuth } from '@/lib/auth'
-import { checkPlanLimit, logAction, getClientIp } from '@/lib/middleware'
-import { getPhoneNumberInfo } from '@/lib/whatsapp'
+import { getAuthUser, requireMemberAccess } from '@/lib/auth'
+import { authenticateApiKey } from '@/lib/api-key-auth'
+import { logAction, getClientIp } from '@/lib/middleware'
+import { getPhoneNumberInfo, toPublicInstance, GRAPH_SUBSCRIBE_BASE_URL } from '@/lib/whatsapp'
+import { checkInstanceCreateAllowed } from '@/lib/wa-smart-send'
 import { v4 as uuidv4 } from 'uuid'
 
 const createSchema = z.object({
-  phone_number: z.string().min(5),
-  display_name: z.string().optional(),
-  phone_number_id: z.string().min(1),
-  waba_id: z.string().optional(),
-  access_token: z.string().min(1),
+  phone_number: z.string().min(5).max(32),
+  display_name: z.string().max(100).optional(),
+  phone_number_id: z.string().trim().regex(/^\d{5,30}$/),
+  waba_id: z.preprocess(v => (typeof v === 'string' && v.trim() === '' ? undefined : typeof v === 'string' ? v.trim() : v),
+    z.string().regex(/^\d{5,30}$/).optional()),
+  access_token: z.string().trim().min(1).max(2048),
 })
 
+// Fields an integration (WHMCS / WordPress plugin, API key auth) may see.
+const API_KEY_INSTANCE_FIELDS = ['id', 'display_name', 'phone_number', 'status', 'instance_type', 'is_default', 'created_at'] as const
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  // GET also accepts an API key (plugins list the account's numbers).
+  if (req.method === 'GET') {
+    const session = await getAuthUser(req)
+    if (!session.ok) {
+      const apiAuth = await authenticateApiKey(req, { route: '/api/whatsapp/instances' })
+      if (!apiAuth) return res.status(session.status).json({ error: session.error })
+      const { data, error } = await supabaseAdmin()
+        .from('whatsapp_instances')
+        .select(API_KEY_INSTANCE_FIELDS.join(','))
+        .eq('user_id', apiAuth.userId)
+        .order('created_at', { ascending: false })
+      if (error) return res.status(500).json({ error: 'Failed to load instances' })
+      const rows = (data || []) as unknown as Record<string, unknown>[]
+      return res.status(200).json({
+        instances: rows.map(r => {
+          const out: Record<string, unknown> = {}
+          for (const k of API_KEY_INSTANCE_FIELDS) out[k] = r[k] ?? null
+          return out
+        }),
+      })
+    }
+  }
+
+  const user = await requireMemberAccess(req, res, 'instances')
   if (!user) return
   const db = supabaseAdmin()
 
   if (req.method === 'GET') {
+    // select('*') then an allowlist: access_token never leaves the server
     const { data, error } = await db
       .from('whatsapp_instances')
       .select('*')
       .eq('user_id', user.userId)
       .order('created_at', { ascending: false })
-    if (error) return res.status(500).json({ error: error.message })
-    return res.status(200).json({ instances: data })
+    if (error) return res.status(500).json({ error: 'Failed to load instances' })
+    return res.status(200).json({ instances: (data || []).map(r => toPublicInstance(r)) })
   }
 
   if (req.method === 'POST') {
-    // Plan limit check removed
+    // Plan limit applies to CREATING instances only (existing ones keep working)
+    const limit = await checkInstanceCreateAllowed(user.userId)
+    if (!limit.allowed) return res.status(403).json({ error: limit.error, code: 'PLAN_LIMIT' })
 
     try {
       const body = createSchema.parse(req.body)
@@ -54,9 +86,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         access_token: body.access_token,
         status: 'connected',
         webhook_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/whatsapp/webhook`,
-      }).select().single()
+      }).select('*').single()
 
-      if (error) return res.status(500).json({ error: error.message })
+      if (error) {
+        console.error('[instances] create failed:', error.message)
+        return res.status(500).json({ error: 'Failed to create instance' })
+      }
 
       // Subscribe our App to this WABA's webhooks — required for Meta to
       // send inbound message/status webhooks. Non-fatal: the token may lack
@@ -66,8 +101,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       let webhookWarning: string | undefined
       if (body.waba_id) {
         try {
-          const apiVer = 'v25.0' // subscribed_apps requires v25.0 (v20/v21 return #200 Permissions error)
-          const subRes = await fetch(`https://graph.facebook.com/${apiVer}/${body.waba_id}/subscribed_apps`, {
+          const subRes = await fetch(`${GRAPH_SUBSCRIBE_BASE_URL}/${body.waba_id}/subscribed_apps`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${body.access_token}` },
           })
@@ -77,8 +111,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               ? `Webhook subscription failed: ${subData.error.message}. Incoming messages won't arrive until this is fixed (use the "Fix Webhook Subscription" button).`
               : 'Webhook subscription did not return success. Incoming messages may not arrive.'
           }
-        } catch (e: any) {
-          webhookWarning = `Could not subscribe to webhooks: ${e?.message}. Incoming messages won't arrive until this is fixed.`
+        } catch {
+          webhookWarning = 'Could not subscribe to webhooks. Incoming messages won\'t arrive until this is fixed.'
         }
       } else {
         webhookWarning = 'No WABA ID provided — incoming messages will NOT arrive. Add the WhatsApp Business Account ID and use "Fix Webhook Subscription".'
@@ -86,7 +120,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       await logAction({ userId: user.userId, action: 'create_instance', resource: 'whatsapp_instance', resourceId: data.id, ipAddress: getClientIp(req) })
 
-      return res.status(201).json({ instance: data, webhook_warning: webhookWarning })
+      return res.status(201).json({ instance: toPublicInstance(data), webhook_warning: webhookWarning })
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ error: 'Invalid data', details: err.errors })
       return res.status(500).json({ error: 'Failed to create instance' })

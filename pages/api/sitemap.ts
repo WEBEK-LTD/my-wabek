@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
+import { docsSitemapPaths } from '@/components/docs/lib/manifest'
 
 const STATIC_PAGES = [
   { path: '/', priority: '1.0', changefreq: 'daily' },
@@ -19,6 +20,8 @@ const STATIC_PAGES = [
   { path: '/legal/privacy', priority: '0.3', changefreq: 'yearly' },
   { path: '/legal/terms', priority: '0.3', changefreq: 'yearly' },
   { path: '/legal/license', priority: '0.2', changefreq: 'yearly' },
+  // Public documentation (Arabic + English), from content/docs/manifest.json
+  ...docsSitemapPaths(),
 ]
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

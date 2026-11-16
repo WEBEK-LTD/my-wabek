@@ -264,7 +264,12 @@ export const blogTranslations: Record<string, Record<string, string>> = {
 <p>تنبيهات الفواتير المستحقة والمتأخرة، تأكيدات الدفع، إشعارات تفعيل وتعليق الخدمة، تحديثات تذاكر الدعم، تذكيرات انتهاء النطاق.</p>
 
 <h2>كيفية التثبيت</h2>
-<p>حمّل الوحدة من WABEK، ارفعها إلى مجلد modules/notifications في WHMCS، وأدخل مفتاح API الخاص بك. الإعداد يستغرق أقل من 5 دقائق.</p>
+<ol>
+  <li>نزّل الملف <a href="/downloads/wabek-whmcs-addon.zip">wabek-whmcs-addon.zip</a> (تجده أيضًا في لوحة التحكم ← WHMCS). يحتوي على وحدة إضافية واحدة، ولم يعد هناك ملف hooks منفصل.</li>
+  <li>فكّ الضغط وارفع مجلد <code>modules</code> إلى المجلد الجذر لـ WHMCS بحيث يوجد الملف <code>modules/addons/wabek/wabek.php</code>. إن كنت تستخدم ملف الـ hook القديم <code>includes/hooks/wabek_notifications.php</code> فاحذفه حتى لا تُرسل الإشعارات مرتين.</li>
+  <li>من لوحة إدارة WHMCS افتح <strong>System Settings ← Addon Modules</strong>، وفعّل <strong>WABEK WhatsApp</strong>، ثم اضغط <strong>Configure</strong> وامنح الصلاحية لمجموعات المشرفين المطلوبة.</li>
+  <li>أنشئ مفتاح API من WABEK (لوحة التحكم ← مفاتيح API)، ثم افتح <strong>Addons ← WABEK WhatsApp ← Settings</strong> والصق المفتاح، واضغط <strong>Test connection</strong> وأرسل رسالة تجريبية إلى رقمك.</li>
+</ol>
 
 <h2>تخصيص الرسائل</h2>
 <p>استخدم متغيرات WHMCS في رسائل واتساب: اسم العميل، رقم الفاتورة، المبلغ المستحق، وتاريخ الاستحقاق.</p>`,
@@ -276,7 +281,7 @@ export const blogTranslations: Record<string, Record<string, string>> = {
 <p>Alertes de factures dues et en retard, confirmations de paiement, notifications d'activation et suspension de service, mises à jour de tickets de support, rappels d'expiration de domaine.</p>
 
 <h2>Comment installer</h2>
-<p>Téléchargez le module depuis WABEK, téléversez-le dans le dossier modules/notifications de WHMCS, et entrez votre clé API. La configuration prend moins de 5 minutes.</p>
+<p>Téléchargez <a href="/downloads/wabek-whmcs-addon.zip">wabek-whmcs-addon.zip</a>, décompressez-le et téléversez le dossier <code>modules</code> à la racine de WHMCS (le fichier <code>modules/addons/wabek/wabek.php</code> doit exister ; supprimez l'ancien hook <code>includes/hooks/wabek_notifications.php</code> s'il est présent). Activez <strong>WABEK WhatsApp</strong> dans <strong>System Settings → Addon Modules</strong>, puis dans <strong>Addons → WABEK WhatsApp → Settings</strong> collez votre clé API et cliquez sur <strong>Test connection</strong>.</p>
 
 <h2>Personnalisation des messages</h2>
 <p>Utilisez les variables WHMCS dans vos messages WhatsApp : nom du client, numéro de facture, montant dû et date d'échéance.</p>`,
@@ -288,7 +293,7 @@ export const blogTranslations: Record<string, Record<string, string>> = {
 <p>Vadesi gelen ve geciken fatura uyarıları, ödeme onayları, hizmet aktivasyonu ve askıya alma bildirimleri, destek bileti güncellemeleri, alan adı sona erme hatırlatıcıları.</p>
 
 <h2>Nasıl Kurulur</h2>
-<p>Modülü WABEK'ten indirin, WHMCS'nin modules/notifications klasörüne yükleyin ve API anahtarınızı girin. Kurulum 5 dakikadan az sürer.</p>
+<p><a href="/downloads/wabek-whmcs-addon.zip">wabek-whmcs-addon.zip</a> dosyasını indirin, açın ve <code>modules</code> klasörünü WHMCS kök dizinine yükleyin (<code>modules/addons/wabek/wabek.php</code> dosyası bulunmalı; eski <code>includes/hooks/wabek_notifications.php</code> hook dosyası varsa silin). <strong>System Settings → Addon Modules</strong> bölümünden <strong>WABEK WhatsApp</strong> modülünü etkinleştirin, ardından <strong>Addons → WABEK WhatsApp → Settings</strong> sayfasında API anahtarınızı yapıştırıp <strong>Test connection</strong> düğmesine tıklayın.</p>
 
 <h2>Mesajları Özelleştirme</h2>
 <p>WhatsApp mesajlarınızda WHMCS değişkenlerini kullanın: müşteri adı, fatura numarası, vadesi gelen tutar ve son ödeme tarihi.</p>`,

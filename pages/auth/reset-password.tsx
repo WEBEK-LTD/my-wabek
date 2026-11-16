@@ -1,115 +1,111 @@
-// @ts-nocheck
-import { useState } from 'react'
-import Head from 'next/head'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { LockClosedIcon, EyeIcon, EyeSlashIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
+import { LockClosedIcon, CheckCircleIcon, ArrowLeftIcon } from '@heroicons/react/24/outline'
+import { Button, Field } from '@/components/ui'
+import { AuthLayout, AuthHeading } from '@/components/auth/AuthLayout'
+import { AuthAlert, PasswordInput, PasswordStrength } from '@/components/auth/AuthParts'
+import { useAuthCopy } from '@/components/auth/copy'
+import type { AuthCopyKey } from '@/components/auth/copy'
 
 export default function ResetPasswordPage() {
   const router = useRouter()
-  const { token } = router.query
+  const token = typeof router.query.token === 'string' ? router.query.token : ''
+  const { c } = useAuthCopy()
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
-  const [showPw, setShowPw] = useState(false)
+  const [errors, setErrors] = useState<{ password?: AuthCopyKey; confirm?: AuthCopyKey }>({})
+  const [serverError, setServerError] = useState<{ key: AuthCopyKey; raw?: string } | null>(null)
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
 
-  const handleSubmit = async (e) => {
+  useEffect(() => {
+    if (!done) return
+    const t = setTimeout(() => router.push('/auth/login'), 2000)
+    return () => clearTimeout(t)
+  }, [done])
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (password !== confirm) { toast.error('Passwords do not match'); return }
-    if (password.length < 8) { toast.error('Password must be at least 8 characters'); return }
+    const errs: typeof errors = {}
+    if (password.length < 8) errs.password = 'err_password_short'
+    if (password !== confirm) errs.confirm = 'mismatch'
+    setErrors(errs)
+    if (Object.keys(errs).length || !token) return
     setLoading(true)
+    setServerError(null)
     try {
       await axios.post('/api/auth/reset-password', { token, password })
       setDone(true)
-      toast.success('Password reset successfully!')
-      setTimeout(() => router.push('/auth/login'), 2000)
-    } catch (err) {
-      toast.error(err?.response?.data?.error || 'Reset link expired or invalid')
+      toast.success(c('rp_toast'))
+    } catch (err: any) {
+      const msg = String(err?.response?.data?.error || '')
+      if (!err?.response) setServerError({ key: 'err_network' })
+      else if (/expired|invalid/i.test(msg)) setServerError({ key: 'rp_expired' })
+      else if (/too short/i.test(msg)) setErrors({ password: 'err_password_short' })
+      else setServerError({ key: 'err_generic', raw: msg || undefined })
     } finally {
       setLoading(false)
     }
   }
 
+  const missingToken = router.isReady && !token
+
   return (
-    <>
-      <Head>
-      <link rel="icon" href="https://res.cloudinary.com/dkl7ntpgw/image/upload/f_auto,q_auto/%D8%AA%D8%B5%D9%85%D9%8A%D9%85_%D8%A8%D8%AF%D9%88%D9%86_%D8%B9%D9%86%D9%88%D8%A7%D9%86_1_kejdrs" /><title>Reset Password | WABEK</title></Head>
-      <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-center py-12 px-4">
-        <div className="max-w-md mx-auto w-full">
-          <div className="flex items-center gap-3 mb-8 justify-center">
-            <div className="w-9 h-9 bg-brand-500 rounded-xl flex items-center justify-center glow-green">
-              <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white"><path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.96 9.96 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2z"/></svg>
+    <AuthLayout title={c('rp_title')}>
+      {!done ? (
+        <>
+          <AuthHeading icon={LockClosedIcon} title={c('rp_title')} subtitle={c('rp_subtitle')} />
+          {missingToken && (
+            <AuthAlert tone="warning" className="mb-5">
+              {c('rp_missing_token')}{' '}
+              <Link href="/auth/forgot-password" className="font-semibold text-inherit underline underline-offset-4">{c('rp_request_new')}</Link>
+            </AuthAlert>
+          )}
+          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+            <div>
+              <Field label={c('new_password')} error={errors.password ? c(errors.password) : undefined}>
+                <PasswordInput autoComplete="new-password" autoFocus placeholder={c('new_password_ph')} value={password}
+                  onChange={e => { setPassword(e.target.value); setErrors(x => ({ ...x, password: undefined })) }} />
+              </Field>
+              <PasswordStrength password={password} />
             </div>
-            <span className="font-display font-bold text-2xl text-slate-900">WABEK</span>
-          </div>
-
-          <div className="card">
-            {!done ? (
-              <>
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
-                    <LockClosedIcon className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <h1 className="font-display font-bold text-xl text-slate-900">Set new password</h1>
-                    <p className="text-sm text-slate-400">Must be at least 8 characters</p>
-                  </div>
-                </div>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <label className="label">New password</label>
-                    <div className="relative">
-                      <input
-                        type={showPw ? 'text' : 'password'}
-                        value={password}
-                        onChange={e => setPassword(e.target.value)}
-                        placeholder="Min. 8 characters"
-                        className="input pr-10"
-                        required
-                      />
-                      <button type="button" onClick={() => setShowPw(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-900">
-                        {showPw ? <EyeSlashIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="label">Confirm password</label>
-                    <input
-                      type="password"
-                      value={confirm}
-                      onChange={e => setConfirm(e.target.value)}
-                      placeholder="Repeat password"
-                      className="input"
-                      required
-                    />
-                    {confirm && password !== confirm && (
-                      <p className="text-red-400 text-xs mt-1">Passwords do not match</p>
-                    )}
-                  </div>
-                  <button type="submit" disabled={loading || !token || password !== confirm || password.length < 8} className="btn-primary w-full justify-center py-3">
-                    {loading ? 'Resetting…' : 'Reset Password'}
-                  </button>
-                </form>
-              </>
-            ) : (
-              <div className="text-center py-4">
-                <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-4">
-                  <CheckCircleIcon className="w-8 h-8 text-blue-600" />
-                </div>
-                <h2 className="font-display font-bold text-xl text-slate-900 mb-2">Password Reset!</h2>
-                <p className="text-slate-400 text-sm">Redirecting to login…</p>
-              </div>
+            <Field label={c('confirm_password')} error={errors.confirm ? c(errors.confirm) : (confirm && password !== confirm ? c('mismatch') : undefined)}>
+              <PasswordInput autoComplete="new-password" placeholder={c('confirm_ph')} value={confirm}
+                onChange={e => { setConfirm(e.target.value); setErrors(x => ({ ...x, confirm: undefined })) }} />
+            </Field>
+            {serverError && (
+              <AuthAlert tone="danger">
+                {serverError.raw || c(serverError.key)}{' '}
+                {serverError.key === 'rp_expired' && (
+                  <Link href="/auth/forgot-password" className="font-semibold text-inherit underline underline-offset-4">{c('rp_request_new')}</Link>
+                )}
+              </AuthAlert>
             )}
-          </div>
-
-          <Link href="/auth/login" className="flex items-center justify-center gap-2 mt-6 text-sm text-slate-400 hover:text-slate-900 transition-colors">
-            ← Back to login
-          </Link>
+            <Button type="submit" size="lg" fullWidth loading={loading} disabled={!token}>
+              {loading ? c('rp_saving') : c('rp_save')}
+            </Button>
+          </form>
+        </>
+      ) : (
+        <div className="flex flex-col items-center text-center" role="status">
+          <span className="mb-5 flex h-16 w-16 items-center justify-center rounded-[22px] bg-brand-gradient text-[#04282C] shadow-glow">
+            <CheckCircleIcon className="h-8 w-8" aria-hidden="true" />
+          </span>
+          <h1 className="text-[26px] font-bold text-ink">{c('rp_done_title')}</h1>
+          <p className="mt-3 text-[15px] leading-relaxed text-muted">{c('rp_done_body')}</p>
+          <Button href="/auth/login" className="mt-6">{c('go_to_login')}</Button>
         </div>
-      </div>
-    </>
+      )}
+
+      {!done && (
+        <Link href="/auth/login" className="mt-8 flex items-center justify-center gap-2 text-sm font-medium text-muted hover:text-ink">
+          <ArrowLeftIcon className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+          {c('back_to_login')}
+        </Link>
+      )}
+    </AuthLayout>
   )
 }

@@ -1,10 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { sendEmail } from '@/lib/email'
+import { escapeHtml } from '@/lib/security'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'inbox')
   if (!user) return
   const db = supabaseAdmin()
 
@@ -24,23 +25,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    const { subject, message } = req.body
-    if (!subject || !message) return res.status(400).json({ error: 'subject and message required' })
+    const { subject, message, whatsapp_phone } = req.body || {}
+    if (!subject || !message || typeof subject !== 'string' || typeof message !== 'string') {
+      return res.status(400).json({ error: 'subject and message required' })
+    }
+    if (subject.length > 300 || message.length > 10000) return res.status(400).json({ error: 'Input too long' })
 
-    const { data: maxRow } = await db.from('support_tickets').select('ticket_number').order('ticket_number', { ascending: false }).limit(1).maybeSingle()
-    const ticketNumber = (maxRow?.ticket_number || 7253) + 1
+    // Race-free ticket numbers from a Postgres sequence (migration 026).
+    // Fallback to max+1 only if the function isn't deployed yet.
+    let ticketNumber: number
+    const { data: seqVal, error: seqErr } = await db.rpc('next_support_ticket_number')
+    if (!seqErr && typeof seqVal === 'number') {
+      ticketNumber = seqVal
+    } else {
+      const { data: maxRow } = await db.from('support_tickets').select('ticket_number').order('ticket_number', { ascending: false }).limit(1).maybeSingle()
+      ticketNumber = (maxRow?.ticket_number || 7253) + 1
+    }
     const { data: userRow } = await db.from('users').select('email, name').eq('id', user.userId).single()
-
-    const { whatsapp_phone } = req.body
+    const safeSubject = escapeHtml(subject)
+    const safeName = escapeHtml(userRow?.name || 'there')
 
     const { data: ticket, error } = await db.from('support_tickets').insert({
       ticket_number: ticketNumber,
       user_id: user.userId,
       subject,
       status: 'open',
-      whatsapp_phone: whatsapp_phone || null,
+      whatsapp_phone: typeof whatsapp_phone === 'string' ? whatsapp_phone.slice(0, 32) : null,
     }).select().single()
-    if (error) return res.status(500).json({ error: error.message })
+    if (error) {
+      console.error('[support/tickets] insert error:', error.message)
+      return res.status(500).json({ error: 'Failed to create ticket' })
+    }
 
     await db.from('support_messages').insert({
       ticket_id: ticket.id, sender_type: 'user', sender_id: user.userId, content: message,
@@ -49,8 +64,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       await sendEmail({
         to: userRow?.email || '',
-        subject: `Ticket #${ticketNumber} opened — ${subject}`,
-        html: `<div style="font-family:sans-serif;max-width:560px;margin:0 auto"><h2>Ticket #${ticketNumber} opened ✅</h2><p>Hi ${userRow?.name || 'there'},</p><p>We received your request. Our team will reply during business hours <strong>(9 AM – 6 PM daily)</strong>.</p><div style="background:#f9fafb;border:1px solid #e9edef;border-radius:8px;padding:16px"><p><strong>Subject:</strong> ${subject}</p><p><strong>Ticket #:</strong> ${ticketNumber}</p></div></div>`,
+        subject: `Ticket #${ticketNumber} opened — ${subject.replace(/[\r\n]+/g, ' ').slice(0, 150)}`,
+        html: `<div style="font-family:sans-serif;max-width:560px;margin:0 auto"><h2>Ticket #${ticketNumber} opened ✅</h2><p>Hi ${safeName},</p><p>We received your request. Our team will reply during business hours <strong>(9 AM – 6 PM daily)</strong>.</p><div style="background:#f9fafb;border:1px solid #e9edef;border-radius:8px;padding:16px"><p><strong>Subject:</strong> ${safeSubject}</p><p><strong>Ticket #:</strong> ${ticketNumber}</p></div></div>`,
       })
     } catch {}
 
@@ -58,8 +73,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const adminEmail = process.env.ADMIN_EMAIL || 'support@waabek.com'
       await sendEmail({
         to: adminEmail,
-        subject: `New ticket #${ticketNumber} — ${userRow?.name || userRow?.email}`,
-        html: `<div style="font-family:sans-serif"><h2>New ticket #${ticketNumber}</h2><p><strong>From:</strong> ${userRow?.name} (${userRow?.email})</p><p><strong>Subject:</strong> ${subject}</p><blockquote>${message}</blockquote><a href="https://waabek.com/admin/support">View in admin →</a></div>`,
+        subject: `New ticket #${ticketNumber} — ${String(userRow?.name || userRow?.email || '').replace(/[\r\n]+/g, ' ').slice(0, 100)}`,
+        html: `<div style="font-family:sans-serif"><h2>New ticket #${ticketNumber}</h2><p><strong>From:</strong> ${escapeHtml(userRow?.name)} (${escapeHtml(userRow?.email)})</p><p><strong>Subject:</strong> ${safeSubject}</p><blockquote style="white-space:pre-wrap">${escapeHtml(message)}</blockquote><a href="https://waabek.com/admin/support">View in admin →</a></div>`,
       })
     } catch {}
 

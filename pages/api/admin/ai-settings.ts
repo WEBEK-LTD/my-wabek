@@ -1,6 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { requireAdmin } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { logAction, getClientIp } from '@/lib/middleware'
+import { isRedactedPlaceholder, maskSecret } from '@/lib/settings'
 
 function jsonVal(v: string | undefined): string {
   if (!v) return ''
@@ -25,11 +27,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const settings: Record<string, string> = {}
     for (const row of data || []) settings[row.key] = jsonVal(row.value)
 
-    // Mask API key
+    // Never return the raw API key — only a mask.
     if (settings['ai_deepseek_api_key']) {
-      const k = settings['ai_deepseek_api_key']
-      settings['ai_deepseek_api_key_masked'] = k.slice(0, 6) + '••••••••' + k.slice(-4)
+      settings['ai_deepseek_api_key_masked'] = maskSecret(settings['ai_deepseek_api_key'])
+      settings['has_ai_deepseek_api_key'] = 'true'
     }
+    delete settings['ai_deepseek_api_key']
 
     // Monthly usage
     const monthlyUsage = getUsageKeys().reduce((sum, key) => sum + parseInt(settings[key] || '0'), 0)
@@ -39,13 +42,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'PUT') {
-    const updates = req.body as Record<string, string>
+    const updates = (req.body || {}) as Record<string, unknown>
     const allowed = new Set(AI_KEYS)
+    const changed: string[] = []
 
     for (const [key, value] of Object.entries(updates)) {
       if (!allowed.has(key)) continue
+      // Empty or masked API key means "keep the current key".
+      if (key === 'ai_deepseek_api_key' && (!value || isRedactedPlaceholder(value) || String(value).includes('••'))) continue
       // Store as JSON string since value column is JSONB
-      await db.from('system_settings').upsert({ key, value: JSON.stringify(String(value)) })
+      const { error } = await db.from('system_settings').upsert({ key, value: JSON.stringify(String(value)) }, { onConflict: 'key' })
+      if (error) {
+        console.error(`[ai-settings] saving ${key} failed:`, error.message)
+        return res.status(500).json({ error: 'Failed to save settings' })
+      }
+      changed.push(key)
+    }
+    if (changed.length) {
+      await logAction({ userId: user.userId, action: 'admin_ai_settings_update', resource: 'system_settings', details: { keys: changed }, ipAddress: getClientIp(req) })
     }
     return res.status(200).json({ success: true })
   }
@@ -78,14 +92,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }),
       })
       if (!r.ok) {
-        const err = await r.text()
-        return res.status(400).json({ error: `API error: ${r.status}`, detail: err })
+        console.error('[ai-settings] provider test failed:', r.status, (await r.text()).slice(0, 300))
+        return res.status(400).json({ error: `API error: ${r.status}` })
       }
       const data = await r.json()
       const reply = data.choices?.[0]?.message?.content || ''
       return res.status(200).json({ success: true, reply, provider, model })
     } catch (err: any) {
-      return res.status(500).json({ error: err?.message })
+      console.error('[ai-settings] provider test error:', err?.message)
+      return res.status(500).json({ error: 'Could not reach the AI provider' })
     }
   }
 

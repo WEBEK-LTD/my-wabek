@@ -1,7 +1,7 @@
 import { smartSend, smartSendWAWeb, SmartSendResult } from '@/lib/wa-smart-send'
 import { supabaseAdmin } from './supabase'
-import { sendWAWebMessage } from './wa-web'
-import { sendTextMessage } from './whatsapp'
+import { isValidAssignee, saveConversationAssignment } from './inbox-access'
+import { emitWebhookEvent } from './outgoing-webhooks'
 import { v4 as uuidv4 } from 'uuid'
 
 // ─────────────────────────────────────────────────────────
@@ -32,6 +32,71 @@ interface Session {
 }
 
 // ─────────────────────────────────────────────────────────
+// Branch selection (pure; shared with the flow tester /api/chatbot/test)
+// ─────────────────────────────────────────────────────────
+
+type EdgeLike = { source: string; target: string; label?: string }
+export type ChatbotButton = { id?: string; text: string }
+
+/** First outgoing edge of a node (unlabelled flow). */
+export function firstEdge<E extends EdgeLike>(edges: E[], nodeId: string): E | undefined {
+  return edges.find(e => e.source === nodeId)
+}
+
+/** Result of a condition node against the session variables. */
+export function evaluateCondition(data: Record<string, unknown>, variables: Record<string, unknown>): boolean {
+  const variable = String(variables[data.variable as string] || '')
+  const op = data.operator as string
+  const val = (data.value as string) || ''
+  if (op === 'equals') return variable === val
+  if (op === 'contains') return variable.toLowerCase().includes(val.toLowerCase())
+  if (op === 'starts_with') return variable.toLowerCase().startsWith(val.toLowerCase())
+  if (op === 'not_empty') return !!variable
+  return false
+}
+
+/** Edge labelled 'true' / 'false' for the result, else the first edge. */
+export function conditionEdge<E extends EdgeLike>(edges: E[], nodeId: string, result: boolean): E | undefined {
+  return edges.find(e => e.source === nodeId && e.label === (result ? 'true' : 'false')) || firstEdge(edges, nodeId)
+}
+
+/** The button the user picked: by text (case-insensitive), id, or its 1-based number. */
+export function matchButton<B extends ChatbotButton>(buttons: B[], input: string): B | undefined {
+  return buttons.find((b, i) =>
+    String(b.text || '').toLowerCase() === input.toLowerCase() ||
+    (b.id !== undefined && b.id === input) ||
+    String(i + 1) === input
+  )
+}
+
+/** Edge labelled with the picked button's text or id, else the first edge. */
+export function buttonEdge<E extends EdgeLike>(edges: E[], nodeId: string, matched: ChatbotButton | undefined): E | undefined {
+  return matched
+    ? edges.find(e => e.source === nodeId && (e.label === matched.text || (matched.id !== undefined && e.label === matched.id))) || firstEdge(edges, nodeId)
+    : firstEdge(edges, nodeId)
+}
+
+/** Replace {{variable}} placeholders with session variables. */
+export function renderFlowText(text: string, variables: Record<string, unknown>): string {
+  let out = text
+  for (const [key, val] of Object.entries(variables)) {
+    const safeKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    out = out.replace(new RegExp(`\\{\\{${safeKey}\\}\\}`, 'gi'), String(val))
+  }
+  return out
+}
+
+/** Message text of a node as sent (buttons are listed as numbered options). */
+export function nodeMessageText(node: { type: string; data: Record<string, unknown> }): string {
+  let text = (node.data.text || node.data.message || node.data.question || '') as string
+  if (node.type === 'buttons') {
+    const buttons = (node.data.buttons as Array<{ text: string }>) || []
+    if (buttons.length) text = `${text}\n\n${buttons.map((b, i) => `${i + 1}. ${b.text}`).join('\n')}`
+  }
+  return text
+}
+
+// ─────────────────────────────────────────────────────────
 // Entry point
 // ─────────────────────────────────────────────────────────
 
@@ -42,6 +107,7 @@ export async function processChatbotMessage(params: {
   from: string
   message: string
   contactName?: string
+  contactId?: string | null
 }): Promise<boolean> {
   const { userId, instanceId, instance, from, message, contactName } = params
   const db = supabaseAdmin()
@@ -85,8 +151,22 @@ export async function processChatbotMessage(params: {
     let matched = null
     const msgLower = message.toLowerCase().trim()
 
-    // First: try keyword match (more specific)
+    // `first_message` flows only run on the contact's first ever inbound
+    // message to this instance (the current message is already stored).
+    let firstInbound: boolean | null = null
+    const isFirstInbound = async (): Promise<boolean> => {
+      if (firstInbound !== null) return firstInbound
+      firstInbound = await isFirstInboundMessage(userId, instanceId, from, params.contactId)
+      return firstInbound
+    }
+    const candidates: typeof eligible = []
     for (const flow of eligible) {
+      if (flow.trigger_type === 'first_message' && !(await isFirstInbound())) continue
+      candidates.push(flow)
+    }
+
+    // First: try keyword match (more specific)
+    for (const flow of candidates) {
       const keywords: string[] = flow.trigger_keywords || []
       if (keywords.length > 0) {
         const hit = keywords.some(k => msgLower.includes(k.toLowerCase().trim()))
@@ -94,11 +174,15 @@ export async function processChatbotMessage(params: {
       }
     }
 
-    // Second: fallback to any_message ONLY if no keyword matched
+    // Second: a first_message flow (when this is the first message), then
+    // any_message — ONLY if no keyword matched
     if (!matched) {
-      for (const flow of eligible) {
+      matched = candidates.find(f => f.trigger_type === 'first_message' && !(f.trigger_keywords || []).length) || null
+    }
+    if (!matched) {
+      for (const flow of candidates) {
         const keywords: string[] = flow.trigger_keywords || []
-        if (keywords.length === 0) {
+        if (keywords.length === 0 && flow.trigger_type !== 'first_message') {
           matched = flow
           break
         }
@@ -137,6 +221,11 @@ export async function processChatbotMessage(params: {
     }
 
     await db.from('chatbot_sessions').upsert(newSession, { onConflict: 'user_id,contact_phone' })
+
+    await emitWebhookEvent(userId, 'chatbot_triggered', {
+      flow_id: matched.id, flow_name: matched.name, trigger_type: matched.trigger_type || null,
+      from, instance_id: instanceId, message,
+    })
 
     // 6. Execute from start node
     const replied = await executeNode(startNode, newSession, matched, instance)
@@ -197,16 +286,8 @@ async function continueFlow(
   // Handle button selection
   if (currentNode.type === 'buttons') {
     const buttons = (currentNode.data.buttons as Array<{ id: string; text: string }>) || []
-    const matched = buttons.find(b =>
-      b.text.toLowerCase() === userInput.toLowerCase() ||
-      b.id === userInput ||
-      String(buttons.indexOf(b) + 1) === userInput
-    )
-
-    const edge = matched
-      ? edges.find(e => e.source === currentNode.id && (e.label === matched.text || e.label === matched.id))
-        || edges.find(e => e.source === currentNode.id)
-      : edges.find(e => e.source === currentNode.id)
+    const matched = matchButton(buttons, userInput)
+    const edge = buttonEdge(edges, currentNode.id, matched)
 
     if (edge) {
       const next = nodes.find(n => n.id === edge.target)
@@ -241,15 +322,34 @@ async function continueFlow(
 // Execute a single node — returns true if a message was sent
 // ─────────────────────────────────────────────────────────
 
+// Guards against misconfigured / malicious flows: a single inbound message may
+// execute at most MAX_STEPS_PER_RUN nodes, never the same node twice (no input
+// is awaited inside a run, so a revisit is always a loop), and sleep at most
+// MAX_DELAY_MS_PER_RUN in total.
+const MAX_STEPS_PER_RUN = 25
+const MAX_DELAY_MS_PER_RUN = 15000
+
+interface RunContext { steps: number; visited: Set<string>; delayMs: number }
+const newRun = (): RunContext => ({ steps: 0, visited: new Set<string>(), delayMs: 0 })
+
 async function executeNode(
   node: ChatbotNode,
   session: Session,
   flow: Record<string, unknown>,
-  instance: Record<string, unknown>
+  instance: Record<string, unknown>,
+  run: RunContext = newRun()
 ): Promise<boolean> {
   const db = supabaseAdmin()
   const edges: ChatbotEdge[] = (flow.edges as ChatbotEdge[]) || []
   const nodes: ChatbotNode[] = (flow.nodes as ChatbotNode[]) || []
+
+  run.steps++
+  if (run.steps > MAX_STEPS_PER_RUN || run.visited.has(node.id)) {
+    console.warn(`[CHATBOT] run aborted flow=${String(flow.id)} node=${node.id} steps=${run.steps} (loop or step limit)`)
+    await db.from('chatbot_sessions').update({ is_active: false }).eq('id', session.id)
+    return false
+  }
+  run.visited.add(node.id)
 
   const next = async (): Promise<boolean> => {
     const edge = edges.find(e => e.source === node.id)
@@ -257,7 +357,7 @@ async function executeNode(
     const nextNode = nodes.find(n => n.id === edge.target)
     if (!nextNode) return false
     await db.from('chatbot_sessions').update({ current_node_id: nextNode.id }).eq('id', session.id)
-    return await executeNode(nextNode, session, flow, instance)
+    return await executeNode(nextNode, session, flow, instance, run)
   }
 
   switch (node.type) {
@@ -271,7 +371,7 @@ async function executeNode(
         if (others.length === 1) {
           console.log(`[CHATBOT] start node has no edge — auto-running single node "${others[0].id}" (${others[0].type})`)
           await db.from('chatbot_sessions').update({ current_node_id: others[0].id }).eq('id', session.id)
-          return await executeNode(others[0], session, flow, instance)
+          return await executeNode(others[0], session, flow, instance, run)
         }
         console.log(`[CHATBOT] start node has no outgoing edge and ${others.length} other nodes — nothing to execute`)
         return false
@@ -298,30 +398,23 @@ async function executeNode(
     }
 
     case 'delay': {
-      const ms = Math.min((node.data.seconds as number || 1) * 1000, 10000)
-      await new Promise(r => setTimeout(r, ms))
+      const secs = Number(node.data.seconds) || 1
+      const requested = Math.max(0, Math.min(secs * 1000, 10000))
+      const ms = Math.min(requested, Math.max(0, MAX_DELAY_MS_PER_RUN - run.delayMs))
+      run.delayMs += ms
+      if (ms > 0) await new Promise(r => setTimeout(r, ms))
       return await next()
     }
 
     case 'condition': {
-      const variable = String(session.variables[node.data.variable as string] || '')
-      const op = node.data.operator as string
-      const val = node.data.value as string || ''
-      let result = false
-
-      if (op === 'equals')      result = variable === val
-      else if (op === 'contains')   result = variable.toLowerCase().includes(val.toLowerCase())
-      else if (op === 'starts_with') result = variable.toLowerCase().startsWith(val.toLowerCase())
-      else if (op === 'not_empty')  result = !!variable
-
-      const edge = edges.find(e => e.source === node.id && e.label === (result ? 'true' : 'false'))
-        || edges.find(e => e.source === node.id)
+      const result = evaluateCondition(node.data, session.variables)
+      const edge = conditionEdge(edges, node.id, result)
 
       if (edge) {
         const nextNode = nodes.find(n => n.id === edge.target)
         if (nextNode) {
           await db.from('chatbot_sessions').update({ current_node_id: nextNode.id }).eq('id', session.id)
-          return await executeNode(nextNode, session, flow, instance)
+          return await executeNode(nextNode, session, flow, instance, run)
         }
       }
       return false
@@ -346,23 +439,29 @@ async function executeNode(
       const assignedTo = node.data.assigned_to as string
       if (assignedTo) {
         const { data: contact } = await db.from('contacts')
-          .select('id').eq('phone', session.contact_phone).maybeSingle()
-        if (contact) {
-          await db.from('conversation_assignments').upsert({
+          .select('id').eq('phone', session.contact_phone).eq('user_id', session.user_id).maybeSingle()
+        // The assignee must be the owner or one of the owner's team members
+        const assigneeOk = await isValidAssignee(db, session.user_id, assignedTo)
+        if (contact && assigneeOk) {
+          const { error } = await saveConversationAssignment(db, {
             owner_id: session.user_id,
             contact_id: contact.id,
+            instance_id: (instance.id as string) || null,
             assigned_to: assignedTo,
             status: 'open',
             updated_at: new Date().toISOString(),
-          }, { onConflict: 'owner_id,contact_id' })
+          })
+          if (error) console.error('[CHATBOT] assign failed:', error.message)
         }
       }
       return await next()
     }
 
     case 'end': {
+      // Optional closing message (the editor's "رسالة ختامية").
+      const sent = await sendMsg(node, session, instance)
       await db.from('chatbot_sessions').update({ is_active: false }).eq('id', session.id)
-      return false // end = let AI take over if needed
+      return sent // nothing sent → let AI take over if needed
     }
 
     default:
@@ -375,22 +474,10 @@ async function executeNode(
 // ─────────────────────────────────────────────────────────
 
 async function sendMsg(node: ChatbotNode, session: Session, instance: Record<string, unknown>): Promise<boolean> {
-  let text = (node.data.text || node.data.message || node.data.question || '') as string
-
-  // Build buttons text
-  if (node.type === 'buttons') {
-    const buttons = (node.data.buttons as Array<{ text: string }>) || []
-    if (buttons.length) {
-      text = `${text}\n\n${buttons.map((b, i) => `${i + 1}. ${b.text}`).join('\n')}`
-    }
-  }
-
-  if (!text.trim()) return false
-
-  // Replace {{variables}}
-  for (const [key, val] of Object.entries(session.variables)) {
-    text = text.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'gi'), String(val))
-  }
+  // Buttons are listed as numbered options; {{variables}} are filled in.
+  const raw = nodeMessageText(node)
+  if (!raw.trim()) return false
+  const text = renderFlowText(raw, session.variables)
 
   try {
     const db = supabaseAdmin()
@@ -399,24 +486,13 @@ async function sendMsg(node: ChatbotNode, session: Session, instance: Record<str
     let waMessageId = ''
 
     if (instType === 'wa_web' || instType === 'baileys') {
-      const r = await sendWAWebMessage({ instanceId: instance.id as string, to: session.contact_phone, text })
-      waMessageId = r?.messageId || ''
-
-      // smartSend (cloud_api path below) already inserts a `messages` row
-      // with meta.source — for wa_web we insert it ourselves here.
-      await db.from('messages').insert({
-        id: uuidv4(),
-        user_id: session.user_id,
-        instance_id: instance.id,
-        direction: 'outbound',
-        type: 'text',
-        content: text,
-        wa_message_id: waMessageId,
-        status: 'sent',
-        meta: { method: 'text', source: 'chatbot' },
-      })
+      // Guarded send (plan limit / opt-out); smartSendWAWeb persists the row.
+      const r = await smartSendWAWeb({ userId: session.user_id, instanceId: instance.id as string, to: session.contact_phone, text, source: 'chatbot' })
+      if (r.error && !r.messageId) return false
+      waMessageId = r.messageId || ''
     } else {
       const r: SmartSendResult = await smartSend({ userId: (instance as any)?.user_id || (instance as any)?.userId || '', instanceId: (instance as any)?.id || '', phoneNumberId: instance.phone_number_id as string, accessToken: instance.access_token as string, to: session.contact_phone, text: text, source: 'chatbot' as any })
+      if (r.error && !r.messageId) return false
       waMessageId = r.messageId || ''
       // NOTE: smartSend already inserts the outbound `messages` row
       // (with wa_message_id dedup + meta.source='chatbot') — do not
@@ -426,6 +502,30 @@ async function sendMsg(node: ChatbotNode, session: Session, instance: Record<str
     return true
   } catch (err) {
     console.error('[CHATBOT] send error:', err)
+    return false
+  }
+}
+
+/**
+ * True when the contact has at most one inbound message on this instance
+ * (the message being processed, already stored by the webhook).
+ */
+async function isFirstInboundMessage(userId: string, instanceId: string, phone: string, contactId?: string | null): Promise<boolean> {
+  try {
+    const db = supabaseAdmin()
+    let ids: string[] = contactId ? [contactId] : []
+    if (!ids.length) {
+      const digits = String(phone || '').replace(/[^0-9]/g, '')
+      const { data: rows } = await db.from('contacts').select('id').eq('user_id', userId)
+        .in('phone', Array.from(new Set([phone, digits, `+${digits}`].filter(Boolean)))).limit(5)
+      ids = (rows || []).map(r => r.id)
+    }
+    if (!ids.length) return true
+    const { count, error } = await db.from('messages').select('id', { count: 'exact', head: true })
+      .eq('user_id', userId).eq('instance_id', instanceId).eq('direction', 'inbound').in('contact_id', ids)
+    if (error || count === null) return false
+    return count <= 1
+  } catch {
     return false
   }
 }

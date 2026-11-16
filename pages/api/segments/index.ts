@@ -1,10 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { v4 as uuidv4 } from 'uuid'
+import { cleanSegmentConditions as cleanConditions, countSegmentContacts } from '@/lib/segments'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'segments')
   if (!user) return
   const db = supabaseAdmin()
 
@@ -14,41 +15,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    const { name, description, conditions, operator } = req.body
-    if (!name) return res.status(400).json({ error: 'name required' })
+    const { name, description } = req.body || {}
+    if (!name || typeof name !== 'string' || name.length > 200) return res.status(400).json({ error: 'name required' })
+    const conditions = cleanConditions(req.body?.conditions)
+    if (!conditions) return res.status(400).json({ error: 'Invalid conditions' })
+    const operator = req.body?.operator === 'OR' ? 'OR' : 'AND'
 
     // Count matching contacts
-    const count = await countSegmentContacts(user.userId, conditions || [], operator || 'AND')
+    const count = await countSegmentContacts(user.userId, conditions, operator)
 
     const { data, error } = await db.from('contact_segments').insert({
-      id: uuidv4(), user_id: user.userId, name, description,
-      conditions: conditions || [], operator: operator || 'AND',
+      id: uuidv4(), user_id: user.userId, name,
+      description: typeof description === 'string' ? description.slice(0, 1000) : null,
+      conditions, operator,
       contact_count: count,
     }).select().single()
 
-    if (error) return res.status(500).json({ error: error.message })
+    if (error) {
+      console.error('[segments] db error:', error.message)
+      return res.status(500).json({ error: 'Failed to create segment' })
+    }
     return res.status(201).json({ segment: data })
   }
 
   return res.status(405).json({ error: 'Method not allowed' })
-}
-
-async function countSegmentContacts(userId: string, conditions: Array<{ field: string; operator: string; value: string }>, operator: string): Promise<number> {
-  const db = supabaseAdmin()
-  let query = db.from('contacts').select('id', { count: 'exact', head: true }).eq('user_id', userId)
-
-  for (const cond of conditions) {
-    if (cond.field === 'tags' && cond.operator === 'contains') {
-      query = query.contains('tags', [cond.value])
-    } else if (cond.field === 'name' && cond.operator === 'contains') {
-      query = query.ilike('name', `%${cond.value}%`)
-    } else if (cond.field === 'phone' && cond.operator === 'starts_with') {
-      query = query.like('phone', `${cond.value}%`)
-    } else if (cond.field === 'opted_out') {
-      query = query.eq('opted_out', cond.value === 'true')
-    }
-  }
-
-  const { count } = await query
-  return count || 0
 }

@@ -29,13 +29,11 @@ export async function subscribeToPush(vapidPublicKey: string): Promise<boolean> 
     }
 
     // Send subscription to server
-    const token = localStorage.getItem('wabek_token')
+    // Authenticated by the HttpOnly session cookie (same origin).
     await fetch('/api/push/subscribe', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ subscription }),
     })
 
@@ -52,11 +50,7 @@ export async function unsubscribeFromPush(): Promise<boolean> {
     const subscription = await registration.pushManager.getSubscription()
     if (subscription) {
       await subscription.unsubscribe()
-      const token = localStorage.getItem('wabek_token')
-      await fetch('/api/push/subscribe', {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` },
-      })
+      await fetch('/api/push/subscribe', { method: 'DELETE', credentials: 'same-origin' })
     }
     return true
   } catch { return false }

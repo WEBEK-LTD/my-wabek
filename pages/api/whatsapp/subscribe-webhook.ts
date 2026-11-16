@@ -1,10 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { GRAPH_SUBSCRIBE_BASE_URL } from '@/lib/whatsapp'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).end()
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'instances')
   if (!user) return
 
   const instanceId = req.body?.instance_id as string
@@ -26,7 +27,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'No WhatsApp Business Account ID (waba_id) on this instance.' })
   }
 
-  const subUrl = `https://graph.facebook.com/v25.0/${instance.waba_id}/subscribed_apps`
+  if (!/^\d{1,30}$/.test(String(instance.waba_id))) {
+    return res.status(400).json({ error: 'Invalid WhatsApp Business Account ID on this instance.' })
+  }
+  const subUrl = `${GRAPH_SUBSCRIBE_BASE_URL}/${instance.waba_id}/subscribed_apps`
   const appId  = process.env.META_APP_ID || ''
 
   try {
@@ -60,8 +64,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (data?.success) {
       return res.status(200).json({ success: true, message: 'Webhook subscription active. Incoming messages should now arrive.' })
     }
-    return res.status(502).json({ success: false, error: data?.error?.message || 'Subscription failed', raw: data })
+    return res.status(502).json({ success: false, error: data?.error?.message || 'Subscription failed' })
   } catch (err: any) {
-    return res.status(502).json({ success: false, error: err?.message || 'Request failed' })
+    console.error('[subscribe-webhook] request failed:', err?.message)
+    return res.status(502).json({ success: false, error: 'Request to Meta failed' })
   }
 }

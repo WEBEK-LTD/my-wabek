@@ -1,49 +1,38 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireAuth, requireMemberAccess } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { escapeFilterValue } from '@/lib/security'
+import { getAllowedInstances, canUseInstance, ownsContact, isValidAssignee, saveConversationAssignment } from '@/lib/inbox-access'
 import { v4 as uuidv4 } from 'uuid'
 
-// ─── Resolve allowed instances for current user ───────────────
-// Owner → all instances (returns null = no filter)
-// Team member with no rows in team_member_instances → all instances
-// Team member with rows → only those instances
-async function getAllowedInstances(
-  db: ReturnType<typeof supabaseAdmin>,
-  userId: string,
-  ownerId: string
-): Promise<string[] | null> {
-  // Owner always sees everything
-  if (userId === ownerId) return null
-
-  const { data } = await db
-    .from('team_member_instances')
-    .select('instance_id')
-    .eq('member_user_id', userId)
-
-  if (!data || data.length === 0) return null // no restrictions = see all
-  return data.map(r => r.instance_id)
-}
+const STATUSES = ['open', 'pending', 'resolved', 'spam']
+const PRIORITIES = ['low', 'normal', 'high', 'urgent']
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'inbox')
   if (!user) return
   const db = supabaseAdmin()
 
   // The effective owner is either the user themselves or their owner (sub-account)
   const ownerId = user.userId  // requireAuth already resolves sub_account_of
+  const actingUserId = user.actualUserId || user.userId
 
   if (req.method === 'GET') {
-    const { status = 'open', assigned_to, page = '1', search, instance_id } = req.query
+    const status = typeof req.query.status === 'string' ? req.query.status : 'open'
+    const assigned_to = typeof req.query.assigned_to === 'string' ? req.query.assigned_to : undefined
+    const instance_id = typeof req.query.instance_id === 'string' ? req.query.instance_id : undefined
+    const search = typeof req.query.search === 'string' ? escapeFilterValue(req.query.search) : ''
+    // Deep link from a contact page: only this contact's conversation(s).
+    const contactFilter = typeof req.query.contact_id === 'string' && /^[0-9a-f-]{36}$/i.test(req.query.contact_id) ? req.query.contact_id : undefined
+    const page = Math.min(Math.max(parseInt(String(req.query.page || '1'), 10) || 1, 1), 1000)
     const limit = 30
-    const offset = (parseInt(page as string) - 1) * limit
+    const offset = (page - 1) * limit
 
     // ── Permission check ────────────────────────────────────────
-    // Resolve which instances this user can see
-    const allowedInstances = await getAllowedInstances(db, user.actualUserId || user.userId, ownerId)
+    const allowedInstances = await getAllowedInstances(db, actingUserId, ownerId)
 
-    // If a specific inbox was requested, verify access
     if (instance_id && instance_id !== 'all') {
-      if (allowedInstances && !allowedInstances.includes(instance_id as string)) {
+      if (allowedInstances && !allowedInstances.includes(instance_id)) {
         return res.status(403).json({ error: 'Access denied to this inbox' })
       }
     }
@@ -59,89 +48,93 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .order('last_message_at', { ascending: false, nullsFirst: false })
       .range(offset, offset + limit - 1)
 
-    // Filter by specific inbox (backend filtering — not frontend)
     if (instance_id && instance_id !== 'all') {
-      query = query.eq('instance_id', instance_id as string)
+      query = query.eq('instance_id', instance_id)
     } else if (allowedInstances) {
-      // Team member: restrict to allowed instances only
       query = query.in('instance_id', allowedInstances)
     }
-    // instance_id === 'all' and owner → no instance filter (see everything)
 
-    if (status !== 'all') query = query.eq('status', status as string)
-    if (assigned_to) query = query.eq('assigned_to', assigned_to as string)
+    if (status !== 'all') query = query.eq('status', status)
+    if (assigned_to) query = query.eq('assigned_to', assigned_to)
+    if (contactFilter) query = query.eq('contact_id', contactFilter)
     if (search) {
-      // Search by contact name or phone
       query = query.or(`contacts.name.ilike.%${search}%,contacts.phone.ilike.%${search}%`)
     }
 
     const { data, error, count } = await query
-    if (error) return res.status(500).json({ error: error.message })
-
-    // ── Last message per conversation ──────────────────────────
-    // Scoped to the instance if one is selected (avoids cross-inbox message bleed)
-    const convIds = (data || []).map(c => c.id)
-    const contactIds = (data || []).map(c => c.contact_id)
-    let lastMessages: Record<string, unknown> = {}
-
-    if (contactIds.length > 0) {
-      let msgQuery = db.from('messages')
-        .select('contact_id, instance_id, content, direction, created_at, type, media_url')
-        .eq('user_id', ownerId)
-        .in('contact_id', contactIds)
-        .order('created_at', { ascending: false })
-
-      // Scope last message to the selected instance too
-      if (instance_id && instance_id !== 'all') {
-        msgQuery = msgQuery.eq('instance_id', instance_id as string)
-      }
-
-      const { data: msgs } = await msgQuery
-      for (const msg of msgs || []) {
-        const key = `${msg.contact_id as string}:${msg.instance_id as string}`
-        if (!lastMessages[key]) lastMessages[key] = msg
-        // Also keep a fallback by contact_id only (for All Inboxes view)
-        const contactKey = msg.contact_id as string
-        if (!lastMessages[contactKey]) lastMessages[contactKey] = msg
-      }
+    if (error) {
+      console.error('[inbox] list error:', error.message)
+      return res.status(500).json({ error: 'Failed to load conversations' })
     }
 
-    // Enrich with instance data (separate query — no FK dependency required)
-    const instanceIds = [...new Set((data || []).map(c => c.instance_id).filter(Boolean))]
-    let instanceMap: Record<string, unknown> = {}
+    // ── Last message per conversation ──────────────────────────
+    // One indexed `limit 1` query per conversation instead of loading every
+    // message of every listed contact.
+    const selectedInstance = instance_id && instance_id !== 'all' ? instance_id : null
+    const rows = data || []
+    const lastMessages = await Promise.all(rows.map(async conv => {
+      if (!conv.contact_id) return null
+      const scope = selectedInstance || conv.instance_id
+      const base = () => db.from('messages')
+        .select('contact_id, instance_id, content, direction, created_at, type, media_url')
+        .eq('user_id', ownerId)
+        .eq('contact_id', conv.contact_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      if (scope) {
+        const { data: m } = await base().eq('instance_id', scope)
+        if (m?.[0]) return m[0]
+        if (selectedInstance) return null
+      }
+      const { data: m } = await base()
+      return m?.[0] || null
+    }))
+
+    // Enrich with instance data (owner-scoped)
+    const instanceIds = [...new Set(rows.map(c => c.instance_id).filter(Boolean))]
+    const instanceMap: Record<string, unknown> = {}
     if (instanceIds.length > 0) {
       const { data: instances } = await db.from('whatsapp_instances')
         .select('id, phone_number, display_name, instance_type, type')
+        .eq('user_id', ownerId)
         .in('id', instanceIds)
-      for (const inst of instances || []) {
-        instanceMap[inst.id] = inst
-      }
+      for (const inst of instances || []) instanceMap[inst.id] = inst
     }
 
-    const conversations = (data || []).map(conv => {
-      const key = `${conv.contact_id}:${conv.instance_id}`
-      return {
-        ...conv,
-        last_message:         lastMessages[key] || lastMessages[conv.contact_id] || null,
-        whatsapp_instances:   conv.instance_id ? (instanceMap[conv.instance_id] || null) : null,
-      }
-    })
+    const conversations = rows.map((conv, i) => ({
+      ...conv,
+      last_message:       lastMessages[i] || null,
+      whatsapp_instances: conv.instance_id ? (instanceMap[conv.instance_id] || null) : null,
+    }))
 
-    return res.status(200).json({
-      conversations,
-      total: count,
-      page: parseInt(page as string),
-    })
+    return res.status(200).json({ conversations, total: count, page })
   }
 
-  // ── GET /api/inbox/instances — list accessible inboxes ───────
-  // (handled by the specific instances endpoint, but also here for convenience)
-
   if (req.method === 'POST') {
-    const { contact_id, assigned_to, status, priority, tags, notes, instance_id } = req.body
-    if (!contact_id) return res.status(400).json({ error: 'contact_id required' })
+    const { contact_id, assigned_to, status, priority, tags, notes, instance_id } = req.body || {}
+    if (!contact_id || typeof contact_id !== 'string') return res.status(400).json({ error: 'contact_id required' })
+    if (status && !STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status' })
+    if (priority && !PRIORITIES.includes(priority)) return res.status(400).json({ error: 'Invalid priority' })
+    if (tags !== undefined && (!Array.isArray(tags) || tags.some((t: unknown) => typeof t !== 'string'))) {
+      return res.status(400).json({ error: 'tags must be an array of strings' })
+    }
 
-    // Use new conflict target that includes instance_id
+    if (!(await ownsContact(db, ownerId, contact_id))) return res.status(404).json({ error: 'Contact not found' })
+
+    const allowed = await getAllowedInstances(db, actingUserId, ownerId)
+    if (instance_id) {
+      if (typeof instance_id !== 'string' || !(await canUseInstance(db, ownerId, instance_id, allowed))) {
+        return res.status(403).json({ error: 'Access denied to this inbox' })
+      }
+    } else if (allowed) {
+      // Restricted team members may only create conversations in their inboxes
+      return res.status(400).json({ error: 'instance_id required' })
+    }
+
+    if (assigned_to && (typeof assigned_to !== 'string' || !(await isValidAssignee(db, ownerId, assigned_to)))) {
+      return res.status(400).json({ error: 'Invalid assignee' })
+    }
+
     const upsertData: Record<string, unknown> = {
       id: uuidv4(),
       owner_id: ownerId,
@@ -151,21 +144,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       status: status || 'open',
       priority: priority || 'normal',
       tags: tags || [],
-      notes: notes || null,
+      notes: notes ? String(notes).slice(0, 5000) : null,
       last_message_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
 
     // Upsert with the correct conflict target based on whether instance_id is set
-    const { data, error } = instance_id
-      ? await db.from('conversation_assignments').upsert(upsertData, {
-          onConflict: 'owner_id,contact_id,instance_id',
-        }).select().single()
-      : await db.from('conversation_assignments').upsert(upsertData, {
-          onConflict: 'owner_id,contact_id',
-        }).select().single()
+    // Select-then-update/insert (022's unique key includes instance_id, and
+    // NULL instance_ids never conflict, so a plain upsert can't be used).
+    const { data, error } = await saveConversationAssignment(db, upsertData as typeof upsertData & { owner_id: string; contact_id: string })
 
-    if (error) return res.status(500).json({ error: error.message })
+    if (error) {
+      console.error('[inbox] upsert error:', error.message)
+      return res.status(500).json({ error: 'Failed to save conversation' })
+    }
     return res.status(201).json({ conversation: data })
   }
 

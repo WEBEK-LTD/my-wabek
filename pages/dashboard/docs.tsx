@@ -2,10 +2,27 @@
 import { useState } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import clsx from 'clsx'
+import {
+  RocketLaunchIcon, CodeBracketIcon, MegaphoneIcon, CpuChipIcon, SparklesIcon, ChatBubbleLeftRightIcon, LockClosedIcon,
+  LinkIcon, SwatchIcon, BuildingStorefrontIcon, UserGroupIcon, CreditCardIcon, DocumentTextIcon, WrenchScrewdriverIcon,
+  BellIcon, BookOpenIcon,
+} from '@heroicons/react/24/outline'
+
+/** Section icons (heroicons, not emoji). */
+const SECTION_ICONS: Record<string, React.ElementType> = {
+  'getting-started': RocketLaunchIcon, api: CodeBracketIcon, campaigns: MegaphoneIcon, chatbot: CpuChipIcon,
+  ai: SparklesIcon, inbox: ChatBubbleLeftRightIcon, otp: LockClosedIcon, integrations: LinkIcon,
+  'white-label': SwatchIcon, reseller: BuildingStorefrontIcon, team: UserGroupIcon, billing: CreditCardIcon,
+  templates: DocumentTextIcon, troubleshooting: WrenchScrewdriverIcon, webhooks: BellIcon,
+}
+function SectionIcon({ id, className }: { id: string; className?: string }) {
+  const Icon = SECTION_ICONS[id] || BookOpenIcon
+  return <Icon className={className} aria-hidden="true" />
+}
 
 const sections = [
   {
-    id: 'getting-started', title: '🚀 Getting Started',
+    id: 'getting-started', title: 'Getting Started',
     items: [
       {
         title: 'Connect WhatsApp',
@@ -90,7 +107,7 @@ curl -H "X-API-Key: YOUR_KEY" https://waabek.com/api/v1/send
     ],
   },
   {
-    id: 'api', title: '🔌 REST API',
+    id: 'api', title: 'REST API',
     items: [
       {
         title: 'Send Message',
@@ -250,7 +267,7 @@ Returns per-recipient delivery status for a campaign.`,
     ],
   },
   {
-    id: 'campaigns', title: '📢 Campaigns',
+    id: 'campaigns', title: 'Campaigns',
     items: [
       {
         title: 'Create & Send Campaign',
@@ -313,7 +330,7 @@ Or use Netlify Scheduled Functions (already configured).
     ],
   },
   {
-    id: 'chatbot', title: '🤖 Chatbot Builder',
+    id: 'chatbot', title: 'Chatbot Builder',
     items: [
       {
         title: 'How the Chatbot Works',
@@ -363,7 +380,7 @@ Or use Netlify Scheduled Functions (already configured).
     ],
   },
   {
-    id: 'ai', title: '🧠 AI Auto-Reply',
+    id: 'ai', title: 'AI Auto-Reply',
     items: [
       {
         title: 'How AI Auto-Reply Works',
@@ -434,7 +451,7 @@ In **Live Chat**, click **Take Over** on any conversation to pause AI and handle
     ],
   },
   {
-    id: 'inbox', title: '💬 Live Chat',
+    id: 'inbox', title: 'Live Chat',
     items: [
       {
         title: 'Shared Inbox',
@@ -461,7 +478,7 @@ Filter conversations by: **All / Unread / Assigned to me / Unassigned / Resolved
     ],
   },
   {
-    id: 'otp', title: '🔐 OTP System',
+    id: 'otp', title: 'OTP System',
     items: [
       {
         title: 'Platform OTP Setup',
@@ -620,7 +637,7 @@ If \`digits\` doesn't exist on your WhatsApp Business Account yet:
     ],
   },
   {
-    id: 'integrations', title: '🔗 Integrations',
+    id: 'integrations', title: 'Integrations',
     items: [
       {
         title: 'WordPress Plugin',
@@ -752,7 +769,7 @@ Events: \`message_received\`, \`message_status\`, \`campaign_completed\``,
     ],
   },
   {
-    id: 'white-label', title: '🎨 White Label',
+    id: 'white-label', title: 'White Label',
     items: [
       {
         title: 'Branding & Custom Domain',
@@ -782,7 +799,7 @@ Enable **Hide Powered By** in White Label settings.`,
     ],
   },
   {
-    id: 'reseller', title: '🏪 Reseller System',
+    id: 'reseller', title: 'Reseller System',
     items: [
       {
         title: 'Become a Reseller',
@@ -834,7 +851,7 @@ Monthly Payout = Sum of (client_revenue × your_margin_percentage)
     ],
   },
   {
-    id: 'team', title: '👥 Team & Permissions',
+    id: 'team', title: 'Team & Permissions',
     items: [
       {
         title: 'Team Members',
@@ -880,7 +897,7 @@ You can set:
     ],
   },
   {
-    id: 'billing', title: '💳 Billing',
+    id: 'billing', title: 'Billing',
     items: [
       {
         title: 'Plans & Upgrade',
@@ -911,7 +928,7 @@ Go to **Dashboard → Billing → Manage Subscription**. Your account stays acti
     ],
   },
   {
-    id: 'templates', title: '📋 WhatsApp Templates',
+    id: 'templates', title: 'WhatsApp Templates',
     items: [
       {
         title: 'Approved Templates',
@@ -948,7 +965,7 @@ Go to **Admin → WA Templates** to view and configure template settings.`,
     ],
   },
   {
-    id: 'troubleshooting', title: '🔧 Troubleshooting',
+    id: 'troubleshooting', title: 'Troubleshooting',
     items: [
       {
         title: 'Common Issues & Fixes',
@@ -1010,7 +1027,7 @@ London, WC2H 9JQ, United Kingdom
     ],
   },
   {
-    id: 'webhooks', title: '🔔 Webhooks',
+    id: 'webhooks', title: 'Webhooks',
     items: [
       {
         title: 'Overview & Setup',
@@ -1863,7 +1880,7 @@ export default function DocsPage() {
                     ? 'bg-brand-500/10 text-blue-600 border-r-2 border-brand-500'
                     : 'text-slate-400 hover:text-slate-900 hover:bg-white'
                 )}>
-                {s.title}
+                <span className="inline-flex items-center gap-2"><SectionIcon id={s.id} className="h-4 w-4 shrink-0" />{s.title}</span>
                 <span className="ml-2 text-xs text-slate-600">({s.items.length})</span>
               </button>
             ))}
@@ -1876,7 +1893,7 @@ export default function DocsPage() {
         <div className="flex-1 overflow-y-auto pt-12 md:pt-0">
           <div className="max-w-3xl mx-auto p-8">
             {currentSection ? <>
-              <h1 className="text-2xl font-bold text-slate-900 mb-6">{currentSection.title}</h1>
+              <h1 className="mb-6 flex items-center gap-2.5 text-2xl font-bold text-slate-900"><SectionIcon id={currentSection.id} className="h-6 w-6 shrink-0" />{currentSection.title}</h1>
               <div className="space-y-3">
                 {currentSection.items.map(item => (
                   <div key={item.title} className="card overflow-hidden">

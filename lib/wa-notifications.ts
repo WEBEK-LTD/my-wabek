@@ -16,6 +16,9 @@ interface NotifyParams {
   // Fallback text if template fails or WA Web
   fallbackText: string
   contactId?: string | null
+  // Platform system messages only (OTP, password reset, welcome). These are
+  // also bypassed automatically by templateKey below.
+  bypassLimits?: boolean
 }
 
 // Map template keys to Meta template names + their parameter names in order
@@ -107,6 +110,9 @@ export const TEMPLATE_MAP = {
 
 export type NotificationKey = keyof typeof TEMPLATE_MAP
 
+// Platform system messages: never blocked by plan limits or opt-out.
+const SYSTEM_TEMPLATE_KEYS = new Set<string>(['OTP', 'PASSWORD_RESET', 'WELCOME', 'WELCOME_V1'])
+
 async function getAdminInstance(userId: string) {
   const db = supabaseAdmin()
   const CONNECTED = ['connected', 'active', 'open', 'ready']
@@ -180,15 +186,17 @@ export async function sendNotification(p: NotifyParams): Promise<{ success: bool
     }
   }
 
-  console.log(`[notify] ${p.templateKey} → template=${tmpl.name} phone=${cleanPhone} params=${JSON.stringify(p.params)} components=${JSON.stringify(components)}`)
+  // Never log params: they can contain OTP codes and reset links.
+  console.log(`[notify] ${p.templateKey} → template=${tmpl.name} phone=${cleanPhone} params=${Object.keys(p.params).join(',')}`)
 
   const provider = resolveProvider(inst)
+  const bypassLimits = p.bypassLimits === true || SYSTEM_TEMPLATE_KEYS.has(p.templateKey)
   console.log(`[notify] instance_id=${inst.id} instance_type=${inst.instance_type} provider=${provider.toUpperCase()} phone=${cleanPhone} template=${tmpl.name}`)
 
   if (provider === 'wa_web') {
     const r = await smartSendWAWeb({
       userId: p.userId, instanceId: inst.id,
-      to: cleanPhone, text: p.fallbackText, contactId: p.contactId,
+      to: cleanPhone, text: p.fallbackText, contactId: p.contactId, bypassLimits,
     })
     console.log(`[notify] result instance_id=${inst.id} provider=WA_WEB method=text message_id=${r.messageId || 'null'} error=${r.error || 'none'}`)
     return { success: !r.error, messageId: r.messageId, method: 'wa_web', error: r.error }
@@ -207,6 +215,7 @@ export async function sendNotification(p: NotifyParams): Promise<{ success: bool
     templateComponents: components,
     forceTemplate: true,
     source: 'notification' as const,
+    bypassLimits,
   })
 
   console.log(`[notify] result instance_id=${inst.id} provider=CLOUD_API method=${r.method} template=${r.templateUsed || 'none'} message_id=${r.messageId || 'null'} error=${r.error || 'none'}`)

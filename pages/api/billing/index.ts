@@ -1,11 +1,12 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
-import { requireAuth } from '@/lib/auth'
-import Stripe from 'stripe'
-import { v4 as uuidv4 } from 'uuid'
+import { requireAuth, requireOwnerOrRole } from '@/lib/auth'
+import { BillingError, BillingCycle, createCheckoutSession, createPortalSession, getStripe } from '@/lib/stripe'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  // GET is readable by team members; buying / managing billing (POST) is
+  // owner-only.
+  const user = req.method === 'POST' ? await requireOwnerOrRole(req, res) : await requireAuth(req, res)
   if (!user) return
   const db = supabaseAdmin()
 
@@ -87,11 +88,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // Auto-sync Stripe if needed
       const needsSync = plans.some((p: { price_monthly: number; stripe_price_id_monthly?: string }) => p.price_monthly > 0 && !p.stripe_price_id_monthly)
-      if (needsSync && process.env.STRIPE_SECRET_KEY) {
+      // Only an admin's own request can trigger the (admin-only) sync.
+      if (needsSync && process.env.STRIPE_SECRET_KEY && user.role === 'admin') {
         try {
           await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/admin/sync-stripe`, {
             method: 'POST',
-            headers: { 'Authorization': req.headers.authorization || '', 'Content-Type': 'application/json' },
+            headers: {
+              'Authorization': req.headers.authorization || '',
+              'Cookie': req.headers.cookie || '',
+              'Content-Type': 'application/json',
+            },
           })
           const { data: synced } = await db.from('plans').select('*').eq('is_active', true).order('sort_order')
           if (synced) plans = synced
@@ -103,50 +109,76 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    const { action, plan_id, billing_cycle, price_id, reseller_id, reseller_plan_id } = req.body
+    const { action, plan_id, reseller_id, reseller_plan_id } = req.body || {}
+    const billing_cycle: BillingCycle = req.body?.billing_cycle === 'yearly' ? 'yearly' : 'monthly'
     const appUrl = process.env.NEXT_PUBLIC_APP_URL
 
     try {
       if (action === 'checkout') {
         // Reseller with Stripe Connect
         if (reseller_id) {
+          const { data: me } = await db.from('users').select('referred_by').eq('id', user.userId).single()
+          if (!me?.referred_by || me.referred_by !== reseller_id) {
+            return res.status(400).json({ error: 'Invalid reseller' })
+          }
+
           const { data: resellerProfile } = await db.from('reseller_profiles')
             .select('stripe_connect_account_id, payment_method')
             .eq('user_id', reseller_id).single()
 
           if (resellerProfile?.stripe_connect_account_id && resellerProfile?.payment_method !== 'platform') {
-            const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2023-10-16' })
-            const { data: rPlan } = await db.from('reseller_plans').select('*, base_plan:base_plan_id(name)').eq('id', reseller_plan_id).single()
+            if (typeof reseller_plan_id !== 'string' || !reseller_plan_id) return res.status(400).json({ error: 'reseller_plan_id required' })
+            const stripe = getStripe()
+            const { data: rPlan } = await db.from('reseller_plans')
+              .select('*, base_plan:base_plan_id(name, price_yearly)')
+              .eq('id', reseller_plan_id)
+              .eq('reseller_id', reseller_id)
+              .eq('is_active', true)
+              .maybeSingle()
             if (!rPlan) return res.status(404).json({ error: 'Plan not found' })
+
+            const amount = billing_cycle === 'yearly'
+              ? Number(rPlan.custom_price_yearly || rPlan.base_plan?.price_yearly || 0)
+              : Number(rPlan.custom_price_monthly || 0)
+            if (!(amount > 0)) return res.status(400).json({ error: 'This plan is not available for the selected billing cycle' })
 
             const price = await stripe.prices.create({
               currency: rPlan.currency?.toLowerCase() || 'usd',
-              unit_amount: Math.round(rPlan.custom_price_monthly * 100),
+              unit_amount: Math.round(amount * 100),
               recurring: { interval: billing_cycle === 'yearly' ? 'year' : 'month' },
               product_data: { name: rPlan.custom_name || rPlan.base_plan?.name || 'Plan' },
             }, { stripeAccount: resellerProfile.stripe_connect_account_id })
 
+            const meta = {
+              userId: user.userId,
+              planId: rPlan.base_plan_id,          // server-derived, never the client's plan_id
+              resellerId: reseller_id,
+              resellerPlanId: rPlan.id,
+              billingCycle: billing_cycle,
+            }
             const session = await stripe.checkout.sessions.create({
               payment_method_types: ['card'],
               mode: 'subscription',
+              client_reference_id: user.userId,
               line_items: [{ price: price.id, quantity: 1 }],
               success_url: `${appUrl}/dashboard/billing?success=1`,
               cancel_url: `${appUrl}/dashboard/billing?cancelled=1`,
-              metadata: { userId: user.userId, planId: plan_id, resellerId: reseller_id, billingCycle: billing_cycle },
+              metadata: meta,
+              subscription_data: { metadata: meta },
             }, { stripeAccount: resellerProfile.stripe_connect_account_id })
 
             return res.status(200).json({ url: session.url })
           }
         }
 
-        // Platform checkout
+        // Platform checkout: the price is chosen server-side from plan + cycle
+        // (any client-sent price_id is ignored).
         if (!process.env.STRIPE_SECRET_KEY) return res.status(400).json({ error: 'Stripe is not configured. Ask the admin to add Stripe keys.' })
-        if (!price_id) return res.status(400).json({ error: 'No Stripe price ID for this plan. Go to Admin → Plans → Sync with Stripe.' })
+        if (typeof plan_id !== 'string' || !plan_id) return res.status(400).json({ error: 'plan_id required' })
 
-        const { createCheckoutSession } = await import('@/lib/stripe')
         const session = await createCheckoutSession({
           userId: user.userId, email: user.email,
-          planId: plan_id, priceId: price_id,
+          planId: plan_id,
           billingCycle: billing_cycle,
           successUrl: `${appUrl}/dashboard/billing?success=1`,
           cancelUrl: `${appUrl}/dashboard/billing?cancelled=1`,
@@ -156,16 +188,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (action === 'portal') {
         if (!process.env.STRIPE_SECRET_KEY) return res.status(400).json({ error: 'Stripe not configured' })
-        const { createPortalSession } = await import('@/lib/stripe')
         const session = await createPortalSession({
           userId: user.userId,
           returnUrl: `${appUrl}/dashboard/billing`,
         })
         return res.status(200).json({ url: session.url })
       }
+
+      return res.status(400).json({ error: 'Unknown action' })
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Stripe error'
-      return res.status(500).json({ error: msg })
+      if (err instanceof BillingError) return res.status(err.status).json({ error: err.message })
+      console.error('[billing] checkout/portal error:', (err as Error)?.message)
+      return res.status(500).json({ error: 'Payment provider error. Please try again later.' })
     }
   }
 

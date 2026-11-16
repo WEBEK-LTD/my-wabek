@@ -1,283 +1,84 @@
-// @ts-nocheck
-import { useState, useEffect, useRef, useCallback } from 'react'
-import Head from 'next/head'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import axios from 'axios'
-import { useAuthStore } from '@/lib/store'
-import { useRequireAuth } from '@/hooks/useAuth'
-import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
-import { format, isToday, isYesterday } from 'date-fns'
-import clsx from 'clsx'
-import DashboardLayout from '@/components/layout/DashboardLayout'
 import {
-  PaperAirplaneIcon, MagnifyingGlassIcon, XMarkIcon,
-  CheckIcon, UserCircleIcon, FunnelIcon, EllipsisVerticalIcon,
-  CheckCircleIcon, ClockIcon, ExclamationCircleIcon,
-  BoltIcon, TagIcon, UserPlusIcon, ArchiveBoxIcon,
-  FaceSmileIcon, PaperClipIcon, ArrowPathIcon,
+  ArrowLeftIcon, UserCircleIcon, ChatBubbleLeftRightIcon, ClockIcon, CheckBadgeIcon, InformationCircleIcon,
 } from '@heroicons/react/24/outline'
-import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid'
+import DashboardLayout from '@/components/layout/DashboardLayout'
+import { Avatar, Button, Select, Skeleton, Tooltip } from '@/components/ui'
+import { cn } from '@/components/ui/utils'
+import { useAuthStore } from '@/lib/store'
+import { useRouter } from 'next/router'
+import { useRequireAuth } from '@/hooks/useAuth'
+import { localeTag } from '@/components/auth/makeCopy'
+import { useInboxCopy } from '@/components/inbox/copy'
+import { ConversationList, STATUS_KEYS } from '@/components/inbox/ConversationList'
+import type { AssignFilter } from '@/components/inbox/ConversationList'
+import { MessageBubble } from '@/components/inbox/MessageBubble'
+import { Composer } from '@/components/inbox/Composer'
+import { CustomerPanel } from '@/components/inbox/CustomerPanel'
+import { TemplatesModal, type InboxTemplate, type TemplateParams } from '@/components/inbox/TemplatesModal'
+import { dayLabel, isAiMessage, windowState } from '@/components/inbox/utils'
 
-const EMOJIS = ['👍','❤️','😂','😮','😢','🙏','🔥','✅','💯','🎉']
-
-const STATUS_CONFIG = {
-  open: { label: 'Open', color: 'text-blue-600', bg: 'bg-blue-50/30', icon: '🟢' },
-  pending: { label: 'Pending', color: 'text-yellow-400', bg: 'bg-yellow-900/30', icon: '🟡' },
-  resolved: { label: 'Resolved', color: 'text-slate-400', bg: 'bg-[#F8FAFC]/30', icon: '✅' },
-  spam: { label: 'Spam', color: 'text-red-400', bg: 'bg-red-900/30', icon: '🚫' },
-}
-
-const PRIORITY_CONFIG = {
-  low: { label: 'Low', color: 'text-slate-400' },
-  normal: { label: 'Normal', color: 'text-blue-400' },
-  high: { label: 'High', color: 'text-orange-400' },
-  urgent: { label: 'Urgent', color: 'text-red-400' },
-}
-
-function formatTime(d) {
-  const date = new Date(d)
-  if (isToday(date)) return format(date, 'HH:mm')
-  if (isYesterday(date)) return 'Yesterday'
-  return format(date, 'MMM d')
-}
-
-function formatBytes(bytes) {
-  if (!bytes) return ''
-  const units = ['B', 'KB', 'MB', 'GB']
-  let i = 0
-  let n = bytes
-  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++ }
-  return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`
-}
-
-function docIconFor(mime, filename) {
-  const ext = (filename || '').split('.').pop()?.toLowerCase() || ''
-  if (mime?.includes('pdf') || ext === 'pdf') return '📄'
-  if (mime?.includes('word') || ['doc', 'docx'].includes(ext)) return '📝'
-  if (mime?.includes('sheet') || mime?.includes('excel') || ['xls', 'xlsx'].includes(ext)) return '📊'
-  if (mime?.includes('zip') || mime?.includes('compressed') || ['zip', 'rar', '7z'].includes(ext)) return '🗜️'
-  if (mime?.includes('presentation') || ['ppt', 'pptx'].includes(ext)) return '📑'
-  return '📎'
-}
-
-// Renders the media portion of a message bubble (image/video/audio/ptt/
-// document/sticker). Returns null for plain text — caller still renders
-// msg.content as a caption underneath when present. Fully isolated: any
-// unrecognized/missing media_url silently falls back to showing nothing
-// extra, the text content below still renders normally.
-function MediaBubbleContent({ msg }) {
-  if (!msg.media_url) return null
-
-  switch (msg.type) {
-    case 'image':
-      return (
-        <a
-          href={msg.media_url?.startsWith('data:') ? undefined : msg.media_url}
-          onClick={msg.media_url?.startsWith('data:') ? (e) => { e.preventDefault(); window.open(msg.media_url) } : undefined}
-          target="_blank" rel="noopener noreferrer" style={{ cursor: 'pointer' }}
-        >
-          <img src={msg.media_url} alt="image" className="rounded-lg mb-1 max-w-64 max-h-64 object-cover" />
-        </a>
-      )
-    case 'sticker':
-      return <img src={msg.media_url} alt="sticker" className="w-32 h-32 mb-1" />
-    case 'video':
-      return (
-        <video src={msg.media_url} controls className="rounded-lg mb-1 max-w-64 max-h-64" />
-      )
-    case 'ptt':
-      return (
-        <div className="flex items-center gap-2 mb-1 min-w-[200px]">
-          <span className="text-lg">🎤</span>
-          <audio src={msg.media_url} controls className="h-9 max-w-[220px]" />
-        </div>
-      )
-    case 'audio':
-      return (
-        <div className="flex items-center gap-2 mb-1 min-w-[200px]">
-          <span className="text-lg">🎵</span>
-          <audio src={msg.media_url} controls className="h-9 max-w-[220px]" />
-        </div>
-      )
-    case 'document':
-      return (
-        <button
-          onClick={() => {
-            const url = msg.media_url
-            if (!url) return
-            if (url.startsWith('data:')) {
-              // data URI — create blob and download (target=_blank fails for data URIs)
-              const [meta, b64] = url.split(',')
-              const mime = meta.split(':')[1]?.split(';')[0] || 'application/octet-stream'
-              const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0))
-              const blob  = new Blob([bytes], { type: mime })
-              const a = document.createElement('a')
-              a.href = URL.createObjectURL(blob)
-              a.download = msg.media_filename || 'file'
-              a.click()
-              URL.revokeObjectURL(a.href)
-            } else {
-              // Regular URL — open in new tab
-              window.open(url, '_blank', 'noopener,noreferrer')
-            }
-          }}
-          className="flex items-center gap-2 mb-1 bg-black/5 rounded-lg px-3 py-2 hover:bg-black/10 transition-colors min-w-[200px] text-left w-full"
-        >
-          <span className="text-2xl flex-shrink-0">{docIconFor(msg.media_mime_type, msg.media_filename)}</span>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium truncate">{msg.media_filename || 'Document'}</p>
-            <p className="text-[10px] opacity-60">Open / Download</p>
-          </div>
-        </button>
-      )
-    default:
-      return null
-  }
-}
-
-function MessageBubble({ msg, showAvatar }) {
-  const isOut = msg.direction === 'outbound'
-  const statusIcon = {
-    pending: <span className="text-slate-500 text-xs">🕐</span>,
-    waiting: <span className="text-slate-500 text-xs">🕐</span>,
-    sending: <span className="text-slate-500 text-xs">🕐</span>,
-    sent: <CheckIcon className="w-3 h-3 text-slate-400" />,
-    delivered: <div className="flex"><CheckIcon className="w-3 h-3 text-slate-400" /><CheckIcon className="w-3 h-3 -ml-1.5 text-slate-400" /></div>,
-    read: <div className="flex"><CheckIcon className="w-3 h-3 text-blue-400" /><CheckIcon className="w-3 h-3 -ml-1.5 text-blue-400" /></div>,
-    failed: <ExclamationCircleIcon className="w-3 h-3 text-red-400" />,
-    window: <ExclamationCircleIcon className="w-3 h-3 text-yellow-400" />,
-  }
-
-  return (
-    <div className={clsx('flex items-end gap-2 group', isOut ? 'justify-end' : 'justify-start')}>
-      {!isOut && showAvatar && (
-        <div className="w-6 h-6 rounded-full bg-[#F8FAFC] flex items-center justify-center text-xs text-slate-400 flex-shrink-0 mb-1">
-          {msg.contacts?.name?.[0] || '?'}
-        </div>
-      )}
-      {!isOut && !showAvatar && <div className="w-6 flex-shrink-0" />}
-      <div className="max-w-[70%]">
-        <div className={clsx('px-3 py-2 rounded-2xl text-sm', isOut ? 'bg-brand-600 text-white rounded-br-sm' : 'bg-[#F8FAFC] text-slate-800 rounded-bl-sm', msg._windowWarning && 'opacity-60')}>
-          <MediaBubbleContent msg={msg} />
-          {msg.content && !(msg.media_url && /^\[(image|video|audio|document|sticker|ptt)\]$/.test(msg.content)) && (
-            <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
-          )}
-          <div className={clsx('flex items-center gap-1 mt-1', isOut ? 'justify-end' : 'justify-start')}>
-            {(msg.type === 'ai_reply' || msg.meta?.source === 'ai_assistant') && (
-              <span className="text-[9px] text-purple-400 bg-purple-900/30 px-1.5 py-0.5 rounded-full">🧠 AI</span>
-            )}
-            {msg.meta?.source === 'chatbot' && (
-              <span className="text-[9px] text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded-full">🤖 Bot</span>
-            )}
-            <span className="text-[10px] opacity-60">{formatTime(msg.created_at)}</span>
-            {isOut && <span className="opacity-70">{msg._windowWarning ? statusIcon.window : (statusIcon[msg.status] || statusIcon.sent)}</span>}
-          </div>
-        </div>
-        {msg._windowWarning && (
-          <p className="text-yellow-400 text-[11px] mt-1 text-right">Not delivered — customer outside 24h window</p>
-        )}
-        {!msg._windowWarning && msg.status === 'failed' && msg.meta?.error_code && (
-          <p className="text-red-400 text-[11px] mt-1 text-right">
-            {msg.meta.error_code === 131047 
-              ? '⚠️ Outside 24h window — customer must message first'
-              : msg.meta.error_code === 131026
-              ? '⚠️ Message not delivered — phone not on WhatsApp'
-              : `✕ Failed (${msg.meta.error_code}): ${msg.meta.error_msg || 'Unknown error'}`}
-          </p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function ConversationItem({ conv, active, onClick, unread, showInboxBadge = false }) {
-  const status = STATUS_CONFIG[conv.status]
-  const lastMsg = conv.last_message
-  const contact = conv.contacts
-  const inbox = conv.whatsapp_instances
-
-  return (
-    <button onClick={onClick} className={clsx(
-      'w-full text-left px-3 py-3 border-b border-slate-200/50 hover:bg-slate-50 transition-colors',
-      active && 'bg-blue-50/20 border-l-2 border-l-brand-500'
-    )}>
-      <div className="flex items-start gap-3">
-        <div className="relative flex-shrink-0">
-          <div className="w-10 h-10 rounded-full bg-[#F8FAFC] flex items-center justify-center text-sm font-bold text-slate-700">
-            {contact?.name?.[0]?.toUpperCase() || contact?.phone?.[0] || '?'}
-          </div>
-          {unread > 0 && (
-            <span className="absolute -top-1 -right-1 w-4 h-4 bg-brand-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-              {unread > 9 ? '9+' : unread}
-            </span>
-          )}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-0.5">
-            <p className="text-sm font-medium text-slate-900 truncate">{contact?.name || contact?.phone}</p>
-            <span className="text-[10px] text-slate-500 flex-shrink-0 ml-2">
-              {lastMsg ? formatTime(lastMsg.created_at) : ''}
-            </span>
-          </div>
-          <p className="text-xs text-slate-500 truncate">
-            {lastMsg?.direction === 'outbound' && '↗ '}
-            {lastMsg?.content || 'No messages yet'}
-          </p>
-          <div className="flex items-center gap-1.5 mt-1">
-            <span className={clsx('text-[10px] px-1.5 py-0.5 rounded', status.bg, status.color)}>{status.label}</span>
-            {conv.priority !== 'normal' && (
-              <span className={clsx('text-[10px]', PRIORITY_CONFIG[conv.priority]?.color)}>
-                {conv.priority === 'urgent' ? '🔴' : conv.priority === 'high' ? '🟠' : ''}
-              </span>
-            )}
-            {conv.assigned_user && (
-              <span className="text-[10px] text-slate-600">@{conv.assigned_user.name?.split(' ')[0]}</span>
-            )}
-            {/* Inbox badge — shown in All Inboxes view so you know which number */}
-            {showInboxBadge && inbox && (
-              <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded truncate max-w-[80px]">
-                📱 {inbox.display_name || inbox.phone_number}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-    </button>
-  )
+/** ≥1280px: the customer panel sits beside the thread instead of over it. */
+function useIsWide() {
+  const [wide, setWide] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1280px)')
+    const on = () => setWide(mq.matches)
+    on()
+    mq.addEventListener?.('change', on)
+    return () => mq.removeEventListener?.('change', on)
+  }, [])
+  return wide
 }
 
 export default function ChatPage() {
   useRequireAuth()
   const { user } = useAuthStore()
+  const { c, lang } = useInboxCopy()
+  const isWide = useIsWide()
 
   // State
-  const [conversations, setConversations] = useState([])
-  const [activeConv, setActiveConv] = useState(null)
-  const activeConvRef = useRef(null)  // keeps realtime handler in sync without re-subscribing
-  const [messages, setMessages] = useState([])
+  const [conversations, setConversations] = useState<any[]>([])
+  const [activeConv, setActiveConv] = useState<any>(null)
+  const activeConvRef = useRef<any>(null)  // keeps realtime handler in sync without re-subscribing
+  const [messages, setMessages] = useState<any[]>([])
+  const [loadingMessages, setLoadingMessages] = useState(false)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
-  const [attachment, setAttachment] = useState(null) // { file, previewUrl, type, caption }
+  const [attachment, setAttachment] = useState<any>(null) // { file, previewUrl, type, caption }
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
-  const fileInputRef = useRef(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState(true)
   const [searchQ, setSearchQ] = useState('')
   const [statusFilter, setStatusFilter] = useState('open')
+  const [assignFilter, setAssignFilter] = useState<AssignFilter>('all')
   const [showQuickReplies, setShowQuickReplies] = useState(false)
-  const [quickReplies, setQuickReplies] = useState([])
+  const [quickReplies, setQuickReplies] = useState<any[]>([])
   const [showEmoji, setShowEmoji] = useState(false)
-  const [instances, setInstances] = useState([])
-  const [inboxes, setInboxes] = useState([])          // accessible inboxes for selector
+  const [instances, setInstances] = useState<any[]>([])
+  const [inboxes, setInboxes] = useState<any[]>([])          // accessible inboxes for selector
   const [canSeeAll, setCanSeeAll] = useState(true)    // owner = true
   const [selectedInbox, setSelectedInbox] = useState<string | null>(null) // null = All Inboxes
   const [selectedInstance, setSelectedInstance] = useState('')  // for send path (backward-compat)
   const [showDetails, setShowDetails] = useState(false)
-  const [teamMembers, setTeamMembers] = useState([])
-  const [unreadCounts, setUnreadCounts] = useState({})
+  // Large screens open the customer panel by default (true three-pane view).
+  useEffect(() => { if (window.matchMedia('(min-width: 1536px)').matches) setShowDetails(true) }, [])
+  const [teamMembers, setTeamMembers] = useState<any[]>([])
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({})
+  const [windowWarning, setWindowWarning] = useState<string | null>(null)
+  const [mode, setMode] = useState<'reply' | 'note'>('reply')
+  const [savingNote, setSavingNote] = useState(false)
+  const [templatesOpen, setTemplatesOpen] = useState(false)
+  const [contactDetails, setContactDetails] = useState<Record<string, any>>({})
+  const [contactLoading, setContactLoading] = useState(false)
+  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiBlocked, setAiBlocked] = useState(false)
 
-  const messagesEndRef = useRef(null)
-  const textareaRef = useRef(null)
-  const realtimeRef = useRef(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Load accessible inboxes + last selected
   const loadInboxes = async (currentStatus?: string) => {
@@ -336,90 +137,150 @@ export default function ChatPage() {
     ]).finally(() => setLoading(false))
   }, [])
 
+  // Deep link: /dashboard/chat?contact=<id> (e.g. "open chat" on a contact page)
+  // opens that contact's conversation, or starts one when none exists yet.
+  const router = useRouter()
+  const deepLinkDone = useRef(false)
+  useEffect(() => {
+    if (loading || deepLinkDone.current || !router.isReady) return
+    const raw = router.query.contact
+    const contactId = typeof raw === 'string' && /^[0-9a-f-]{36}$/i.test(raw) ? raw : null
+    if (!contactId) return
+    deepLinkDone.current = true
+    ;(async () => {
+      try {
+        const known = conversations.find(cv => cv.contact_id === contactId)
+        if (known) { openConversation(known); return }
+        const { data } = await axios.get('/api/inbox', { params: { status: 'all', contact_id: contactId, ...(canSeeAll ? { instance_id: 'all' } : {}) } })
+        const found = (data?.conversations || [])[0]
+        if (found) {
+          setConversations(prev => (prev.some(cv => cv.id === found.id) ? prev : [found, ...prev]))
+          openConversation(found)
+          return
+        }
+        // No conversation yet: open an empty thread for the contact.
+        const { data: cd } = await axios.get(`/api/contacts/${contactId}`)
+        const contact = cd?.contact
+        if (!contact) return
+        openConversation({
+          id: null, contact_id: contact.id, instance_id: selectedInstance || instances[0]?.id || null, status: 'open',
+          contacts: { id: contact.id, name: contact.name, phone: contact.phone, tags: contact.tags },
+        })
+      } catch { /* invalid or inaccessible contact: stay on the list */ }
+    })()
+  }, [loading, router.isReady, router.query.contact])
+
   // Keep ref in sync so realtime handler always reads current value
   useEffect(() => { activeConvRef.current = activeConv }, [activeConv])
+  // ── Live updates ────────────────────────────────────────────
+  // Authenticated polling of /api/inbox/updates (server-scoped to this
+  // account and the member's inboxes). Replaces the former anon-key Supabase
+  // Realtime subscription, which received every tenant's messages.
+  const seenMsgIdsRef = useRef(new Set<string>())
   useEffect(() => {
     if (!user?.id) return
+    let cancelled = false
+    let inFlight = false
+    let cursor: string | null = null
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const seen = seenMsgIdsRef.current
 
-    const channel = supabase
-      .channel('inbox-realtime')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        // No server-side filter — filter client-side to avoid RLS/publication issues
-        // (server filter requires exact column match; client filter is more reliable)
-      }, (payload) => {
-        const newMsg = payload.new
-        // Client-side filter: only handle messages belonging to this user
-        if (newMsg.user_id !== user.id) return
-        const conv = activeConvRef.current  // always current — no stale closure
+    const handleNewMessage = (newMsg: any) => {
+      const conv = activeConvRef.current  // always current — no stale closure
 
-        // ── Add to open conversation ──────────────────────────
-        if (conv && newMsg.contact_id === conv.contact_id) {
-          setMessages(prev => {
-            if (prev.find(m => m.id === newMsg.id)) return prev
-            if (newMsg.wa_message_id && prev.find(m => m.wa_message_id === newMsg.wa_message_id)) return prev
-            const hasTempWaId = prev.find(m => m.id?.startsWith('temp-') && m.wa_message_id === newMsg.wa_message_id)
-            if (hasTempWaId) return prev.map(m => m.wa_message_id === newMsg.wa_message_id ? newMsg : m)
-            if (newMsg.direction === 'outbound') {
-              const hasTempOut = prev.find(m => m.id?.startsWith('temp-') && m.content === newMsg.content)
-              if (hasTempOut) return prev.map(m => (m.id?.startsWith('temp-') && m.content === newMsg.content) ? newMsg : m)
-            }
-            return [...prev, newMsg]
-          })
-        }
+      // ── Add to open conversation ──────────────────────────
+      if (conv && newMsg.contact_id === conv.contact_id) {
+        setMessages(prev => {
+          if (prev.find(m => m.id === newMsg.id)) return prev
+          if (newMsg.wa_message_id && prev.find(m => m.wa_message_id === newMsg.wa_message_id)) return prev
+          const hasTempWaId = prev.find(m => m.id?.startsWith('temp-') && m.wa_message_id === newMsg.wa_message_id)
+          if (hasTempWaId) return prev.map(m => m.wa_message_id === newMsg.wa_message_id ? newMsg : m)
+          if (newMsg.direction === 'outbound') {
+            const hasTempOut = prev.find(m => m.id?.startsWith('temp-') && m.content === newMsg.content)
+            if (hasTempOut) return prev.map(m => (m.id?.startsWith('temp-') && m.content === newMsg.content) ? newMsg : m)
+          }
+          return [...prev, newMsg]
+        })
+      }
 
-        // ── Update conversations list ─────────────────────────
-        if (newMsg.direction === 'inbound') {
-          setUnreadCounts(prev => ({
-            ...prev,
-            [newMsg.contact_id]: (prev[newMsg.contact_id] || 0) + 1,
-          }))
-          setConversations(prev => {
-            const exists = prev.find(c =>
-              c.contact_id === newMsg.contact_id &&
-              (!newMsg.instance_id || c.instance_id === newMsg.instance_id)
-            )
-            if (exists) {
-              return prev
-                .map(c => c.contact_id === newMsg.contact_id &&
-                  (!newMsg.instance_id || c.instance_id === newMsg.instance_id)
-                    ? { ...c, last_message: newMsg, last_message_at: newMsg.created_at }
-                    : c
-                )
-                .sort((a, b) => new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime())
-            }
-            // New contact — reload conversations to get full contact details
-            setTimeout(() => loadConversations(newMsg.instance_id || null), 300)
+      // ── Update conversations list ─────────────────────────
+      if (newMsg.direction === 'inbound') {
+        setUnreadCounts(prev => ({
+          ...prev,
+          [newMsg.contact_id]: (prev[newMsg.contact_id] || 0) + 1,
+        }))
+        setConversations(prev => {
+          const exists = prev.find(c =>
+            c.contact_id === newMsg.contact_id &&
+            (!newMsg.instance_id || c.instance_id === newMsg.instance_id)
+          )
+          if (exists) {
             return prev
-          })
-          if (newMsg.instance_id) {
-            setInboxes(prev => prev.map((inbox: any) =>
-              inbox.id === newMsg.instance_id
-                ? { ...inbox, unread: (inbox.unread || 0) + 1 }
-                : inbox
-            ))
+              .map(c => c.contact_id === newMsg.contact_id &&
+                (!newMsg.instance_id || c.instance_id === newMsg.instance_id)
+                  ? { ...c, last_message: newMsg, last_message_at: newMsg.created_at }
+                  : c
+              )
+              .sort((a, b) => new Date(b.last_message_at || 0).getTime() - new Date(a.last_message_at || 0).getTime())
+          }
+          // New contact — reload conversations to get full contact details
+          setTimeout(() => loadConversations(newMsg.instance_id || null), 300)
+          return prev
+        })
+        if (newMsg.instance_id) {
+          setInboxes(prev => prev.map((inbox: any) =>
+            inbox.id === newMsg.instance_id
+              ? { ...inbox, unread: (inbox.unread || 0) + 1 }
+              : inbox
+          ))
+        }
+      }
+    }
+
+    const schedule = () => {
+      if (cancelled) return
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(tick, 3500)
+    }
+
+    const tick = async () => {
+      if (cancelled || inFlight) return
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') { schedule(); return }
+      inFlight = true
+      try {
+        const { data } = await axios.get('/api/inbox/updates', { params: cursor ? { after: cursor } : {} })
+        if (cancelled) return
+        const isFirst = cursor === null
+        cursor = data?.cursor || cursor
+        if (!isFirst) {
+          if (seen.size > 5000) seen.clear()
+          for (const m of data?.messages || []) {
+            if (seen.has(m.id)) {
+              // Re-delivered (overlap window) — just refresh its status
+              setMessages(prev => prev.map(x => (x.id === m.id && x.status !== m.status) ? { ...x, status: m.status } : x))
+              continue
+            }
+            seen.add(m.id)
+            handleNewMessage(m)
           }
         }
-      })
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'messages',
-      }, (payload) => {
-        const updated = payload.new
-        if (updated.user_id !== user?.id) return
-        setMessages(prev => prev.map(m =>
-          m.id === updated.id ? { ...m, status: updated.status } : m
-        ))
-      })
-      .subscribe((status) => {
-        console.log('[realtime] subscription:', status)
-      })
+      } catch {} finally {
+        inFlight = false
+      }
+      schedule()
+    }
 
-    realtimeRef.current = channel
-    return () => { supabase.removeChannel(channel) }
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible' && !inFlight) { if (timer) clearTimeout(timer); tick() }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    tick()
+
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [user?.id])  // ← no activeConv dep — using ref to avoid stale closure
 
   // Poll for message status updates every 4 seconds
@@ -443,7 +304,7 @@ export default function ChatPage() {
 
         setMessages(prev => prev.map(msg => {
           if (!pendingIds.includes(msg.id)) return msg
-          const updated = fresh.find(f =>
+          const updated = fresh.find((f: any) =>
             f.id === msg.id ||
             (f.wa_message_id && f.wa_message_id === msg.wa_message_id)
           )
@@ -459,7 +320,8 @@ export default function ChatPage() {
 
   // Scroll to bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const el = scrollRef.current
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [messages])
 
   const loadConversations = async (inboxId?: string | null, status?: string) => {
@@ -478,31 +340,43 @@ export default function ChatPage() {
   // and by switchInbox on user selection — this handles only statusFilter changes)
   useEffect(() => { loadConversations(selectedInbox, statusFilter) }, [statusFilter])
 
-  const openConversation = async (conv) => {
+  const openConversation = async (conv: any) => {
     setActiveConv(conv)
-    setShowDetails(false)
+    if (!isWide) setShowDetails(false)
+    setWindowWarning(null)
+    setAiSuggestion(null)
+    setMode('reply')
     // Clear unread
     setUnreadCounts(prev => ({ ...prev, [conv.contact_id]: 0 }))
     // Load messages
+    setMessages([])
+    setLoadingMessages(true)
     try {
       const { data } = await axios.get('/api/whatsapp/messages', { params: { contact_id: conv.contact_id, limit: 50, _t: Date.now() } })
       setMessages(data.messages || [])
-    } catch {}
+    } catch {} finally { setLoadingMessages(false) }
   }
+
+  // The reply goes out from the conversation's own number when it is connected
+  // (the 24-hour window belongs to that number).
+  const sendingInstance = () =>
+    instances.find(i => i.id === activeConv?.instance_id) || instances.find(i => i.id === selectedInstance) || instances[0]
 
   const sendMessage = async () => {
     if (!text.trim() || !activeConv || sending) return
     setSending(true)
     const msgText = text.trim()
     setText('')
+    setAiSuggestion(null)
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
     // Optimistic update
     const tempMsg = { id: 'temp-' + Date.now(), direction: 'outbound', content: msgText, status: 'sending', created_at: new Date().toISOString(), type: 'text' }
     setMessages(prev => [...prev, tempMsg])
 
     try {
-      const instance = instances.find(i => i.id === selectedInstance) || instances[0]
-      if (!instance) { toast.error('No WhatsApp instance connected'); return }
+      const instance = sendingInstance()
+      if (!instance) { toast.error(c('no_instance')); return }
 
       const sendResp = await axios.post('/api/whatsapp/chat-send', {
         instance_id: instance.id,
@@ -526,22 +400,50 @@ export default function ChatPage() {
     } catch (e: any) {
       const data = e?.response?.data
       if (data?.outside_window) {
-        // Remove the optimistic message and show inline warning
-        setMessages(prev => prev.map(m => m.id === tempMsg.id 
+        // Keep the optimistic message and show the inline warning
+        setMessages(prev => prev.map(m => m.id === tempMsg.id
           ? { ...m, status: 'failed', _windowWarning: true }
           : m
         ))
         setWindowWarning('outside')
       } else {
         setMessages(prev => prev.map(m => m.id === tempMsg.id ? { ...m, status: 'failed' } : m))
-        toast.error(data?.error || 'Send failed')
+        toast.error(data?.error || c('send_failed'))
         setText(msgText)
       }
     } finally { setSending(false) }
   }
 
+  // ── Approved template (Cloud API; reopens a conversation outside the 24h window) ──
+  const sendTemplate = async (tpl: InboxTemplate, params: TemplateParams) => {
+    if (!activeConv) return
+    const instance = sendingInstance()
+    if (!instance) { toast.error(c('no_instance')); throw new Error('no_instance') }
+    try {
+      const { data } = await axios.post('/api/whatsapp/chat-send', {
+        instance_id: instance.id,
+        to: activeConv.contacts?.phone,
+        contact_id: activeConv.contacts?.id,
+        template: { name: tpl.name, language: tpl.language, params },
+      })
+      const content = data?.content || `[${tpl.name}]`
+      const now = new Date().toISOString()
+      setMessages(prev => [...prev, {
+        id: 'temp-' + Date.now(), direction: 'outbound', content, status: 'sent', created_at: now, type: 'text',
+        wa_message_id: data?.wa_message_id, meta: { method: 'template', template: tpl.name, source: 'live_chat' },
+      }])
+      setConversations(prev => prev.map(cv =>
+        cv.id === activeConv.id ? { ...cv, last_message: { content, direction: 'outbound', created_at: now } } : cv
+      ))
+      toast.success(c('tpl_sent'))
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || c('tpl_send_failed'))
+      throw e
+    }
+  }
+
   // ── Attachments (isolated from the text sendMessage flow above) ──────────
-  function mimeToWaType(mime) {
+  function mimeToWaType(mime: string) {
     if (!mime) return 'document'
     if (mime.startsWith('image/')) return 'image'
     if (mime.startsWith('video/')) return 'video'
@@ -549,10 +451,10 @@ export default function ChatPage() {
     return 'document'
   }
 
-  const pickAttachment = (e) => {
+  const pickAttachment = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 16 * 1024 * 1024) { toast.error('File too large (max 16MB)'); return }
+    if (file.size > 16 * 1024 * 1024) { toast.error(c('file_too_large')); return }
     const previewUrl = file.type.startsWith('image/') || file.type.startsWith('video/')
       ? URL.createObjectURL(file) : null
     setAttachment({ file, previewUrl, type: mimeToWaType(file.type), caption: '' })
@@ -569,8 +471,8 @@ export default function ChatPage() {
     setUploadingAttachment(true)
 
     try {
-      const instance = instances.find(i => i.id === selectedInstance) || instances[0]
-      if (!instance) { toast.error('No WhatsApp instance connected'); return }
+      const instance = sendingInstance()
+      if (!instance) { toast.error(c('no_instance')); return }
 
       // 1. Upload to our storage
       const formData = new FormData()
@@ -605,7 +507,7 @@ export default function ChatPage() {
       const waId = sendResp.data?.wa_message_id
       setMessages(prev => prev.map(m => m.id === tempMsg.id ? { ...m, status: 'sent', wa_message_id: waId } : m))
       setConversations(prev => prev.map(c =>
-        c.id === activeConv.id ? { ...c, last_message: { content: sentCaption || `[${attachment.type}]`, direction: 'outbound', created_at: new Date().toISOString() } } : c
+        c.id === activeConv.id ? { ...c, last_message: { content: sentCaption || `[${attachment.type}]`, direction: 'outbound', created_at: new Date().toISOString(), type: attachment.type } } : c
       ))
     } catch (e: any) {
       const data = e?.response?.data
@@ -614,375 +516,285 @@ export default function ChatPage() {
         setWindowWarning('outside')
       } else {
         setMessages(prev => prev.map(m => m.status === 'sending' ? { ...m, status: 'failed' } : m))
-        toast.error(data?.error || 'Attachment send failed')
+        toast.error(data?.error || c('attachment_failed'))
       }
     } finally { setUploadingAttachment(false) }
   }
 
-  const updateConversation = async (updates) => {
-    if (!activeConv) return
+  const updateConversation = async (updates: Record<string, unknown>, successMsg?: string) => {
+    if (!activeConv) return false
     try {
       const { data } = await axios.put(`/api/inbox/${activeConv.id}`, updates)
-      setActiveConv(prev => ({ ...prev, ...data.conversation }))
+      setActiveConv((prev: any) => ({ ...prev, ...data.conversation }))
       setConversations(prev => prev.map(c => c.id === activeConv.id ? { ...c, ...data.conversation } : c))
-      toast.success('Updated')
-    } catch { toast.error('Failed') }
+      toast.success(successMsg || c('updated'))
+      return true
+    } catch { toast.error(c('update_failed')); return false }
   }
+
+  // ── Internal notes (stored in the conversation's notes field) ──────────
+  const addNote = async () => {
+    const note = text.trim()
+    if (!note || !activeConv || savingNote) return
+    setSavingNote(true)
+    const stamp = new Intl.DateTimeFormat(localeTag(lang), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())
+    const entry = `[${stamp}${user?.name ? ` · ${user.name}` : ''}] ${note}`
+    const next = (activeConv.notes ? `${activeConv.notes}\n` : '') + entry
+    const ok = await updateConversation({ notes: next }, c('note_added'))
+    if (ok) setText('')
+    setSavingNote(false)
+  }
+
+  // ── AI reply suggestion (on demand; server builds it from the conversation) ─
+  const lastInbound = useMemo(() => [...messages].reverse().find(m => m.direction === 'inbound' && m.content), [messages])
+  const suggestReply = async () => {
+    if (!activeConv || aiLoading) return
+    setAiLoading(true)
+    setAiSuggestion(null)
+    try {
+      const { data } = await axios.post('/api/ai/suggest', activeConv.id
+        ? { conversation_id: activeConv.id }
+        : { contact_id: activeConv.contact_id, instance_id: activeConv.instance_id || undefined })
+      if (data?.suggestion) setAiSuggestion(String(data.suggestion).trim())
+      else toast.error(c('ai_failed'))
+    } catch (e: any) {
+      if (e?.response?.data?.upgrade_required) { setAiBlocked(true); toast.error(c('ai_upgrade')) }
+      else toast.error(e?.response?.data?.error || c('ai_failed'))
+    } finally { setAiLoading(false) }
+  }
+
+  // ── Contact details for the side panel ─────────────────────────────────
+  const panelOpen = !!activeConv && showDetails
+  useEffect(() => {
+    const id = activeConv?.contact_id
+    if (!panelOpen || !id || contactDetails[id]) return
+    setContactLoading(true)
+    axios.get(`/api/contacts/${id}`)
+      .then(r => setContactDetails(prev => ({ ...prev, [id]: r.data.contact })))
+      .catch(() => {})
+      .finally(() => setContactLoading(false))
+  }, [panelOpen, activeConv?.contact_id])
 
   const filteredConvs = conversations.filter(c => {
+    if (assignFilter === 'mine' && c.assigned_to !== user?.id) return false
+    if (assignFilter === 'unassigned' && c.assigned_to) return false
+    if (assignFilter === 'ai' && !isAiMessage(c.last_message)) return false
+    if (assignFilter === 'waiting' && c.last_message?.direction !== 'inbound') return false
     if (!searchQ) return true
     const q = searchQ.toLowerCase()
-    return c.contacts?.name?.toLowerCase().includes(q) || c.contacts?.phone?.includes(q)
+    return c.contacts?.name?.toLowerCase().includes(q) || c.contacts?.phone?.includes(q) ||
+      (Array.isArray(c.tags) && c.tags.some((t: string) => t.toLowerCase().includes(q.replace(/^#/, ''))))
   })
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
-  }
+  // 24-hour window of the conversation's number
+  const win = activeConv ? windowState(messages, activeConv.whatsapp_instances || (activeConv.instance_id ? { id: activeConv.instance_id } : null)) : { kind: 'na' as const }
+  const effectiveWin = windowWarning === 'outside' && win.kind !== 'na' ? { kind: 'closed' as const, lastInbound: null } : win
+
+  // Thread with day separators
+  const thread = useMemo(() => {
+    const out: ({ kind: 'day'; key: string; label: string } | { kind: 'msg'; msg: any; grouped: boolean })[] = []
+    let prevDay = ''
+    let prev: any = null
+    for (const m of messages) {
+      const d = m.created_at ? new Date(m.created_at) : new Date()
+      const day = d.toDateString()
+      if (day !== prevDay) {
+        out.push({ kind: 'day', key: `day-${day}`, label: dayLabel(d, lang, c) })
+        prevDay = day
+        prev = null
+      }
+      const grouped = !!prev && prev.direction === m.direction && Math.abs(d.getTime() - new Date(prev.created_at).getTime()) < 5 * 60000
+      out.push({ kind: 'msg', msg: m, grouped })
+      prev = m
+    }
+    return out
+  }, [messages, lang])
+
+  const contact = activeConv ? (contactDetails[activeConv.contact_id] || null) : null
+  const aiAvailable = !aiBlocked && !!lastInbound && messages[messages.length - 1]?.direction === 'inbound'
+
+  const panel = activeConv && showDetails ? (
+    <CustomerPanel
+      conv={activeConv}
+      contact={contact}
+      contactLoading={contactLoading && !contact}
+      messages={messages}
+      user={user}
+      teamMembers={teamMembers}
+      onUpdate={updates => updateConversation(updates)}
+      onNotesChange={notes => setActiveConv((p: any) => ({ ...p, notes }))}
+      onClose={() => setShowDetails(false)}
+      className={isWide ? 'w-[320px] shrink-0 border-s border-line-soft' : 'h-full w-full'}
+    />
+  ) : null
 
   return (
-    <DashboardLayout title="Inbox">
-      <div className="flex h-[calc(100vh-56px)] bg-[#F8FAFC] overflow-hidden -m-6">
-        <div className="flex flex-1 overflow-hidden">
+    <DashboardLayout title={c('title')}>
+      <div className="flex h-[calc(100dvh-56px-2rem)] min-h-[460px] overflow-hidden rounded-panel border border-line bg-surface shadow-card md:h-[calc(100dvh-56px-3rem)]">
 
-          {/* Conversations List */}
-          <div className={clsx('flex flex-col bg-white border-r border-slate-200 flex-shrink-0', activeConv ? 'hidden md:flex w-80' : 'flex w-full md:w-80')}>
-            {/* Header */}
-            <div className="px-4 py-3 border-b border-slate-200">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="font-display font-bold text-slate-900">Inbox</h2>
-                <div className="flex gap-1">
-                  <button onClick={loadConversations} className="p-1.5 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-[#F8FAFC]">
-                    <ArrowPathIcon className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
+        {/* Conversations */}
+        <ConversationList
+          className={cn('w-full shrink-0 md:flex md:w-[340px] md:border-e md:border-line-soft lg:w-[360px]', activeConv ? 'hidden' : 'flex')}
+          conversations={filteredConvs}
+          totalCount={conversations.length}
+          loading={loading}
+          activeId={activeConv?.id}
+          unreadCounts={unreadCounts}
+          inboxes={inboxes}
+          canSeeAll={canSeeAll}
+          selectedInbox={selectedInbox}
+          onSwitchInbox={switchInbox}
+          searchQ={searchQ}
+          onSearch={setSearchQ}
+          statusFilter={statusFilter}
+          onStatusFilter={setStatusFilter}
+          assignFilter={assignFilter}
+          onAssignFilter={setAssignFilter}
+          onRefresh={() => loadConversations()}
+          onOpen={openConversation}
+        />
 
-              {/* Inbox Selector — shown only when multiple inboxes exist */}
-              {inboxes.length > 1 && (
-                <div className="mb-3">
-                  <div className="flex flex-col gap-1 max-h-36 overflow-y-auto pr-1">
-                    {canSeeAll && (
-                      <button
-                        onClick={() => switchInbox(null)}
-                        className={clsx(
-                          'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left w-full',
-                          selectedInbox === null
-                            ? 'bg-brand-500 text-white'
-                            : 'text-slate-600 hover:bg-[#F8FAFC]'
-                        )}
-                      >
-                        <span className="text-base">📥</span>
-                        <span className="flex-1 truncate">All Inboxes</span>
-                        {Object.values(unreadCounts as Record<string, number>).reduce((a, b) => a + b, 0) > 0 && selectedInbox !== null && (
-                          <span className="bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0">
-                            {Object.values(unreadCounts as Record<string, number>).reduce((a, b) => a + b, 0)}
-                          </span>
-                        )}
-                      </button>
+        {/* Thread */}
+        {activeConv ? (
+          <div className="flex min-w-0 flex-1">
+            <section aria-label={activeConv.contacts?.name || activeConv.contacts?.phone} className="flex min-w-0 flex-1 flex-col">
+              {/* Header */}
+              <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-line-soft px-3 sm:px-4">
+                <Button size="icon-sm" variant="ghost" icon={ArrowLeftIcon} aria-label={c('back')} onClick={() => setActiveConv(null)} className="md:hidden rtl:[&_svg]:rotate-180" />
+                <Avatar name={activeConv.contacts?.name || activeConv.contacts?.phone} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-ink" dir="auto">{activeConv.contacts?.name || activeConv.contacts?.phone}</p>
+                  <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted">
+                    {!loadingMessages && effectiveWin.kind !== 'na' ? (
+                      <span title={c('window_hint')} className={cn('inline-flex min-w-0 items-center gap-1 font-medium', effectiveWin.kind === 'open' ? 'text-success' : 'text-warning')}>
+                        <ClockIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <span className="truncate">
+                          {effectiveWin.kind === 'open'
+                            ? (effectiveWin.msLeft >= 3600000 ? c('window_open', { h: Math.floor(effectiveWin.msLeft / 3600000) }) : c('window_open_m', { m: Math.max(1, Math.floor(effectiveWin.msLeft / 60000)) }))
+                            : effectiveWin.lastInbound ? c('window_closed') : c('window_none')}
+                        </span>
+                      </span>
+                    ) : (
+                      <bdi dir="ltr" className="tabular truncate">{activeConv.contacts?.phone}</bdi>
                     )}
-                    {inboxes.map((inbox: any) => {
-                        return (
-                        <button
-                          key={inbox.id}
-                          onClick={() => switchInbox(inbox.id)}
-                          className={clsx(
-                            'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left w-full',
-                            selectedInbox === inbox.id
-                              ? 'bg-brand-500 text-white'
-                              : 'text-slate-600 hover:bg-[#F8FAFC]'
-                          )}
-                        >
-                          <img
-                            src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg"
-                            alt="WhatsApp"
-                            className="w-4 h-4 flex-shrink-0"
-                          />
-                          <span className="flex-1 truncate">{inbox.name}</span>
-                          {inbox.unread > 0 && (
-                            <span className="bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0">
-                              {inbox.unread}
-                            </span>
-                          )}
-                        </button>
-                        )
-                      })}
-                  </div>
+                    {activeConv.whatsapp_instances && (
+                      <span className="hidden truncate lg:inline">· {activeConv.whatsapp_instances.display_name || <bdi dir="ltr">{activeConv.whatsapp_instances.phone_number}</bdi>}</span>
+                    )}
+                  </p>
                 </div>
-              )}
-
-              {/* Search */}
-              <div className="relative mb-3">
-                <MagnifyingGlassIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={searchQ} onChange={e => setSearchQ(e.target.value)}
-                  placeholder="Search conversations..." className="input pl-9 py-2 text-sm" />
-              </div>
-
-              {/* Status tabs */}
-              <div className="flex gap-1">
-                {Object.entries(STATUS_CONFIG).map(([s, config]) => (
-                  <button key={s} onClick={() => setStatusFilter(s)}
-                    className={clsx('flex-1 text-xs py-1.5 rounded-lg transition-colors font-medium',
-                      statusFilter === s ? 'bg-brand-500 text-white' : 'text-slate-400 hover:text-white hover:bg-[#F8FAFC]')}>
-                    {config.icon}
-                  </button>
-                ))}
-                <button onClick={() => setStatusFilter('all')}
-                  className={clsx('flex-1 text-xs py-1.5 rounded-lg transition-colors font-medium',
-                    statusFilter === 'all' ? 'bg-brand-500 text-white' : 'text-slate-400 hover:text-white hover:bg-[#F8FAFC]')}>
-                  All
-                </button>
-              </div>
-            </div>
-
-            {/* Conversations */}
-            <div className="flex-1 overflow-y-auto">
-              {loading ? (
-                <div className="p-4 space-y-3">
-                  {[1,2,3,4,5].map(i => <div key={i} className="skeleton h-16 rounded-lg" />)}
+                <div className={cn('hidden shrink-0', !(isWide && showDetails) && 'sm:block')}>
+                  <Select
+                    size="sm"
+                    aria-label={c('status')}
+                    value={activeConv.status}
+                    onChange={e => updateConversation({ status: e.target.value })}
+                    className="w-[124px]"
+                    options={['open', 'pending', 'resolved', 'spam'].map(s => ({ value: s, label: c(STATUS_KEYS[s]) }))}
+                  />
                 </div>
-              ) : filteredConvs.length === 0 ? (
-                <div className="text-center py-16">
-                  <p className="text-slate-500 text-sm">No conversations</p>
-                  <p className="text-slate-600 text-xs mt-1">Messages will appear here</p>
-                </div>
-              ) : filteredConvs.map(conv => (
-                <ConversationItem
-                  key={conv.id}
-                  conv={conv}
-                  active={activeConv?.id === conv.id}
-                  unread={unreadCounts[conv.contact_id] || 0}
-                  showInboxBadge={selectedInbox === null && inboxes.length > 1}
-                  onClick={() => openConversation(conv)}
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* Chat Area */}
-          {activeConv ? (
-            <div className="flex flex-1 overflow-hidden">
-              <div className="flex flex-col flex-1 overflow-hidden">
-                {/* Chat Header */}
-                <div className="h-14 bg-white border-b border-slate-200 flex items-center px-4 gap-3 flex-shrink-0">
-                  <button onClick={() => setActiveConv(null)} className="md:hidden text-slate-400 hover:text-slate-900 mr-1">
-                    ←
-                  </button>
-                  <div className="w-9 h-9 rounded-full bg-[#F8FAFC] flex items-center justify-center font-bold text-slate-700">
-                    {activeConv.contacts?.name?.[0]?.toUpperCase() || '?'}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-slate-900 text-sm truncate">{activeConv.contacts?.name || activeConv.contacts?.phone}</p>
-                    <p className="text-xs text-slate-500">{activeConv.contacts?.phone}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {/* Status badge */}
-                    <select value={activeConv.status} onChange={e => updateConversation({ status: e.target.value })}
-                      className={clsx('text-xs px-2 py-1 rounded-lg border-0 cursor-pointer', STATUS_CONFIG[activeConv.status]?.bg, STATUS_CONFIG[activeConv.status]?.color)}>
-                      {Object.entries(STATUS_CONFIG).map(([s, c]) => <option key={s} value={s}>{c.icon} {c.label}</option>)}
-                    </select>
-                    <button onClick={() => setShowDetails(v => !v)} className="p-2 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-[#F8FAFC]">
-                      <EllipsisVerticalIcon className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Messages */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-1.5" style={{ backgroundColor: '#F8FAFC' }}>
-                  {messages.length === 0 ? (
-                    <div className="text-center py-16 text-slate-500 text-sm">No messages yet</div>
-                  ) : messages.map((msg, idx) => {
-                    const prevMsg = messages[idx - 1]
-                    const showAvatar = !prevMsg || prevMsg.direction !== msg.direction
-                    return <MessageBubble key={msg.id} msg={msg} showAvatar={showAvatar} />
-                  })}
-                  <div ref={messagesEndRef} />
-                </div>
-
-                {/* Input */}
-                <div className="bg-white border-t border-slate-200 p-3">
-                  {/* Quick replies popup */}
-                  {showQuickReplies && quickReplies.length > 0 && (
-                    <div className="mb-2 bg-[#F8FAFC] border border-slate-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
-                      {quickReplies.filter(r => !text || r.title.toLowerCase().includes(text.toLowerCase()) || r.message.toLowerCase().includes(text.toLowerCase())).map(reply => (
-                        <button key={reply.id} onClick={() => { setText(reply.message); setShowQuickReplies(false); textareaRef.current?.focus() }}
-                          className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b border-slate-200/50 last:border-0">
-                          <p className="text-sm font-medium text-slate-900">{reply.title}</p>
-                          <p className="text-xs text-slate-500 truncate">{reply.message}</p>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Emoji picker */}
-                  {showEmoji && (
-                    <div className="mb-2 flex gap-1.5 flex-wrap p-2 bg-[#F8FAFC] border border-slate-200 rounded-xl">
-                      {EMOJIS.map(e => (
-                        <button key={e} onClick={() => { setText(t => t + e); setShowEmoji(false) }}
-                          className="text-xl hover:scale-125 transition-transform">{e}</button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Attachment preview */}
-                {attachment && (
-                  <div className="mb-2 bg-[#F8FAFC] border border-slate-200 rounded-xl p-3">
-                    <div className="flex items-start gap-3">
-                      {attachment.previewUrl && attachment.type === 'image' && (
-                        <img src={attachment.previewUrl} alt="preview" className="w-16 h-16 rounded-lg object-cover flex-shrink-0" />
-                      )}
-                      {attachment.previewUrl && attachment.type === 'video' && (
-                        <video src={attachment.previewUrl} className="w-16 h-16 rounded-lg object-cover flex-shrink-0" />
-                      )}
-                      {!attachment.previewUrl && (
-                        <div className="w-16 h-16 rounded-lg bg-slate-200 flex items-center justify-center text-2xl flex-shrink-0">
-                          {attachment.type === 'audio' || attachment.type === 'ptt' ? '🎵' : '📎'}
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-900 truncate">{attachment.file.name}</p>
-                        <p className="text-xs text-slate-500">{(attachment.file.size / 1024).toFixed(0)} KB</p>
-                        <input
-                          value={attachment.caption}
-                          onChange={e => setAttachment(a => ({ ...a, caption: e.target.value }))}
-                          placeholder="Add a caption (optional)…"
-                          className="mt-1.5 w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:border-brand-700"
-                        />
-                      </div>
-                      <button onClick={cancelAttachment} className="p-1 text-slate-400 hover:text-slate-900 flex-shrink-0">
-                        <XMarkIcon className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <button onClick={sendAttachment} disabled={uploadingAttachment}
-                      className="btn-primary text-xs w-full justify-center mt-2 py-2">
-                      {uploadingAttachment ? <><ArrowPathIcon className="w-4 h-4 animate-spin" /> Sending…</> : <>📤 Send {attachment.type}</>}
-                    </button>
-                  </div>
+                {activeConv.status !== 'resolved' && (
+                  <Tooltip content={c('mark_resolved')}>
+                    <Button size="icon-sm" variant="ghost" icon={CheckBadgeIcon} aria-label={c('mark_resolved')} onClick={() => updateConversation({ status: 'resolved' })} className="hidden sm:inline-flex" />
+                  </Tooltip>
                 )}
-
-                <div className="flex items-end gap-2">
-                    <input ref={fileInputRef} type="file" className="hidden" onChange={pickAttachment}
-                      accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.ppt,.pptx" />
-                    <button onClick={() => fileInputRef.current?.click()}
-                      className="p-2 text-slate-400 hover:text-slate-900 flex-shrink-0" title="Attach file">
-                      <PaperClipIcon className="w-5 h-5" />
-                    </button>
-                    <button onClick={() => { setShowEmoji(v => !v); setShowQuickReplies(false) }}
-                      className="p-2 text-slate-400 hover:text-slate-900 flex-shrink-0">
-                      <FaceSmileIcon className="w-5 h-5" />
-                    </button>
-                    <button onClick={() => { setShowQuickReplies(v => !v); setShowEmoji(false) }}
-                      className="p-2 text-slate-400 hover:text-slate-900 flex-shrink-0" title="Quick Replies">
-                      <BoltIcon className="w-5 h-5" />
-                    </button>
-                    <textarea
-                      ref={textareaRef}
-                      value={text}
-                      onChange={e => setText(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      placeholder="Type a message... (Enter to send, Shift+Enter for new line)"
-                      rows={1}
-                      style={{ resize: 'none', maxHeight: '120px' }}
-                      className="flex-1 bg-[#F8FAFC] border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-brand-700 transition-colors"
-                      onInput={e => {
-                        const t = e.target as HTMLTextAreaElement
-                        t.style.height = 'auto'
-                        t.style.height = Math.min(t.scrollHeight, 120) + 'px'
-                      }}
-                    />
-                    <button onClick={sendMessage} disabled={!text.trim() || sending}
-                      className="p-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-colors flex-shrink-0">
-                      <PaperAirplaneIcon className="w-5 h-5 text-slate-900" />
-                    </button>
-                  </div>
-                </div>
+                <Tooltip content={c('details')}>
+                  <Button size="icon-sm" variant={showDetails ? 'secondary' : 'ghost'} icon={isWide ? InformationCircleIcon : UserCircleIcon} aria-label={c('details')} aria-pressed={showDetails} onClick={() => setShowDetails(v => !v)} />
+                </Tooltip>
               </div>
 
-              {/* Details Panel */}
-              {showDetails && (
-                <div className="w-72 bg-white border-l border-slate-200 flex-shrink-0 overflow-y-auto">
-                  <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-                    <h3 className="font-semibold text-slate-900 text-sm">Details</h3>
-                    <button onClick={() => setShowDetails(false)} className="text-slate-400 hover:text-slate-900">
-                      <XMarkIcon className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <div className="p-4 space-y-4">
-                    {/* Contact info */}
-                    <div>
-                      <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Contact</p>
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-12 h-12 rounded-full bg-[#F8FAFC] flex items-center justify-center text-lg font-bold text-slate-700">
-                          {activeConv.contacts?.name?.[0]?.toUpperCase() || '?'}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-slate-900">{activeConv.contacts?.name || 'Unknown'}</p>
-                          <p className="text-xs text-slate-500">{activeConv.contacts?.phone}</p>
-                        </div>
+              {/* Messages */}
+              <div
+                ref={scrollRef}
+                className="min-h-0 flex-1 overflow-y-auto bg-canvas px-3 py-4 sm:px-6"
+                style={{ backgroundImage: 'radial-gradient(rgb(var(--brand-teal) / 0.06) 1px, transparent 1px)', backgroundSize: '18px 18px' }}
+                aria-busy={loadingMessages || undefined}
+              >
+                {loadingMessages ? (
+                  <div className="flex flex-col gap-3" aria-label={c('loading_messages')}>
+                    {[0, 1, 2, 3].map(i => (
+                      <div key={i} className={cn('flex', i % 2 ? 'justify-end' : 'justify-start')}>
+                        <Skeleton className={cn('h-12 rounded-[18px]', i % 2 ? 'w-1/2' : 'w-2/5')} />
                       </div>
-                    </div>
-
-                    {/* Assign */}
-                    <div>
-                      <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Assigned To</p>
-                      <select value={activeConv.assigned_to || ''} onChange={e => updateConversation({ assigned_to: e.target.value || null })} className="input text-sm py-2">
-                        <option value="">Unassigned</option>
-                        <option value={user?.id}>Me</option>
-                        {teamMembers.filter(m => m.status === 'active').map(m => (
-                          <option key={m.id} value={m.user_id}>{m.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Priority */}
-                    <div>
-                      <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Priority</p>
-                      <select value={activeConv.priority || 'normal'} onChange={e => updateConversation({ priority: e.target.value })} className="input text-sm py-2">
-                        {Object.entries(PRIORITY_CONFIG).map(([p, c]) => (
-                          <option key={p} value={p}>{c.label}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Notes */}
-                    <div>
-                      <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Notes</p>
-                      <textarea value={activeConv.notes || ''} onChange={e => setActiveConv(p => ({ ...p, notes: e.target.value }))}
-                        onBlur={() => updateConversation({ notes: activeConv.notes })}
-                        placeholder="Add internal notes..."
-                        rows={3} className="input text-sm resize-none" />
-                    </div>
-
-                    {/* Actions */}
-                    <div className="space-y-2">
-                      <button onClick={() => updateConversation({ status: 'resolved' })}
-                        className="btn-secondary w-full justify-center text-sm py-2 text-blue-600">
-                        <CheckCircleIcon className="w-4 h-4" /> Mark Resolved
-                      </button>
-                      <button onClick={() => updateConversation({ status: 'spam' })}
-                        className="btn-secondary w-full justify-center text-sm py-2 text-red-400">
-                        <ArchiveBoxIcon className="w-4 h-4" /> Mark as Spam
-                      </button>
-                    </div>
+                    ))}
                   </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="hidden md:flex flex-1 items-center justify-center bg-[#F8FAFC]">
-              <div className="text-center">
-                <div className="w-20 h-20 bg-blue-50 border-2 border-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <svg viewBox="0 0 24 24" className="w-10 h-10" fill="none" stroke="#2563EB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.96 9.96 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2z"/>
-                  </svg>
-                </div>
-                <h3 className="font-display font-bold text-xl text-slate-900 mb-2">Select a conversation</h3>
-                <p className="text-slate-500 text-sm">Choose from the left to start chatting</p>
+                ) : messages.length === 0 ? (
+                  <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-chip text-chip-ink"><ChatBubbleLeftRightIcon className="h-6 w-6" aria-hidden="true" /></span>
+                    <p className="text-sm text-muted">{c('thread_empty')}</p>
+                  </div>
+                ) : (
+                  thread.map(item => item.kind === 'day' ? (
+                    <div key={item.key} className="sticky top-0 z-[1] my-3 flex justify-center">
+                      <span className="rounded-full border border-line bg-surface/95 px-3 py-1 text-[11.5px] font-medium text-muted shadow-sm backdrop-blur">{item.label}</span>
+                    </div>
+                  ) : (
+                    <MessageBubble key={item.msg.id} msg={item.msg} grouped={item.grouped} />
+                  ))
+                )}
               </div>
-            </div>
-          )}
-        </div>
+
+              <Composer
+                mode={mode}
+                onMode={m => { setMode(m); setShowQuickReplies(false); setShowEmoji(false); textareaRef.current?.focus() }}
+                text={text}
+                onText={setText}
+                onSend={sendMessage}
+                onAddNote={addNote}
+                sending={sending}
+                savingNote={savingNote}
+                textareaRef={textareaRef}
+                quickReplies={quickReplies}
+                showQuickReplies={showQuickReplies}
+                onShowQuickReplies={setShowQuickReplies}
+                showEmoji={showEmoji}
+                onShowEmoji={setShowEmoji}
+                attachment={attachment}
+                onAttachmentCaption={v => setAttachment((a: any) => ({ ...a, caption: v }))}
+                fileInputRef={fileInputRef}
+                onPickAttachment={pickAttachment}
+                onCancelAttachment={cancelAttachment}
+                onSendAttachment={sendAttachment}
+                uploadingAttachment={uploadingAttachment}
+                windowState={loadingMessages ? { kind: 'na' } : effectiveWin}
+                onOpenTemplates={() => setTemplatesOpen(true)}
+                aiAvailable={aiAvailable}
+                aiSuggestion={aiSuggestion}
+                aiLoading={aiLoading}
+                onSuggest={suggestReply}
+                onUseSuggestion={() => { if (aiSuggestion) setText(aiSuggestion); setAiSuggestion(null); textareaRef.current?.focus() }}
+                onDismissSuggestion={() => setAiSuggestion(null)}
+              />
+            </section>
+
+            {/* Customer panel: beside the thread on wide screens, a sheet otherwise */}
+            {isWide && panel}
+          </div>
+        ) : (
+          <div className="hidden flex-1 flex-col items-center justify-center gap-3 bg-canvas p-8 text-center md:flex">
+            <span className="flex h-20 w-20 items-center justify-center rounded-[26px] bg-brand-gradient text-[#04282C] shadow-glow">
+              <ChatBubbleLeftRightIcon className="h-10 w-10" aria-hidden="true" />
+            </span>
+            <h2 className="mt-2 text-xl font-bold text-ink">{c('select_title')}</h2>
+            <p className="max-w-xs text-sm text-muted">{c('select_d')}</p>
+          </div>
+        )}
       </div>
+
+      {!isWide && panel && (
+        <div className="fixed inset-0 z-overlay flex justify-end" role="dialog" aria-modal="true" aria-label={c('details')}
+          onKeyDown={e => { if (e.key === 'Escape') setShowDetails(false) }}>
+          <button type="button" className="absolute inset-0 bg-overlay/50 backdrop-blur-[2px]" aria-label={c('close')} onClick={() => setShowDetails(false)} />
+          <div className="relative h-full w-[min(92vw,380px)] shadow-dropdown">{panel}</div>
+        </div>
+      )}
+
+      <TemplatesModal
+        open={templatesOpen}
+        onClose={() => setTemplatesOpen(false)}
+        instanceId={sendingInstance()?.id || activeConv?.instance_id}
+        onSend={activeConv ? sendTemplate : undefined}
+        defaults={{ first: activeConv?.contacts?.name || undefined }}
+      />
     </DashboardLayout>
   )
 }

@@ -26,12 +26,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     { count: openConversationsRaw },
     { data: instances },
     { data: recentCampaigns },
-    { data: statusBreakdown },
+    { count: sbSent },
+    { count: sbDelivered },
+    { count: sbRead },
+    { count: sbFailed },
     { data: chatbotStats },
     { count: aiRepliesRaw },
     { data: topLinks },
     { count: inboundMsgCount },
-    { data: dailyMessages },
+    dailyAgg,
+    activeAutomationsRes,
+    aiReplies30Res,
+    teamReplies30Res,
   ] = await Promise.all([
     db.from('messages').select('*', { count: 'exact', head: true }).eq('user_id', user.userId),
     db.from('messages').select('*', { count: 'exact', head: true }).eq('user_id', user.userId).eq('direction', 'outbound').gte('created_at', monthStart),
@@ -40,17 +46,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     db.from('contacts').select('*', { count: 'exact', head: true }).eq('user_id', user.userId).gte('created_at', monthStart),
     db.from('campaigns').select('*', { count: 'exact', head: true }).eq('user_id', user.userId).in('status', ['running', 'scheduled']),
     db.from('chatbot_flows').select('*', { count: 'exact', head: true }).eq('user_id', user.userId).eq('is_active', true),
-    db.from('tracked_links').select('click_count, short_code, original_url, created_at').eq('user_id', user.userId),
+    db.from('tracked_links').select('click_count').eq('user_id', user.userId).limit(10000),
     db.from('conversation_assignments').select('*', { count: 'exact', head: true }).eq('owner_id', user.userId).eq('status', 'open'),
     db.from('whatsapp_instances').select('id, display_name, phone_number, status, type').eq('user_id', user.userId),
     db.from('campaigns').select('name, sent_count, delivered_count, read_count, failed_count, status, created_at').eq('user_id', user.userId).order('created_at', { ascending: false }).limit(8),
-    db.from('messages').select('status').eq('user_id', user.userId).eq('direction', 'outbound').gte('created_at', monthStart),
+    ...(['sent', 'delivered', 'read', 'failed'].map(st =>
+      db.from('messages').select('id', { count: 'exact', head: true }).eq('user_id', user.userId).eq('direction', 'outbound').eq('status', st).gte('created_at', monthStart)
+    ) as [any, any, any, any]),
     db.from('chatbot_flows').select('name, trigger_count, is_active').eq('user_id', user.userId).order('trigger_count', { ascending: false }).limit(5),
-    db.from('messages').select('*', { count: 'exact', head: true }).eq('user_id', user.userId).eq('type', 'ai_reply').gte('created_at', monthStart),
+    // AI replies are stored with meta.source = 'ai_assistant' (legacy rows: type 'ai_reply').
+    db.from('messages').select('id', { count: 'exact', head: true }).eq('user_id', user.userId).eq('direction', 'outbound')
+      .or('type.eq.ai_reply,meta->>source.eq.ai_assistant').gte('created_at', monthStart),
     db.from('tracked_links').select('short_code, original_url, click_count').eq('user_id', user.userId).order('click_count', { ascending: false }).limit(5),
     db.from('messages').select('*', { count: 'exact', head: true }).eq('user_id', user.userId).eq('direction', 'inbound').gte('created_at', monthStart),
-    // Last 30 days messages for chart
-    db.from('messages').select('created_at, status, direction').eq('user_id', user.userId).gte('created_at', thirtyDaysAgo).order('created_at', { ascending: true }),
+    // Last 30 days chart — SQL aggregate (migration 026)
+    db.rpc('dashboard_daily_messages', { p_user: user.userId, p_since: thirtyDaysAgo }),
+    db.from('automation_flows').select('id', { count: 'exact', head: true }).eq('user_id', user.userId).eq('is_active', true),
+    // Replies in the last 30 days: AI assistant vs the team (head counts only).
+    db.from('messages').select('id', { count: 'exact', head: true }).eq('user_id', user.userId).eq('direction', 'outbound')
+      .eq('meta->>source', 'ai_assistant').gte('created_at', thirtyDaysAgo),
+    db.from('messages').select('id', { count: 'exact', head: true }).eq('user_id', user.userId).eq('direction', 'outbound')
+      .not('meta->>sent_by', 'is', null).gte('created_at', thirtyDaysAgo),
   ])
 
   // Null-safe counts
@@ -64,12 +80,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const openConversations = openConversationsRaw || 0
   const inboundMessages = inboundMsgCount || 0
   const aiRepliesThisMonth = aiRepliesRaw || 0
+  // automation_flows may be missing on older databases → 0.
+  const activeAutomations = activeAutomationsRes.error ? 0 : (activeAutomationsRes.count || 0)
+  const aiReplies30 = aiReplies30Res.error ? 0 : (aiReplies30Res.count || 0)
+  const teamReplies30 = teamReplies30Res.error ? 0 : (teamReplies30Res.count || 0)
 
   // Status breakdown
-  const sb = { sent: 0, delivered: 0, read: 0, failed: 0 }
-  for (const msg of statusBreakdown || []) {
-    if (msg.status in sb) sb[msg.status as keyof typeof sb]++
-  }
+  const sb = { sent: sbSent || 0, delivered: sbDelivered || 0, read: sbRead || 0, failed: sbFailed || 0 }
 
   // Build daily chart from raw messages (last 30 days)
   const dayMap: Record<string, { sent: number; delivered: number; received: number }> = {}
@@ -78,14 +95,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const key = d.toISOString().split('T')[0]
     dayMap[key] = { sent: 0, delivered: 0, received: 0 }
   }
-  for (const msg of dailyMessages || []) {
-    const day = msg.created_at?.split('T')[0]
-    if (day && dayMap[day]) {
-      if (msg.direction === 'outbound') {
-        dayMap[day].sent++
-        if (msg.status === 'delivered' || msg.status === 'read') dayMap[day].delivered++
-      } else {
-        dayMap[day].received++
+  if (!dailyAgg.error) {
+    for (const row of (dailyAgg.data || []) as Array<{ day: string; sent: number; delivered: number; received: number }>) {
+      const day = String(row.day).slice(0, 10)
+      if (dayMap[day]) dayMap[day] = { sent: Number(row.sent) || 0, delivered: Number(row.delivered) || 0, received: Number(row.received) || 0 }
+    }
+  } else {
+    // Migration 026 not applied yet — bounded fallback
+    const { data: dailyMessages } = await db.from('messages').select('created_at, status, direction')
+      .eq('user_id', user.userId).gte('created_at', thirtyDaysAgo).order('created_at', { ascending: false }).limit(5000)
+    for (const msg of dailyMessages || []) {
+      const day = msg.created_at?.split('T')[0]
+      if (day && dayMap[day]) {
+        if (msg.direction === 'outbound') {
+          dayMap[day].sent++
+          if (msg.status === 'delivered' || msg.status === 'read') dayMap[day].delivered++
+        } else {
+          dayMap[day].received++
+        }
       }
     }
   }
@@ -108,13 +135,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       new_contacts_this_month: newContactsThisMonth || 0,
       active_campaigns: activeCampaigns || 0,
       active_chatbots: activeChatbots || 0,
+      active_automations: activeAutomations,
+      // Active chatbot + automation flows.
+      active_flows: activeChatbots + activeAutomations,
       link_clicks_total: totalClicks,
       open_conversations: openConversations || 0,
       ai_replies_this_month: aiRepliesThisMonth || 0,
       inbound_this_month: inboundMessages || 0,
       delivery_rate: deliveryRate,
       read_rate: readRate,
+      ai_replies_30d: aiReplies30,
+      team_replies_30d: teamReplies30,
     },
+    replies_30d: { ai: aiReplies30, team: teamReplies30 },
     status_breakdown: sb,
     daily_chart: chart,
     recent_campaigns: recentCampaigns || [],

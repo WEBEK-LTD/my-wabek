@@ -1,35 +1,22 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
 import { v4 as uuidv4 } from 'uuid'
 import { checkPlanFeature } from '@/lib/middleware'
-
-const nodeSchema = z.object({
-  id: z.string(),
-  type: z.enum(['send_message', 'delay', 'condition', 'tag_contact', 'end']),
-  data: z.record(z.string()),
-  next: z.string().optional(),
-  nextFalse: z.string().optional(),
-})
-
-const createSchema = z.object({
-  name: z.string().min(1).max(200),
-  instance_id: z.string().uuid().nullable().optional(),
-  trigger_type: z.enum(['keyword', 'message_received', 'opt_in', 'scheduled']),
-  trigger_value: z.string().nullable().optional(),
-  nodes: z.array(nodeSchema).default([]),
-  is_active: z.boolean().default(false),
-})
+import { automationFlowSchema as createSchema } from '@/lib/automation-engine'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'automation')
   if (!user) return
   const db = supabaseAdmin()
 
   if (req.method === 'GET') {
     const { data, error } = await db.from('automation_flows').select('*').eq('user_id', user.userId).order('created_at', { ascending: false })
-    if (error) return res.status(500).json({ error: error.message })
+    if (error) {
+      console.error('[automation] list error:', error.message)
+      return res.status(500).json({ error: 'Failed to load flows' })
+    }
     return res.status(200).json({ flows: data })
   }
 
@@ -48,8 +35,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     try {
       const body = createSchema.parse(req.body)
+      if (body.instance_id) {
+        const { data: inst } = await db.from('whatsapp_instances').select('id')
+          .eq('id', body.instance_id).eq('user_id', user.userId).maybeSingle()
+        if (!inst) return res.status(400).json({ error: 'Instance not found' })
+      }
       const { data, error } = await db.from('automation_flows').insert({ id: uuidv4(), user_id: user.userId, trigger_count: 0, ...body }).select().single()
-      if (error) return res.status(500).json({ error: error.message })
+      if (error) {
+        console.error('[automation] create error:', error.message)
+        return res.status(500).json({ error: 'Failed to create flow' })
+      }
       return res.status(201).json({ flow: data })
     } catch (err) {
       if (err instanceof z.ZodError) return res.status(400).json({ error: 'Invalid data', details: err.errors })

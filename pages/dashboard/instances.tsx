@@ -7,49 +7,28 @@ import { useQuery, useMutation, useQueryClient } from 'react-query'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import {
-  PlusIcon, TrashIcon, XMarkIcon, ClipboardIcon,
-  QrCodeIcon, ArrowPathIcon, CheckCircleIcon,
-  ExclamationTriangleIcon, CloudIcon, DevicePhoneMobileIcon,
+  PlusIcon, QrCodeIcon, CloudIcon, DevicePhoneMobileIcon, SignalIcon, CheckIcon,
+  ExclamationTriangleIcon, BookOpenIcon,
 } from '@heroicons/react/24/outline'
-import { useForm } from 'react-hook-form'
-
-interface Instance {
-  id: string; phone_number: string; display_name: string | null
-  status: string; instance_type: string; phone_number_id: string
-  waba_id: string; webhook_url: string; qr_code: string | null; created_at: string
-}
-
-const STATUS_BADGE = {
-  connected:    'badge-green',
-  disconnected: 'badge-red',
-  pending:      'badge-yellow',
-  qr_pending:   'badge-yellow',
-  initializing: 'badge-yellow',
-  banned:       'badge-red',
-}
-
-const STATUS_LABEL = {
-  connected:    '🟢 Connected',
-  disconnected: '🔴 Disconnected',
-  pending:      '🟡 Pending',
-  qr_pending:   '📱 Scan QR Code',
-  initializing: '⏳ Initializing',
-  banned:       '🚫 Banned',
-}
+import { Button, Card, CardHeader, ConfirmDialog, EmptyState, PageHeader, StatCard, Tabs } from '@/components/ui'
+import { CardsSkeleton, ErrorState, apiError } from '@/components/settings/Shared'
+import { NumberCard, isWebInstance, type Instance } from '@/components/numbers/NumberCard'
+import { QrDialog } from '@/components/numbers/QrDialog'
+import { ConnectNumberDialog } from '@/components/numbers/ConnectNumberDialog'
+import { CloudApiForm } from '@/components/numbers/CloudApiForm'
 
 export default function InstancesPage() {
   const qc = useQueryClient()
   const router = useRouter()
-  const [tab, setTab] = useState<'cloud' | 'web'>('cloud')
+  const [filter, setFilter] = useState<'all' | 'cloud' | 'web'>('all')
+  const [showConnect, setShowConnect] = useState(false)
   const [showCloudForm, setShowCloudForm] = useState(false)
   const [metaLoading, setMetaLoading] = useState(false)
-  const [metaAppId, setMetaAppId] = useState('')
   const [qrInstance, setQrInstance] = useState(null)
-  const [qrPolling, setQrPolling] = useState(false)
+  const [toDelete, setToDelete] = useState<Instance | null>(null)
   const qrPollRef = useRef(null)
-  const { register, handleSubmit, reset } = useForm()
 
-  // Meta Embedded Signup handler
+  // Meta Embedded Signup handler (unchanged flow)
   const launchMetaSignup = async () => {
     setMetaLoading(true)
     try {
@@ -106,18 +85,18 @@ export default function InstancesPage() {
             redirectUri,
           }).then(r => {
             if (r.data.success) {
-              toast.success('✅ WhatsApp connected successfully!')
+              toast.success('تم ربط واتساب بنجاح')
               window.location.reload()
             } else {
-              toast.error(r.data.error || 'Connection failed')
+              toast.error(r.data.error || 'تعذّر الربط')
             }
           }).catch(e => {
-            toast.error(e?.response?.data?.error || 'Connection failed')
+            toast.error(e?.response?.data?.error || 'تعذّر الربط')
           }).finally(() => setMetaLoading(false))
         } else {
           setMetaLoading(false)
           if (response?.status !== 'connected') {
-            toast.error('Meta login cancelled or failed')
+            toast.error('أُلغي تسجيل الدخول إلى Meta أو لم يكتمل')
           }
         }
       }, {
@@ -137,16 +116,18 @@ export default function InstancesPage() {
     }
   }
 
-  const { data } = useQuery('instances', () => axios.get('/api/whatsapp/instances').then(r => r.data))
+  const { data, isLoading, isError, error, refetch } = useQuery('instances', () => axios.get('/api/whatsapp/instances').then(r => r.data))
   const instances: Instance[] = data?.instances || []
   const cloudInstances = instances.filter(i => !i.instance_type || i.instance_type === 'cloud_api')
   const webInstances = instances.filter(i => i.instance_type === 'wa_web')
+  const connectedCount = instances.filter(i => i.status === 'connected').length
+  const visible = filter === 'cloud' ? cloudInstances : filter === 'web' ? webInstances : instances
 
   // Show success/error from Meta OAuth redirect
   useEffect(() => {
     const { success, error } = router.query
     if (success === 'connected') {
-      toast.success('✅ WhatsApp connected via Meta!')
+      toast.success('تم ربط واتساب عبر Meta')
       qc.invalidateQueries('instances')
       router.replace('/dashboard/instances', undefined, { shallow: true })
     } else if (error) {
@@ -155,7 +136,7 @@ export default function InstancesPage() {
     }
   }, [router.query])
 
-  // Poll QR code status
+  // Poll QR code status (unchanged)
   useEffect(() => {
     if (!qrInstance) { clearInterval(qrPollRef.current); return }
     qrPollRef.current = setInterval(async () => {
@@ -165,7 +146,7 @@ export default function InstancesPage() {
           clearInterval(qrPollRef.current)
           setQrInstance(null)
           qc.invalidateQueries('instances')
-          toast.success(`✅ WhatsApp connected: ${data.phoneNumber}`)
+          toast.success(`تم ربط واتساب: ${data.phoneNumber}`)
         } else if (data.qrCode && data.qrCode !== qrInstance.qr_code) {
           setQrInstance(prev => ({ ...prev, qr_code: data.qrCode, status: data.status }))
         }
@@ -177,9 +158,10 @@ export default function InstancesPage() {
   const createCloudMut = useMutation(
     (body) => axios.post('/api/whatsapp/instances', body),
     { onSuccess: (res) => {
-        qc.invalidateQueries('instances'); reset(); setShowCloudForm(false)
-toast.success('Cloud API instance connected!')
-      }, onError: (e) => toast.error(e?.response?.data?.error || 'Failed') }
+        qc.invalidateQueries('instances'); setShowCloudForm(false)
+        toast.success('تم ربط رقم Cloud API')
+        if (res?.data?.webhook_warning) toast(res.data.webhook_warning, { duration: 8000 })
+      }, onError: (e) => toast.error(e?.response?.data?.error || 'تعذّر الربط') }
   )
 
   const createWebMut = useMutation(
@@ -187,16 +169,17 @@ toast.success('Cloud API instance connected!')
     {
       onSuccess: (res) => {
         qc.invalidateQueries('instances')
+        setShowConnect(false)
         const inst = res.data?.instance
         if (inst) {
           setQrInstance({ ...inst, qr_code: res.data?.qrCode || null })
-          if (!res.data?.qrCode) toast(res.data?.message || 'Waiting for QR code…', { icon: '📱', duration: 5000 })
+          if (!res.data?.qrCode) toast(res.data?.message || 'بانتظار رمز QR…', { duration: 5000 })
         }
       },
       onError: (e) => {
-        const msg = e?.response?.data?.message || e?.response?.data?.error || 'Failed'
+        const msg = e?.response?.data?.message || e?.response?.data?.error || 'تعذّر إنشاء الجلسة'
         if (e?.response?.data?.configured === false) {
-          toast.error('WA Web server not configured. Add WA_WEB_SERVER_URL to Netlify env vars first.', { duration: 6000 })
+          toast.error('خادم واتساب ويب غير مُعدّ. أضف WA_WEB_SERVER_URL إلى متغيرات البيئة أولًا.', { duration: 6000 })
         } else {
           toast.error(msg, { duration: 5000 })
         }
@@ -210,324 +193,166 @@ toast.success('Cloud API instance connected!')
       onSuccess: (res, instanceId) => {
         const inst = instances.find(i => i.id === instanceId)
         if (inst) setQrInstance({ ...inst, qr_code: res.data?.qrCode || inst.qr_code })
-        toast.success('QR code refreshed')
+        toast.success('تم تحديث رمز QR')
       },
     }
   )
 
   const deleteMut = useMutation(
     (id) => axios.delete(`/api/whatsapp/instances/${id}`),
-    { onSuccess: () => { qc.invalidateQueries('instances'); toast.success('Instance removed') } }
+    {
+      onSuccess: () => { qc.invalidateQueries('instances'); setToDelete(null); toast.success('تم حذف الرقم') },
+      onError: (e) => toast.error(apiError(e, 'تعذّر حذف الرقم')),
+    }
   )
-
-  const copyWebhook = (url) => { navigator.clipboard.writeText(url); toast.success('Copied!') }
-
-
 
   const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://your-site.netlify.app'
 
+  const reconnect = (inst: Instance) => { refreshQRMut.mutate(inst.id); setQrInstance(inst) }
+  const openManual = () => { setShowConnect(false); setShowCloudForm(true) }
+
   return (
     <DashboardLayout title="WhatsApp Accounts">
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-white border border-slate-200 rounded-xl p-1 w-fit">
-        <button onClick={() => setTab('cloud')} className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${tab === 'cloud' ? 'bg-[#F8FAFC] text-slate-900 shadow' : 'text-slate-400 hover:text-slate-900'}`}>
-          <CloudIcon className="w-4 h-4" />
-          Cloud API
-          {cloudInstances.length > 0 && <span className="ml-1 bg-blue-50 text-blue-600 text-xs px-1.5 rounded-full">{cloudInstances.length}</span>}
-        </button>
-        <button onClick={() => setTab('web')} className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${tab === 'web' ? 'bg-[#F8FAFC] text-slate-900 shadow' : 'text-slate-400 hover:text-slate-900'}`}>
-          <DevicePhoneMobileIcon className="w-4 h-4" />
-          WhatsApp Web
-          {webInstances.length > 0 && <span className="ml-1 bg-blue-900 text-blue-400 text-xs px-1.5 rounded-full">{webInstances.length}</span>}
-        </button>
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="التكاملات"
+          title="أرقام واتساب"
+          description="اربط أرقامك عبر واجهة Meta الرسمية أو واتساب ويب، وتابع حالة كل رقم من مكان واحد."
+          actions={
+            <>
+              <Button variant="secondary" icon={BookOpenIcon} href="/docs/getting-started/connect-number">دليل الربط</Button>
+              <Button icon={PlusIcon} onClick={() => setShowConnect(true)}>ربط رقم</Button>
+            </>
+          }
+        />
+
+        <div className="grid grid-cols-2 gap-3 sm:gap-3.5 lg:grid-cols-4">
+          <StatCard label="جميع الأرقام" value={String(instances.length)} icon={SignalIcon} loading={isLoading} />
+          <StatCard label="متصلة الآن" value={String(connectedCount)} icon={CheckIcon} loading={isLoading}
+            sub={instances.length ? `${instances.length - connectedCount} غير متصلة` : undefined}
+            subTone={instances.length - connectedCount > 0 ? 'warning' : 'muted'} />
+          <StatCard label="Cloud API" value={String(cloudInstances.length)} icon={CloudIcon} loading={isLoading} sub="الربط الرسمي" />
+          <StatCard label="WhatsApp Web" value={String(webInstances.length)} icon={DevicePhoneMobileIcon} loading={isLoading} sub="الربط برمز QR" />
+        </div>
+
+        {isLoading ? (
+          <CardsSkeleton count={2} className="h-64" />
+        ) : isError ? (
+          <ErrorState message={apiError(error, 'تعذّر تحميل الأرقام')} onRetry={() => refetch()} />
+        ) : instances.length === 0 ? (
+          <EmptyState
+            variant="card"
+            icon={SignalIcon}
+            title="لم تربط أي رقم بعد"
+            description="ابدأ بربط رقم واتساب لإرسال الرسائل واستقبالها. ننصح بواجهة Meta الرسمية للأنشطة التجارية."
+            action={
+              <>
+                <Button icon={CloudIcon} loading={metaLoading} onClick={launchMetaSignup}>الربط عبر Meta</Button>
+                <Button variant="secondary" icon={QrCodeIcon} loading={createWebMut.isLoading} onClick={() => createWebMut.mutate()}>الربط برمز QR</Button>
+              </>
+            }
+          />
+        ) : (
+          <section aria-label="الأرقام المرتبطة" className="space-y-4">
+            <Tabs
+              variant="segmented"
+              size="sm"
+              idPrefix="numbers"
+              aria-label="تصفية الأرقام"
+              value={filter}
+              onChange={v => setFilter(v as typeof filter)}
+              tabs={[
+                { id: 'all', label: 'الكل', count: instances.length },
+                { id: 'cloud', label: 'Cloud API', count: cloudInstances.length },
+                { id: 'web', label: 'WhatsApp Web', count: webInstances.length },
+              ]}
+            />
+            {visible.length === 0 ? (
+              <EmptyState
+                variant="card"
+                size="sm"
+                icon={filter === 'web' ? DevicePhoneMobileIcon : CloudIcon}
+                title={filter === 'web' ? 'لا توجد أرقام واتساب ويب' : 'لا توجد أرقام Cloud API'}
+                action={filter === 'web'
+                  ? <Button size="sm" icon={QrCodeIcon} loading={createWebMut.isLoading} onClick={() => createWebMut.mutate()}>الربط برمز QR</Button>
+                  : <Button size="sm" icon={CloudIcon} loading={metaLoading} onClick={launchMetaSignup}>الربط عبر Meta</Button>}
+              />
+            ) : (
+              <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr))]">
+                {visible.map(inst => (
+                  <NumberCard
+                    key={inst.id}
+                    inst={inst}
+                    onDelete={setToDelete}
+                    onReconnect={isWebInstance(inst) ? reconnect : undefined}
+                    reconnecting={refreshQRMut.isLoading && refreshQRMut.variables === inst.id}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Which method fits? */}
+        <Card padding="none">
+          <CardHeader title="أي طريقة تناسبك؟" subtitle="مقارنة سريعة بين طريقتَي الربط" divider />
+          <div className="grid gap-px bg-line-soft md:grid-cols-2">
+            <div className="space-y-2 bg-surface p-5">
+              <p className="flex items-center gap-2 font-semibold text-ink"><CloudIcon className="h-5 w-5 text-brand-ink" aria-hidden="true" />Cloud API — رسمية</p>
+              <ul className="space-y-1.5 text-sm text-body">
+                <li>منتج رسمي من Meta دون خطر حظر.</li>
+                <li>أول 1,000 محادثة شهريًا مجانية من Meta.</li>
+                <li>يتطلب توثيق حساب Meta Business، وقد تستغرق الموافقة من أسبوع إلى أسبوعين.</li>
+                <li>تحتاج إلى Phone Number ID ورمز وصول من <a className="text-link hover:text-link-hover" href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" dir="ltr">developers.facebook.com</a> عند الإعداد اليدوي.</li>
+              </ul>
+            </div>
+            <div className="space-y-2 bg-surface p-5">
+              <p className="flex items-center gap-2 font-semibold text-ink"><ExclamationTriangleIcon className="h-5 w-5 text-warning" aria-hidden="true" />WhatsApp Web — غير رسمية</p>
+              <ul className="space-y-1.5 text-sm text-body">
+                <li>دون موافقة من Meta، وتعمل مع أي رقم ودون رسوم لكل رسالة.</li>
+                <li>تخالف شروط استخدام واتساب، وقد يتعرّض الرقم للحظر.</li>
+                <li>تحتاج إلى خادم منفصل للجلسات، ولا تناسب الإرسال بكميات كبيرة.</li>
+              </ul>
+            </div>
+          </div>
+        </Card>
       </div>
 
-      {/* ─── CLOUD API TAB ─── */}
-      {tab === 'cloud' && (
-        <div>
-          <div className="flex justify-between items-center mb-4">
-            <p className="text-slate-400 text-sm">{cloudInstances.length} Cloud API instance{cloudInstances.length !== 1 ? 's' : ''}</p>
-            <div className="flex gap-2">
-              <button
-                onClick={launchMetaSignup}
-                disabled={metaLoading}
-                className="btn-primary text-sm bg-[#1877F2] hover:bg-[#166fe5]">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/0/05/Facebook_Logo_%282019%29.png" className="w-4 h-4 rounded" alt="" />
-                {metaLoading ? 'Connecting...' : 'Connect with Meta'}
-              </button>
-              <button onClick={() => setShowCloudForm(true)} className="btn-secondary text-sm">
-                <PlusIcon className="w-4 h-4" /> Manual Setup
-              </button>
-            </div>
-          </div>
+      <ConnectNumberDialog
+        open={showConnect}
+        onClose={() => setShowConnect(false)}
+        onMeta={launchMetaSignup}
+        metaLoading={metaLoading}
+        onManual={openManual}
+        onWeb={() => createWebMut.mutate()}
+        webLoading={createWebMut.isLoading}
+      />
 
-          {/* Guide */}
-          <div className="card border-blue-200/50 bg-blue-50/10 mb-5">
-            <h3 className="font-display font-semibold text-slate-900 mb-2 flex items-center gap-2">
-              <CloudIcon className="w-4 h-4 text-blue-600" />
-              Meta WhatsApp Cloud API — Official ✅
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-400">
-              <ul className="space-y-1">
-                <li>✅ Official Meta product — no ban risk</li>
-                <li>✅ Free up to 1,000 conversations/month</li>
-                <li>✅ Stable — 99.9% uptime SLA</li>
-                <li>✅ Works on Netlify serverless</li>
-              </ul>
-              <ul className="space-y-1">
-                <li>📋 Requires Meta Business verification</li>
-                <li>📋 1–2 weeks approval process</li>
-                <li>📋 <a href="https://developers.facebook.com" target="_blank" className="text-blue-600 hover:underline">developers.facebook.com</a></li>
-                <li>📋 Get Phone Number ID + Access Token</li>
-              </ul>
-            </div>
-          </div>
+      <CloudApiForm
+        open={showCloudForm}
+        onClose={() => setShowCloudForm(false)}
+        loading={createCloudMut.isLoading}
+        webhookUrl={`${appUrl}/api/whatsapp/webhook`}
+        onSubmit={(d, reset) => createCloudMut.mutate(d, { onSuccess: () => reset() })}
+      />
 
-          {cloudInstances.length === 0 ? (
-            <div className="card text-center py-16">
-              <CloudIcon className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-              <p className="text-slate-400 mb-4">No Cloud API instances yet</p>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <button onClick={launchMetaSignup} disabled={metaLoading}
-                  className="btn-primary bg-[#1877F2] hover:bg-[#166fe5]">
-                  <img src="https://upload.wikimedia.org/wikipedia/commons/0/05/Facebook_Logo_%282019%29.png" className="w-4 h-4 rounded" alt="" />
-                  {metaLoading ? 'Connecting...' : 'Connect with Meta'}
-                </button>
-                <button onClick={() => setShowCloudForm(true)} className="btn-secondary">
-                  <PlusIcon className="w-4 h-4" /> Manual Setup
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {cloudInstances.map(inst => (
-                <div key={inst.id} className="card">
-                  <div className="flex items-start justify-between gap-3 mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-11 h-11 rounded-full bg-blue-50 border border-brand-700 flex items-center justify-center text-blue-600 font-bold text-lg">
-                        {(inst.display_name || inst.phone_number)[0]}
-                      </div>
-                      <div>
-                        <h3 className="font-display font-semibold text-slate-900">{inst.display_name || inst.phone_number}</h3>
-                        <p className="text-xs text-slate-400">{inst.phone_number}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={STATUS_BADGE[inst.status] || 'badge-gray'}>{STATUS_LABEL[inst.status] || inst.status}</span>
-                      <button onClick={() => deleteMut.mutate(inst.id)} className="p-1.5 text-slate-500 hover:text-red-400">
-                        <TrashIcon className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5 text-xs">
-                    <div className="flex items-center justify-between bg-[#F8FAFC] rounded-lg px-3 py-2 gap-2">
-                      <span className="text-slate-500 flex-shrink-0">Instance ID</span>
-                      <span className="text-slate-800 font-mono truncate text-slate-800">{inst.id}</span>
-                      <button onClick={() => { navigator.clipboard.writeText(inst.id); toast.success('Instance ID copied!') }} className="text-blue-600 flex-shrink-0">
-                        <ClipboardIcon className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <div className="flex justify-between bg-[#F8FAFC] rounded-lg px-3 py-2">
-                      <span className="text-slate-500">Phone Number ID</span>
-                      <span className="text-slate-800 font-mono text-slate-800">{inst.phone_number_id || '—'}</span>
-                    </div>
-                    <div className="flex items-center justify-between bg-[#F8FAFC] rounded-lg px-3 py-2 gap-2">
-                      <span className="text-slate-500 flex-shrink-0">Webhook URL</span>
-                      <span className="text-slate-800 font-mono truncate text-slate-800">{inst.webhook_url}</span>
-                      <button onClick={() => copyWebhook(inst.webhook_url)} className="text-blue-600 flex-shrink-0">
-                        <ClipboardIcon className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
+      <QrDialog
+        instance={qrInstance}
+        onClose={() => { setQrInstance(null); qc.invalidateQueries('instances') }}
+        onRefresh={() => qrInstance && refreshQRMut.mutate(qrInstance.id)}
+        refreshing={refreshQRMut.isLoading}
+      />
 
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ─── WA WEB TAB ─── */}
-      {tab === 'web' && (
-        <div>
-          <div className="flex justify-between items-center mb-4">
-            <p className="text-slate-400 text-sm">{webInstances.length} WhatsApp Web instance{webInstances.length !== 1 ? 's' : ''}</p>
-            <button onClick={() => createWebMut.mutate()} disabled={createWebMut.isLoading} className="btn-primary text-sm">
-              <QrCodeIcon className="w-4 h-4" />
-              {createWebMut.isLoading ? 'Generating QR…' : 'Connect via QR Code'}
-            </button>
-          </div>
-
-          {/* Warning */}
-          <div className="card border-yellow-800/50 bg-yellow-900/10 mb-5">
-            <h3 className="font-display font-semibold text-yellow-400 mb-2 flex items-center gap-2">
-              <ExclamationTriangleIcon className="w-4 h-4" />
-              WhatsApp Web — Unofficial Method ⚠️
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <ul className="space-y-1 text-slate-700">
-                <li>✅ No Meta approval needed</li>
-                <li>✅ Works with any WhatsApp number</li>
-                <li>✅ Free — no per-message fees</li>
-                <li>✅ Full WA features (media, reactions)</li>
-              </ul>
-              <ul className="space-y-1 text-yellow-400/80">
-                <li>⚠️ Against WhatsApp ToS</li>
-                <li>⚠️ Account ban risk</li>
-                <li>⚠️ Requires separate server for sessions</li>
-                <li>⚠️ Not suitable for high-volume</li>
-              </ul>
-            </div>
-
-
-          </div>
-
-          {/* QR Code display */}
-          {qrInstance && (
-            <div className="card border-blue-200/50 bg-blue-50/10 mb-5">
-              <div className="flex flex-col items-center gap-4 py-4">
-                <h3 className="font-display font-semibold text-slate-900 text-lg">📱 Scan QR Code with WhatsApp</h3>
-                <p className="text-slate-400 text-sm text-center max-w-sm">
-                  Open WhatsApp on your phone → Menu → Linked Devices → Link a Device → Scan this QR code
-                </p>
-                {qrInstance.qr_code ? (
-                  <div className="bg-white p-4 rounded-2xl">
-                    <img src={qrInstance.qr_code.startsWith('data:') ? qrInstance.qr_code : `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrInstance.qr_code)}`}
-                      alt="WhatsApp QR Code" className="w-56 h-56" />
-                  </div>
-                ) : (
-                  <div className="w-56 h-56 bg-[#F8FAFC] rounded-2xl flex flex-col items-center justify-center gap-3">
-                    <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-                    <p className="text-slate-400 text-sm">Generating QR code…</p>
-                    <p className="text-slate-500 text-xs text-center px-4">Make sure WA_WEB_SERVER_URL is set in env vars</p>
-                  </div>
-                )}
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-brand-500 animate-pulse" />
-                  <span className="text-sm text-slate-400">Waiting for scan… (auto-refreshes)</span>
-                </div>
-                <div className="flex gap-3">
-                  <button onClick={() => refreshQRMut.mutate(qrInstance.id)} className="btn-secondary text-sm">
-                    <ArrowPathIcon className="w-4 h-4" /> Refresh QR
-                  </button>
-                  <button onClick={() => { setQrInstance(null); qc.invalidateQueries('instances') }} className="btn-secondary text-sm">
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {webInstances.length === 0 && !qrInstance ? (
-            <div className="card text-center py-16">
-              <DevicePhoneMobileIcon className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-              <p className="text-slate-400 mb-2">No WhatsApp Web instances yet</p>
-              <p className="text-slate-500 text-sm mb-4">Connect any WhatsApp number by scanning a QR code</p>
-              <button onClick={() => createWebMut.mutate()} disabled={createWebMut.isLoading} className="btn-primary mx-auto">
-                <QrCodeIcon className="w-4 h-4" />
-                {createWebMut.isLoading ? 'Generating…' : 'Generate QR Code'}
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {webInstances.map(inst => (
-                <div key={inst.id} className="card">
-                  <div className="flex items-start justify-between gap-3 mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-11 h-11 rounded-full bg-blue-900 border border-blue-700 flex items-center justify-center text-blue-400">
-                        <DevicePhoneMobileIcon className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h3 className="font-display font-semibold text-slate-900">{inst.display_name || inst.phone_number || 'WhatsApp Web'}</h3>
-                        <p className="text-xs text-slate-400">{inst.phone_number !== 'pending' ? inst.phone_number : 'Not connected yet'}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={STATUS_BADGE[inst.status] || 'badge-gray'}>{STATUS_LABEL[inst.status] || inst.status}</span>
-                      <button onClick={() => deleteMut.mutate(inst.id)} className="p-1.5 text-slate-500 hover:text-red-400">
-                        <TrashIcon className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="mb-3 text-xs">
-                    <div className="flex items-center justify-between bg-[#F8FAFC] rounded-lg px-3 py-2 gap-2">
-                      <span className="text-slate-500 flex-shrink-0">Instance ID</span>
-                      <span className="text-slate-800 font-mono truncate text-slate-800">{inst.id}</span>
-                      <button onClick={() => { navigator.clipboard.writeText(inst.id); toast.success('Instance ID copied!') }} className="text-blue-600 flex-shrink-0">
-                        <ClipboardIcon className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                  {['disconnected', 'qr_pending', 'initializing'].includes(inst.status) && (
-                    <button onClick={() => { refreshQRMut.mutate(inst.id); setQrInstance(inst) }} className="btn-secondary text-sm w-full justify-center">
-                      <QrCodeIcon className="w-4 h-4" />
-                      {inst.status === 'qr_pending' ? 'Show QR Code' : 'Reconnect'}
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Cloud API Form Modal */}
-      {showCloudForm && (
-        <div className="modal-backdrop" onClick={() => setShowCloudForm(false)}>
-          <div className="modal-panel max-w-lg" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-5 border-b border-slate-200">
-              <div>
-                <h3 className="font-display font-semibold text-slate-900">Connect WhatsApp Cloud API</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Official Meta Business API</p>
-              </div>
-              <button onClick={() => setShowCloudForm(false)} className="text-slate-400 hover:text-slate-900">
-                <XMarkIcon className="w-5 h-5" />
-              </button>
-            </div>
-            <form onSubmit={handleSubmit(d => createCloudMut.mutate(d))} className="p-5 space-y-4">
-              <div>
-                <label className="label">Phone Number (E.164 format) *</label>
-                <input {...register('phone_number', { required: true })} placeholder="+905551234567" className="input" />
-              </div>
-              <div>
-                <label className="label">Display Name</label>
-                <input {...register('display_name')} placeholder="My Business" className="input" />
-              </div>
-              <div>
-                <label className="label">Phone Number ID * <span className="text-slate-500 font-normal">(from Meta Developer Portal)</span></label>
-                <input {...register('phone_number_id', { required: true })} placeholder="123456789012345" className="input font-mono text-sm" />
-              </div>
-              <div>
-                <label className="label">WABA ID * <span className="text-slate-500 font-normal">(WhatsApp Business Account ID)</span></label>
-                <input {...register('waba_id', { required: true })} placeholder="987654321098765" className="input font-mono text-sm" />
-              </div>
-              <div>
-                <label className="label">Access Token * <span className="text-slate-500 font-normal">(System User token — permanent)</span></label>
-                <input {...register('access_token', { required: true })} type="password" placeholder="EAAx…" className="input font-mono text-sm" />
-                <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-                  ⚠️ <strong>Must be a System User Token</strong> — the Temporary Token from Meta Developer Portal will NOT work for receiving incoming messages.<br/>
-                  <span className="mt-1 block">Get it from: <strong>Meta Business Suite → Settings → Users → System Users → Generate Token</strong> (select <code className="bg-amber-100 px-1 rounded">whatsapp_business_messaging</code> + <code className="bg-amber-100 px-1 rounded">whatsapp_business_management</code>)</span>
-                </div>
-              </div>
-              <div className="bg-[#F8FAFC] rounded-lg px-3 py-2 text-xs text-slate-400">
-                <strong className="text-slate-900">Webhook URL to set in Meta:</strong>
-                <div className="flex items-center gap-2 mt-1">
-                  <code className="text-blue-600 flex-1 truncate">{appUrl}/api/whatsapp/webhook</code>
-                  <button type="button" onClick={() => copyWebhook(`${appUrl}/api/whatsapp/webhook`)} className="text-slate-400 hover:text-slate-900">
-                    <ClipboardIcon className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowCloudForm(false)} className="btn-secondary">Cancel</button>
-                <button type="submit" disabled={createCloudMut.isLoading} className="btn-primary">
-                  {createCloudMut.isLoading ? 'Connecting…' : 'Connect'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        destructive
+        open={!!toDelete}
+        onClose={() => setToDelete(null)}
+        onConfirm={() => toDelete && deleteMut.mutate(toDelete.id)}
+        loading={deleteMut.isLoading}
+        title="حذف هذا الرقم؟"
+        description={`سيتوقف إرسال الرسائل واستقبالها عبر ${toDelete?.display_name || toDelete?.phone_number || 'هذا الرقم'}. يمكنك ربطه مجددًا لاحقًا.`}
+        confirmLabel="حذف الرقم"
+      />
     </DashboardLayout>
   )
 }

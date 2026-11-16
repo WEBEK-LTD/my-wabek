@@ -1,14 +1,14 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuth } from '@/lib/auth'
+import { requireOwnerOrRole } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-  const user = await requireAuth(req, res)
+  const user = await requireOwnerOrRole(req, res)
   if (!user) return
 
   const db = supabaseAdmin()
-  const { data: profile } = await db.from('reseller_profiles').select('stripe_connect_account_id').eq('user_id', user.userId).single()
+  const { data: profile } = await db.from('reseller_profiles').select('stripe_connect_account_id').eq('user_id', user.userId).maybeSingle()
 
   if (profile?.stripe_connect_account_id) {
     // Deauthorize from Stripe

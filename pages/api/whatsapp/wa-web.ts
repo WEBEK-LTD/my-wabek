@@ -1,48 +1,52 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
-import { requireAuth } from '@/lib/auth'
+import { requireMemberAccess } from '@/lib/auth'
+import { checkInstanceCreateAllowed } from '@/lib/wa-smart-send'
+import { callWAServer, isValidInstanceId } from '@/lib/wa-web'
 import { v4 as uuidv4 } from 'uuid'
 
+const PUBLIC_COLUMNS = 'id, user_id, status, qr_code, phone_number, display_name, instance_type, type'
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  const user = await requireMemberAccess(req, res, 'instances')
   if (!user) return
   const db = supabaseAdmin()
 
   const WA_SERVER = process.env.WA_WEB_SERVER_URL
-  const WA_SECRET = process.env.WA_WEB_SERVER_SECRET
+
+  /** The caller's own instance, or null. Every action goes through this. */
+  const ownInstance = async (instanceId: unknown) => {
+    if (!isValidInstanceId(instanceId)) return null
+    const { data } = await db
+      .from('whatsapp_instances')
+      .select(PUBLIC_COLUMNS)
+      .eq('id', instanceId)
+      .eq('user_id', user.userId)
+      .maybeSingle()
+    return data
+  }
 
   // GET — get QR / status
   if (req.method === 'GET') {
     const { instanceId } = req.query
     if (!instanceId) return res.status(400).json({ error: 'instanceId required' })
 
-    const { data: instance } = await db
-      .from('whatsapp_instances')
-      .select('*')
-      .eq('id', instanceId as string)
-      .eq('user_id', user.userId)
-      .single()
-
+    const instance = await ownInstance(instanceId)
     if (!instance) return res.status(404).json({ error: 'Instance not found' })
 
     // If Railway server configured, get fresh status
     if (WA_SERVER && instance.status !== 'connected') {
       try {
-        const r = await fetch(`${WA_SERVER}/instance/${instanceId}/status`, {
-          headers: { 'X-Secret': WA_SECRET || '' },
-        })
-        if (r.ok) {
-          const fresh = await r.json()
-          if (fresh.qrCode) {
-            await db.from('whatsapp_instances').update({ qr_code: fresh.qrCode, status: fresh.status }).eq('id', instanceId as string)
-            return res.status(200).json({ instanceId, status: fresh.status, qrCode: fresh.qrCode, phoneNumber: fresh.phoneNumber })
-          }
+        const fresh = await callWAServer(`/instance/${instance.id}/status`) as { qrCode?: string; status?: string; phoneNumber?: string }
+        if (fresh?.qrCode) {
+          await db.from('whatsapp_instances').update({ qr_code: fresh.qrCode, status: fresh.status }).eq('id', instance.id).eq('user_id', user.userId)
+          return res.status(200).json({ instanceId: instance.id, status: fresh.status, qrCode: fresh.qrCode, phoneNumber: fresh.phoneNumber })
         }
       } catch {}
     }
 
     return res.status(200).json({
-      instanceId,
+      instanceId: instance.id,
       status: instance.status,
       qrCode: instance.qr_code,
       phoneNumber: instance.phone_number,
@@ -52,7 +56,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // POST — create/manage WA Web instance
   if (req.method === 'POST') {
-    const { action, instanceId, display_name } = req.body
+    const { action, instanceId, display_name } = req.body || {}
 
     if (action === 'create') {
       // Check if Railway server is configured
@@ -65,6 +69,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
       }
 
+      // Plan limit applies to CREATING instances only (existing ones keep working)
+      const limit = await checkInstanceCreateAllowed(user.userId)
+      if (!limit.allowed) return res.status(403).json({ error: limit.error, code: 'PLAN_LIMIT' })
+
       const newId = uuidv4()
 
       // Create instance in DB first
@@ -72,28 +80,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         id: newId,
         user_id: user.userId,
         phone_number: 'pending',
-        display_name: display_name || null,  // null → UI shows phone_number once connected
+        display_name: typeof display_name === 'string' ? display_name.slice(0, 100) : null,  // null → UI shows phone_number once connected
         instance_type: 'wa_web',
         status: 'initializing',
         webhook_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/whatsapp/webhook`,
-      }).select().single()
+      }).select(PUBLIC_COLUMNS).single()
 
-      if (error) return res.status(500).json({ error: error.message })
+      if (error) {
+        console.error('[wa-web] create instance failed:', error.message)
+        return res.status(500).json({ error: 'Failed to create instance' })
+      }
 
       // Request QR from Railway server
       try {
-        const r = await fetch(`${WA_SERVER}/instance/${newId}/qr`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Secret': WA_SECRET || '' },
-          body: JSON.stringify({ instanceId: newId, userId: user.userId }),
-        })
-
-        if (r.ok) {
-          const qrData = await r.json()
-          if (qrData.qrCode) {
-            await db.from('whatsapp_instances').update({ qr_code: qrData.qrCode, status: 'qr_pending' }).eq('id', newId)
-            return res.status(201).json({ instance: data, qrCode: qrData.qrCode, message: 'Scan QR code with WhatsApp' })
-          }
+        const qrData = await callWAServer(`/instance/${newId}/qr`, { instanceId: newId, userId: user.userId }) as { qrCode?: string }
+        if (qrData?.qrCode) {
+          await db.from('whatsapp_instances').update({ qr_code: qrData.qrCode, status: 'qr_pending' }).eq('id', newId)
+          return res.status(201).json({ instance: data, qrCode: qrData.qrCode, message: 'Scan QR code with WhatsApp' })
         }
 
         // Server responded but no QR yet (still initializing)
@@ -101,44 +104,52 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(201).json({ instance: data, message: 'Instance created. QR code generating...' })
 
       } catch (err) {
+        const msg = err instanceof Error ? err.message : ''
+        if (/failed \(\d+\)/.test(msg)) {
+          // Server responded with an error but is reachable — keep the row (QR may come later)
+          await db.from('whatsapp_instances').update({ status: 'qr_pending' }).eq('id', newId)
+          return res.status(201).json({ instance: data, message: 'Instance created. QR code generating...' })
+        }
         // Railway server unreachable
+        console.error('[wa-web] create: WA server error:', msg)
         await db.from('whatsapp_instances').delete().eq('id', newId)
         return res.status(503).json({
           error: 'Cannot connect to WA Web server',
-          message: `Cannot reach ${WA_SERVER}. Make sure your Railway server is running and WA_WEB_SERVER_URL is correct.`,
+          message: 'Cannot reach the WhatsApp Web server. Make sure it is running and WA_WEB_SERVER_URL is correct.',
         })
       }
     }
 
     if (action === 'request_qr' && instanceId) {
       if (!WA_SERVER) return res.status(400).json({ error: 'WA_WEB_SERVER_URL not configured in Netlify' })
+      const instance = await ownInstance(instanceId)
+      if (!instance) return res.status(404).json({ error: 'Instance not found' })
 
       try {
-        const r = await fetch(`${WA_SERVER}/instance/${instanceId}/qr`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Secret': WA_SECRET || '' },
-          body: JSON.stringify({ instanceId }),
-        })
-        const data = await r.json()
-        if (data.qrCode) {
-          await db.from('whatsapp_instances').update({ qr_code: data.qrCode, status: 'qr_pending' }).eq('id', instanceId)
+        const data = await callWAServer(`/instance/${instance.id}/qr`, { instanceId: instance.id }) as Record<string, unknown>
+        if (data?.qrCode) {
+          await db.from('whatsapp_instances').update({ qr_code: data.qrCode, status: 'qr_pending' }).eq('id', instance.id).eq('user_id', user.userId)
         }
-        return res.status(200).json(data)
-      } catch {
+        return res.status(200).json({
+          instanceId: instance.id,
+          qrCode: data?.qrCode || null,
+          connected: data?.connected,
+          phoneNumber: data?.phoneNumber,
+          status: data?.status,
+        })
+      } catch (err) {
+        console.error('[wa-web] request_qr failed:', err instanceof Error ? err.message : err)
         return res.status(503).json({ error: 'Cannot reach WA Web server' })
       }
     }
 
     if (action === 'disconnect' && instanceId) {
+      const instance = await ownInstance(instanceId)
+      if (!instance) return res.status(404).json({ error: 'Instance not found' })
       if (WA_SERVER) {
-        try {
-          await fetch(`${WA_SERVER}/instance/${instanceId}/disconnect`, {
-            method: 'POST',
-            headers: { 'X-Secret': WA_SECRET || '' },
-          })
-        } catch {}
+        try { await callWAServer(`/instance/${instance.id}/disconnect`, {}) } catch {}
       }
-      await db.from('whatsapp_instances').update({ status: 'disconnected', qr_code: null }).eq('id', instanceId)
+      await db.from('whatsapp_instances').update({ status: 'disconnected', qr_code: null }).eq('id', instance.id).eq('user_id', user.userId)
       return res.status(200).json({ success: true })
     }
 

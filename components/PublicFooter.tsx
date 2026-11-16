@@ -1,18 +1,26 @@
-// @ts-nocheck
 import Link from 'next/link'
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useWhiteLabel } from '@/hooks/useWhiteLabel'
-import { LANGUAGES, getStoredLang, setStoredLang, t } from '@/lib/i18n'
+import { LANGUAGES, getStoredLang, setStoredLang, t, isRtlLang } from '@/lib/i18n'
+import { Logo } from '@/components/ui/Logo'
+import { cn } from '@/components/ui/utils'
 
-export default function PublicFooter({ lang: langProp = '' }: any) {
-  const { brandName, brandLogo } = useWhiteLabel()
+export interface PublicFooterProps {
+  lang?: string
+  onLangChange?: ((code: string) => void) | null
+  /** light (default) on the canvas background, deep on a deep-teal section. */
+  variant?: 'light' | 'deep'
+}
+
+export default function PublicFooter({ lang: langProp = '', onLangChange = null, variant = 'light' }: PublicFooterProps) {
+  const { brandName, customLogo, hidePoweredBy } = useWhiteLabel()
   const name = brandName || 'WABEK'
+  const [lang, setLang] = useState(langProp || 'ar')
   const year = new Date().getFullYear()
-  const [lang, setLang] = useState('en')
 
   useEffect(() => {
     setLang(langProp || getStoredLang())
-    const handler = (e: any) => setLang(e.detail)
+    const handler = (e: Event) => { const d = (e as CustomEvent<string>).detail; if (typeof d === 'string') setLang(d) }
     window.addEventListener('langchange', handler)
     return () => window.removeEventListener('langchange', handler)
   }, [langProp])
@@ -20,78 +28,76 @@ export default function PublicFooter({ lang: langProp = '' }: any) {
   const changeLang = (code: string) => {
     setLang(code)
     setStoredLang(code)
+    onLangChange?.(code)
     window.dispatchEvent(new CustomEvent('langchange', { detail: code }))
   }
 
+  const deep = variant === 'deep'
+  const muted = deep ? 'text-[#B5D3D0] hover:text-white' : 'text-muted hover:text-ink'
+
+  const primary: [string, string][] = [
+    [t(lang, 'pub_docs'), '/docs'],
+    [t(lang, 'pub_status'), '/status'],
+    [t(lang, 'pub_legal'), '/legal'],
+  ]
+  const secondary: [string, string][] = [
+    [t(lang, 'pub_product'), '/features'],
+    [t(lang, 'integrations'), '/integrations'],
+    [t(lang, 'pricing'), '/pricing'],
+    [t(lang, 'blog'), '/blog'],
+    [t(lang, 'about'), '/about'],
+    [t(lang, 'support'), '/support'],
+  ]
+
   return (
-    <footer style={{background:'#111b21',padding:'64px 24px 36px'}}>
-      <div style={{maxWidth:1200,margin:'0 auto'}}>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:48,marginBottom:56}}>
-
-          {/* Brand col */}
-          <div style={{gridColumn:'span 2'}}>
-            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:18}}>
-              {brandLogo
-                ? <div style={{background:'rgba(255,255,255,0.08)',borderRadius:10,padding:'6px 10px',display:'inline-flex',alignItems:'center'}}><img src={brandLogo} alt={name} style={{height:52,maxWidth:180,objectFit:'contain'}} /></div>
-                : <>
-                    <div style={{width:32,height:32,background:'#25D366',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>💬</div>
-                    <span style={{fontWeight:800,fontSize:24,color:'#fff'}}>{name}</span>
-                  </>
-              }
-            </div>
-            <p style={{fontSize:14,color:'#8696a0',lineHeight:1.8,maxWidth:260,direction: lang==='ar' ? 'rtl' : 'ltr'}}>{t(lang,'footer_desc')}</p>
-
-            {/* Language switcher */}
-            <div style={{display:'flex',gap:8,marginTop:20,flexWrap:'wrap'}}>
-              {LANGUAGES.map(l => (
-                <button key={l.code} onClick={()=>changeLang(l.code)}
-                  style={{display:'flex',alignItems:'center',gap:6,padding:'6px 10px',background: lang===l.code ? '#25D366' : '#1e2a2f',border: lang===l.code ? 'none' : '1px solid #2a3942',borderRadius:7,cursor:'pointer',fontSize:12,fontWeight:700,color: lang===l.code ? '#fff' : '#8696a0'}}>
-                  <img src={l.flag} alt={l.label} style={{width:18,height:13,objectFit:'cover',borderRadius:2}} />
-                  <span>{l.label}</span>
-                </button>
-              ))}
-            </div>
+    <footer dir={isRtlLang(lang) ? 'rtl' : 'ltr'} className={cn(deep ? 'bg-[#04282C] text-[#EAF7F5]' : 'bg-canvas text-muted')}>
+      <div className={cn('mx-auto max-w-[1280px] border-t px-4 pb-11 pt-7 sm:px-8', deep ? 'border-white/10' : 'border-line')}>
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4 text-sm">
+          <div className="flex items-center gap-2.5">
+            <Logo src={customLogo} name={brandName} size={24} wordmark={false} decorative={!customLogo} />
+            <span className={deep ? 'text-[#B5D3D0]' : 'text-muted'} dir="ltr">
+              © {year} {name}{!brandName && ' · webek.org'}
+            </span>
           </div>
-
-          {[
-            {title: t(lang,'footer_product'), links:[
-              [t(lang,'home'),'/'],
-              [t(lang,'features'),'/features'],
-              [t(lang,'integrations'),'/integrations'],
-              [t(lang,'pricing'),'/pricing'],
-              ['API Docs','/dashboard/docs'],
-            ]},
-            {title: t(lang,'footer_company'), links:[
-              [t(lang,'about'),'/about'],
-              [t(lang,'blog'),'/blog'],
-              [t(lang,'support'),'/support'],
-            ]},
-            {title: t(lang,'footer_legal'), links:[
-              [t(lang,'privacy'),'/legal/privacy'],
-              [t(lang,'terms'),'/legal/terms'],
-              [t(lang,'refund'),'/legal/refund'],
-              [t(lang,'license'),'/legal/license'],
-              ['System Status','/status'],
-            ]},
-          ].map(col => (
-            <div key={col.title}>
-              <h4 style={{color:'#fff',fontSize:12,fontWeight:700,marginBottom:20,textTransform:'uppercase',letterSpacing:'0.6px',direction: lang==='ar' ? 'rtl' : 'ltr'}}>{col.title}</h4>
-              {col.links.map(([l,h]) => (
-                <Link key={l} href={h}
-                  style={{display:'block',color:'#8696a0',fontSize:14,marginBottom:12,textDecoration:'none',direction: lang==='ar' ? 'rtl' : 'ltr'}}
-                  onMouseOver={e=>(e.target as any).style.color='#25D366'}
-                  onMouseOut={e=>(e.target as any).style.color='#8696a0'}>{l}</Link>
-              ))}
-            </div>
-          ))}
+          <nav aria-label={t(lang, 'footer_legal')} className="flex flex-wrap gap-x-6 gap-y-2">
+            {primary.map(([label, href]) => (
+              <Link key={href} href={href} className={cn('transition-colors', muted)}>{label}</Link>
+            ))}
+          </nav>
         </div>
 
-        <div style={{borderTop:'1px solid #2a3942',paddingTop:28,textAlign:'center'}}>
-          <p style={{fontSize:12,color:'#54656f',lineHeight:1.8}}>
-            © {year} {name}. {t(lang,'footer_rights')} {t(lang,'footer_proprietary')}
+        <div className={cn('mt-5 flex flex-wrap items-center justify-between gap-4 border-t pt-5 text-[13px]', deep ? 'border-white/10' : 'border-line-soft')}>
+          <nav aria-label={t(lang, 'footer_product')} className="flex flex-wrap gap-x-5 gap-y-2">
+            {secondary.map(([label, href]) => (
+              <Link key={href} href={href} className={cn('transition-colors', muted)}>{label}</Link>
+            ))}
+          </nav>
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={t(lang, 'shell_language')}>
+            {LANGUAGES.map(l => (
+              <button
+                key={l.code}
+                type="button"
+                onClick={() => changeLang(l.code)}
+                aria-pressed={l.code === lang}
+                lang={l.code}
+                className={cn(
+                  'h-8 rounded-full px-3 text-xs font-medium transition-colors',
+                  l.code === lang
+                    ? deep ? 'bg-[#EAF7F5] text-[#04282C]' : 'bg-[#04282C] text-[#EAF7F5] dark:bg-[#EAF7F5] dark:text-[#04282C]'
+                    : deep ? 'text-[#B5D3D0] hover:bg-white/10 hover:text-white' : 'text-muted hover:bg-surface-3 hover:text-ink',
+                )}
+              >
+                {l.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {!hidePoweredBy && (
+          <p className={cn('mt-4 text-xs', deep ? 'text-[#B5D3D0]' : 'text-muted')}>
+            {t(lang, 'footer_rights')} {t(lang, 'footer_proprietary')}
           </p>
-          <p style={{fontSize:11,color:'#3d5a65',marginTop:6}}>{t(lang,'footer_built_by')}</p>
-        </div>
+        )}
       </div>
     </footer>
   )

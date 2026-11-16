@@ -25,12 +25,49 @@ const QRCode   = require('qrcode')
 const fs       = require('fs')
 const path     = require('path')
 const pino     = require('pino')
-
-const app = express()
-app.use(express.json({ limit: '50mb' }))
+const crypto   = require('crypto')
+const dns      = require('dns').promises
+const net      = require('net')
 
 const PORT                = process.env.PORT              || 3001
-const SERVER_SECRET       = process.env.SERVER_SECRET     || 'change-this-secret'
+// The API below can read QR codes and send messages from every connected
+// number, so SERVER_SECRET must be a long random value. We deliberately do
+// NOT refuse to start without one: connected WhatsApp sessions must stay
+// online through a deploy. A missing value keeps the previous default
+// placeholder (so an existing WABEK deployment using it keeps working) and
+// is reported loudly at startup and every hour until it is fixed.
+const LEGACY_PLACEHOLDER_SECRET = 'change-this-secret'
+const SERVER_SECRET       = process.env.SERVER_SECRET || LEGACY_PLACEHOLDER_SECRET
+const SERVER_SECRET_WEAK  = !process.env.SERVER_SECRET || SERVER_SECRET === LEGACY_PLACEHOLDER_SECRET || SERVER_SECRET.length < 16
+function warnWeakServerSecret() {
+  if (!SERVER_SECRET_WEAK) return
+  console.error('⚠️  SECURITY WARNING: SERVER_SECRET is missing, too short, or still "change-this-secret". ' +
+    'Anyone who knows it can read QR codes and send messages. Set a long random SERVER_SECRET on Railway ' +
+    'and the SAME value as WA_WEB_SERVER_SECRET on Netlify, then redeploy both. (Sessions are not affected by the change.)')
+}
+warnWeakServerSecret()
+if (SERVER_SECRET_WEAK) setInterval(warnWeakServerSecret, 60 * 60 * 1000).unref()
+
+const app = express()
+app.disable('x-powered-by')
+
+// CORS: this API is called server-to-server only. No cross-origin browser
+// access unless an origin is listed in CORS_ALLOWED_ORIGINS (comma-separated).
+const CORS_ALLOWED_ORIGINS = (process.env.CORS_ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)
+app.use((req, res, next) => {
+  const origin = req.headers.origin
+  if (origin && CORS_ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Vary', 'Origin')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Secret')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE')
+  }
+  if (req.method === 'OPTIONS') return res.sendStatus(204)
+  next()
+})
+
+app.use(express.json({ limit: '50mb' }))
+
 const WABEK_EVENTS_URL    = process.env.WABEK_EVENTS_URL
 const WABEK_EVENTS_SECRET = process.env.WABEK_EVENTS_SECRET || SERVER_SECRET
 const SUPABASE_URL        = process.env.SUPABASE_URL
@@ -42,10 +79,85 @@ const SESSIONS_DIR = path.join(__dirname, 'sessions')
 fs.mkdirSync(SESSIONS_DIR, { recursive: true })
 
 // ─── Auth middleware ───────────────────────────────────────
+// Header only (WABEK always sends X-Secret); never the query string, which
+// ends up in access logs. Constant-time comparison.
+function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || !a || !b) return false
+  const ab = Buffer.from(a), bb = Buffer.from(b)
+  if (ab.length !== bb.length) return false
+  return crypto.timingSafeEqual(ab, bb)
+}
+function isAuthed(req) {
+  return safeEqual(req.headers['x-secret'], SERVER_SECRET)
+}
 function auth(req, res, next) {
-  const s = req.headers['x-secret'] || req.query.secret
-  if (s !== SERVER_SECRET) return res.status(403).json({ error: 'Forbidden' })
+  if (!isAuthed(req)) return res.status(403).json({ error: 'Forbidden' })
   next()
+}
+
+// Instance ids are UUIDs from WABEK; anything else could escape SESSIONS_DIR.
+app.param('id', (req, res, next, id) => {
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return res.status(400).json({ error: 'Invalid instance id' })
+  next()
+})
+
+// ─── SSRF guard for outbound media URLs ───────────────────
+function isPrivateIp(ip) {
+  if (net.isIPv4(ip)) {
+    const [a, b] = ip.split('.').map(Number)
+    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) ||
+      (a === 192 && b === 0) || (a === 198 && (b === 18 || b === 19)) || a >= 224
+  }
+  const v6 = String(ip).toLowerCase()
+  if (v6 === '::1' || v6 === '::' || v6.startsWith('fc') || v6.startsWith('fd') || v6.startsWith('fe80')) return true
+  const mapped = v6.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
+  return mapped ? isPrivateIp(mapped[1]) : false
+}
+
+async function assertPublicUrl(raw) {
+  let url
+  try { url = new URL(raw) } catch { throw new Error('Invalid media URL') }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('Media URL scheme not allowed')
+  if (url.username || url.password) throw new Error('Media URL not allowed')
+  const host = url.hostname.replace(/^\[|\]$/g, '')
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.internal') || host.endsWith('.local')) throw new Error('Media host not allowed')
+  const addrs = net.isIP(host) ? [{ address: host }] : await dns.lookup(host, { all: true })
+  if (!addrs.length || addrs.some(a => isPrivateIp(a.address))) throw new Error('Media host not allowed')
+  return url
+}
+
+const MAX_MEDIA_DOWNLOAD = 64 * 1024 * 1024
+
+/** Download a media URL with the private-IP check on every redirect hop, a timeout and a size cap. */
+async function safeDownload(raw) {
+  let current = raw
+  for (let hop = 0; hop <= 3; hop++) {
+    await assertPublicUrl(current)
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), 30000)
+    try {
+      const r = await fetch(current, { redirect: 'manual', signal: ctrl.signal })
+      if (r.status >= 300 && r.status < 400 && r.headers.get('location')) {
+        current = new URL(r.headers.get('location'), current).toString()
+        continue
+      }
+      if (!r.ok) throw new Error(`Media download failed (${r.status})`)
+      const len = Number(r.headers.get('content-length') || 0)
+      if (len > MAX_MEDIA_DOWNLOAD) throw new Error('Media too large')
+      const chunks = []
+      let size = 0
+      for await (const chunk of r.body) {
+        size += chunk.length
+        if (size > MAX_MEDIA_DOWNLOAD) { ctrl.abort(); throw new Error('Media too large') }
+        chunks.push(Buffer.from(chunk))
+      }
+      return Buffer.concat(chunks)
+    } finally {
+      clearTimeout(t)
+    }
+  }
+  throw new Error('Too many redirects')
 }
 
 // ─── Notify WABEK ─────────────────────────────────────────
@@ -136,14 +248,51 @@ function toJid(to) {
 }
 
 // ─── Media payload ─────────────────────────────────────────
-function buildMediaPayload(mediaType, mediaUrl, caption, filename, mimetype) {
+// `media` is the downloaded Buffer (never a URL: Baileys would fetch it
+// itself, without the private-network check above).
+function buildMediaPayload(mediaType, media, caption, filename, mimetype) {
   switch (mediaType) {
-    case 'image':   return { image:    { url: mediaUrl }, caption: caption || '', mimetype: mimetype || 'image/jpeg' }
-    case 'video':   return { video:    { url: mediaUrl }, caption: caption || '', mimetype: mimetype || 'video/mp4' }
-    case 'audio':   return { audio:    { url: mediaUrl }, mimetype: mimetype || 'audio/mpeg', ptt: false }
-    case 'ptt':     return { audio:    { url: mediaUrl }, mimetype: mimetype || 'audio/ogg; codecs=opus', ptt: true }
-    case 'sticker': return { sticker:  { url: mediaUrl }, mimetype: mimetype || 'image/webp' }
-    default:        return { document: { url: mediaUrl }, mimetype: mimetype || 'application/octet-stream', fileName: filename || 'file', caption: caption || '' }
+    case 'image':   return { image:    media, caption: caption || '', mimetype: mimetype || 'image/jpeg' }
+    case 'video':   return { video:    media, caption: caption || '', mimetype: mimetype || 'video/mp4' }
+    case 'audio':   return { audio:    media, mimetype: mimetype || 'audio/mpeg', ptt: false }
+    case 'ptt':     return { audio:    media, mimetype: mimetype || 'audio/ogg; codecs=opus', ptt: true }
+    case 'sticker': return { sticker:  media, mimetype: mimetype || 'image/webp' }
+    default:        return { document: media, mimetype: mimetype || 'application/octet-stream', fileName: filename || 'file', caption: caption || '' }
+  }
+}
+
+// ─── Inbound media → Supabase storage (optional) ──────────
+// When SUPABASE_URL/SUPABASE_SERVICE_KEY are set, inbound media is uploaded
+// to the same public `wa-media` bucket WABEK uses and only its URL is sent
+// to WABEK (large base64 bodies otherwise hit the serverless body limit).
+// Falls back to the previous data: URL if the upload fails.
+// Set UPLOAD_INBOUND_MEDIA=0 to always send data: URLs.
+const MEDIA_EXT = {
+  'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif',
+  'video/mp4': 'mp4', 'video/3gpp': '3gp',
+  'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/aac': 'aac', 'audio/mp4': 'm4a', 'audio/amr': 'amr',
+  'application/pdf': 'pdf', 'text/plain': 'txt',
+  'application/msword': 'doc', 'application/vnd.ms-excel': 'xls', 'application/vnd.ms-powerpoint': 'ppt',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+}
+async function uploadInboundMedia(instanceId, buffer, mimeType) {
+  if (!SUPABASE_URL || !SUPABASE_KEY || process.env.UPLOAD_INBOUND_MEDIA === '0') return null
+  try {
+    const base = String(mimeType || '').split(';')[0].trim().toLowerCase()
+    const contentType = MEDIA_EXT[base] ? base : 'application/octet-stream'
+    const objectPath = `inbound/${instanceId}/${crypto.randomUUID()}.${MEDIA_EXT[base] || 'bin'}`
+    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/wa-media/${objectPath}`, {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': contentType, 'x-upsert': 'false' },
+      body: buffer,
+    })
+    if (!r.ok) { console.error(`[${instanceId}] media upload failed: ${r.status}`); return null }
+    return `${SUPABASE_URL}/storage/v1/object/public/wa-media/${objectPath}`
+  } catch (e) {
+    console.error(`[${instanceId}] media upload error:`, e.message)
+    return null
   }
 }
 
@@ -162,7 +311,7 @@ async function downloadInboundMedia(msg, msgType) {
       sticker: m.stickerMessage?.mimetype || 'image/webp',
     }
     return {
-      base64: buffer.toString('base64'),
+      buffer,
       mimeType: mimes[msgType] || 'application/octet-stream',
       filename: m.documentMessage?.fileName || null,
     }
@@ -285,7 +434,8 @@ async function createSession(instanceId) {
         try {
           const media = await downloadInboundMedia(msg, msgType)
           if (media) {
-            mediaUrl = `data:${media.mimeType};base64,${media.base64}`
+            mediaUrl = await uploadInboundMedia(instanceId, media.buffer, media.mimeType)
+              || `data:${media.mimeType};base64,${media.buffer.toString('base64')}`
             mimeType = media.mimeType
             filename = media.filename
           }
@@ -405,6 +555,8 @@ async function restoreSessions() {
 // ─── Routes ───────────────────────────────────────────────
 
 app.get('/health', (req, res) => {
+  // Unauthenticated: just liveness for Railway. Details need X-Secret.
+  if (!isAuthed(req)) return res.json({ ok: true })
   const list = [...sessions.entries()].map(([id, s]) => ({ id, connected: s.connected, phoneNumber: s.phoneNumber, hasQR: !!s.qr }))
   res.json({
     ok: true, sessions: sessions.size, instances: list,
@@ -438,12 +590,12 @@ app.post('/instance/:id/send', auth, async (req, res) => {
   try {
     const jid    = toJid(to)
     const result = mediaUrl && mediaType
-      ? await s.sock.sendMessage(jid, buildMediaPayload(mediaType, mediaUrl, caption || text || '', filename, mimetype))
+      ? await s.sock.sendMessage(jid, buildMediaPayload(mediaType, await safeDownload(mediaUrl), caption || text || '', filename, mimetype))
       : await s.sock.sendMessage(jid, { text })
     res.json({ success: true, messageId: result?.key?.id })
   } catch (e) {
     console.error(`[${id}] send error:`, e.message)
-    res.status(500).json({ error: e.message })
+    res.status(500).json({ error: 'Send failed' })
   }
 })
 
@@ -455,11 +607,12 @@ app.post('/instance/:id/send-media', auth, async (req, res) => {
   if (!s) return res.status(404).json({ error: 'Instance not found' })
   if (!s.connected) return res.status(400).json({ error: 'Instance not connected' })
   try {
-    const result = await s.sock.sendMessage(toJid(to), buildMediaPayload(mediaType, mediaUrl, caption || '', filename, mimetype))
+    const media  = await safeDownload(mediaUrl)
+    const result = await s.sock.sendMessage(toJid(to), buildMediaPayload(mediaType, media, caption || '', filename, mimetype))
     res.json({ success: true, messageId: result?.key?.id })
   } catch (e) {
     console.error(`[${id}] send-media error:`, e.message)
-    res.status(500).json({ error: e.message })
+    res.status(500).json({ error: 'Media send failed' })
   }
 })
 
@@ -480,7 +633,10 @@ app.post('/instance/:id/restore', auth, async (req, res) => {
     }
     const s = sessions.get(id)
     return res.json({ ok: true, status: s?.qr ? 'qr_pending' : 'connecting' })
-  } catch (e) { res.status(500).json({ error: e.message }) }
+  } catch (e) {
+    console.error(`[${id}] restore error:`, e.message)
+    res.status(500).json({ error: 'Restore failed' })
+  }
 })
 
 app.get('/instance/:id/status', auth, (req, res) => {
@@ -531,7 +687,9 @@ app.listen(PORT, async () => {
   // ── AI Quality Review Scheduler ─────────────────────────
   // Runs every hour to analyze inactive conversations
   const NETLIFY_URL   = process.env.NETLIFY_URL   || process.env.WABEK_EVENTS_URL?.replace('/api/whatsapp/wa-web-events', '')
-  const REVIEW_SECRET = process.env.SERVER_SECRET || SERVER_SECRET
+  // WABEK's cron endpoints check CRON_SECRET; set the same value here.
+  // Falls back to SERVER_SECRET (previous behaviour).
+  const REVIEW_SECRET = process.env.CRON_SECRET || SERVER_SECRET
 
   async function runAIReviews() {
     if (!NETLIFY_URL) {
