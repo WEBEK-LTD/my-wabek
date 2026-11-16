@@ -1,11 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
-import { requireAdmin } from '@/lib/auth'
+import { requireAdmin, bumpTokenVersion } from '@/lib/auth'
 import { logAction, getClientIp } from '@/lib/middleware'
 import { pick } from '@/lib/security'
 import { cancelStripeSubscription, upsertSubscriptionRow, LIVE_SUB_STATUSES } from '@/lib/stripe'
 
-const SENSITIVE_USER_FIELDS = ['password_hash', 'api_key', 'api_key_hash', 'otp_secret', 'reset_token', 'reset_token_expires']
+const SENSITIVE_USER_FIELDS = ['password_hash', 'api_key', 'api_key_hash', 'otp_secret', 'two_factor_secret', 'totp_secret', 'reset_token', 'reset_token_expires', 'token_version']
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const admin = await requireAdmin(req, res)
@@ -48,7 +48,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'You cannot suspend or demote your own account' })
     }
 
-    const { data: current } = await db.from('users').select('id, plan_id, plan_expires_at').eq('id', id).maybeSingle()
+    const { data: current } = await db.from('users').select('id, plan_id, plan_expires_at, role, is_active').eq('id', id).maybeSingle()
     if (!current) return res.status(404).json({ error: 'User not found' })
 
     const hasPlan = Object.prototype.hasOwnProperty.call(body, 'plan_id')
@@ -122,6 +122,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(500).json({ error: 'Failed to update user' })
     }
 
+    // Suspension or a role change must end every existing session now.
+    const roleChanged = 'role' in update && update.role !== current.role
+    const suspended = update.is_active === false && current.is_active !== false
+    if (roleChanged || suspended) await bumpTokenVersion(id)
+
     try {
       if (subscriptionAction === 'assign' && newPlanId) {
         const expires = (update.plan_expires_at as string | null) || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
@@ -154,6 +159,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === 'DELETE') {
     if (id === admin.userId) return res.status(400).json({ error: 'You cannot suspend your own account' })
     await db.from('users').update({ is_active: false }).eq('id', id)
+    await bumpTokenVersion(id)
     await logAction({ userId: admin.userId, action: 'admin_suspend_user', resource: 'user', resourceId: id, ipAddress: getClientIp(req) })
     return res.status(200).json({ success: true })
   }
