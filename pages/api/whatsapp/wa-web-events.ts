@@ -21,6 +21,18 @@ function eventSecrets(): string[] {
 }
 
 /**
+ * Delivery statuses a receipt may overwrite (pending → sent → delivered →
+ * read). 'failed' only replaces a not-yet-delivered status; a later
+ * delivered/read receipt still wins over 'failed'.
+ */
+const STATUS_OVERWRITES: Record<string, string[]> = {
+  sent: ['pending'],
+  delivered: ['pending', 'sent', 'failed'],
+  read: ['pending', 'sent', 'delivered', 'failed'],
+  failed: ['pending', 'sent'],
+}
+
+/**
  * Re-host a data: URL from the Baileys server on our storage, so the DB
  * stores a short storage URL instead of megabytes of base64. Already-hosted
  * http(s) URLs (Baileys uploading itself) are kept as they are.
@@ -253,21 +265,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       case 'message_status': {
         // Update main messages table
         if (!data.messageId) break
+        // Older Baileys builds sent 'played' (voice notes); messages.status
+        // only allows pending/sent/delivered/read/failed.
+        const newStatus = data.status === 'played' ? 'read' : data.status
+        const overwritable = STATUS_OVERWRITES[newStatus as string]
+        if (!overwritable) break
         const { data: before } = await db.from('messages').select('id, status, user_id, contact_id, campaign_id')
           .eq('wa_message_id', data.messageId).eq('instance_id', instanceId).limit(1)
+        // Monotonic: never move a message back (read → delivered, delivered →
+        // sent), receipts can arrive out of order.
         const { data: updated } = await db
           .from('messages')
-          .update({ status: data.status })
+          .update({ status: newStatus })
           .eq('wa_message_id', data.messageId)
           .eq('instance_id', instanceId)
+          .or(`status.is.null,status.in.(${overwritable.join(',')})`)
           .select('id')
 
-        console.log(`[message_status] id=${data.messageId} status=${data.status} updated=${updated?.length || 0}`)
+        console.log(`[message_status] id=${data.messageId} status=${newStatus} updated=${updated?.length || 0}`)
 
         const prev = before?.[0]
-        if (prev && ['delivered', 'read', 'failed'].includes(data.status) && prev.status !== data.status) {
+        if (prev && updated?.length && ['delivered', 'read', 'failed'].includes(newStatus) && prev.status !== newStatus) {
           emit(prev.user_id, 'message_status', {
-            message_id: data.messageId, id: prev.id, status: data.status, to: data.to || data.remoteJid || null,
+            message_id: data.messageId, id: prev.id, status: newStatus, to: data.to || data.remoteJid || null,
             contact_id: prev.contact_id || null, campaign_id: prev.campaign_id || null, instance_id: instanceId,
           })
         }
