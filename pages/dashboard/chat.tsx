@@ -75,7 +75,6 @@ export default function ChatPage() {
   const [aiSuggestion, setAiSuggestion] = useState<string | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiBlocked, setAiBlocked] = useState(false)
-  const aiSettingsRef = useRef<any[] | null>(null)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -512,31 +511,17 @@ export default function ChatPage() {
     setSavingNote(false)
   }
 
-  // ── AI reply suggestion (on demand; uses the AI test endpoint) ─────────
+  // ── AI reply suggestion (on demand; server builds it from the conversation) ─
   const lastInbound = useMemo(() => [...messages].reverse().find(m => m.direction === 'inbound' && m.content), [messages])
   const suggestReply = async () => {
     if (!activeConv || aiLoading) return
     setAiLoading(true)
     setAiSuggestion(null)
     try {
-      if (!aiSettingsRef.current) {
-        const { data } = await axios.get('/api/ai/settings').catch(() => ({ data: { settings: [] } }))
-        aiSettingsRef.current = data?.settings || []
-      }
-      const settings = aiSettingsRef.current || []
-      const cfg = settings.find((s: any) => s.instance_id === activeConv.instance_id) || settings.find((s: any) => !s.instance_id) || settings[0] || {}
-      const transcript = messages
-        .filter(m => m.content && !/^\[(image|video|audio|document|sticker|ptt)\]$/.test(m.content))
-        .slice(-10)
-        .map(m => `${m.direction === 'inbound' ? 'Customer' : 'Agent'}: ${m.content}`)
-        .join('\n')
-      const prompt = `${transcript}\n\nWrite the agent's next reply to the customer. Reply with the message text only.`.slice(-3900)
-      const { data } = await axios.post('/api/ai/test', {
-        message: prompt,
-        ...(cfg.system_prompt ? { system_prompt: cfg.system_prompt } : {}),
-        ...(cfg.company_name ? { company_name: cfg.company_name } : {}),
-      })
-      if (data?.reply) setAiSuggestion(String(data.reply).trim())
+      const { data } = await axios.post('/api/ai/suggest', activeConv.id
+        ? { conversation_id: activeConv.id }
+        : { contact_id: activeConv.contact_id, instance_id: activeConv.instance_id || undefined })
+      if (data?.suggestion) setAiSuggestion(String(data.suggestion).trim())
       else toast.error(c('ai_failed'))
     } catch (e: any) {
       if (e?.response?.data?.upgrade_required) { setAiBlocked(true); toast.error(c('ai_upgrade')) }
