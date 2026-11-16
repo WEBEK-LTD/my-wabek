@@ -17,7 +17,7 @@ on:
       platform:
         description: Store
         type: choice
-        options: [both, google-play, app-store]
+        options: [both, google-play, app-store, diagnose-app-store]
         default: both
 
 permissions:
@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   google-play:
-    if: inputs.platform != 'app-store'
+    if: inputs.platform == 'both' || inputs.platform == 'google-play'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -67,7 +67,7 @@ jobs:
             --sync_image_upload true
 
   app-store:
-    if: inputs.platform != 'google-play'
+    if: inputs.platform == 'both' || inputs.platform == 'app-store'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -132,3 +132,23 @@ jobs:
             --automatic_release false \
             --run_precheck_before_submit false \
             --force true
+
+  diagnose-app-store:
+    if: inputs.platform == 'diagnose-app-store'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+      - run: gem install fastlane --no-document
+      - name: Read-only App Store Connect check
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          jq -n --arg id "$ASC_KEY_ID" --arg iss "$ASC_ISSUER_ID" --arg key "$ASC_KEY_P8" \
+            '{key_id:$id, issuer_id:$iss, key:$key, in_house:false}' > "$RUNNER_TEMP/asc.json"
+          ASC_JSON="$RUNNER_TEMP/asc.json" ruby .github/scripts/asc-diagnose.rb
