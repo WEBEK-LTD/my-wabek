@@ -1,19 +1,37 @@
 // @ts-nocheck
-import { usePlanGuard } from '@/hooks/usePlanFeature'
-import UpgradeWall from '@/components/UpgradeWall'
 import { useState, useEffect } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { useQuery, useMutation } from 'react-query'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { ArrowPathIcon, SwatchIcon, GlobeAltIcon, CheckCircleIcon, XCircleIcon, ClockIcon } from '@heroicons/react/24/outline'
-import clsx from 'clsx'
+import {
+  SwatchIcon, GlobeAltIcon, CheckCircleIcon, XCircleIcon, ClockIcon, MagnifyingGlassIcon,
+  LifebuoyIcon, AdjustmentsHorizontalIcon, EyeIcon, BookOpenIcon, ChatBubbleLeftRightIcon, HomeIcon, UsersIcon,
+} from '@heroicons/react/24/outline'
+import { Button, Card, Field, Input, PageHeader, Skeleton, Switch, Textarea, Table, TBody, TD, TH, THead, TR } from '@/components/ui'
+import { CopyButton, Notice, PlanGate, SectionTitle } from '@/components/settings/Shared'
+
+const DNS_TARGET = 'wabek.netlify.app'
 
 export default function WhiteLabelPage() {
-  const { blocked, isLoading: planLoading } = usePlanGuard('allow_white_label')
-  if (planLoading) return null
-  if (blocked) return <UpgradeWall feature="allow_white_label" />
+  return <PlanGate feature="allow_white_label"><WhiteLabelContent /></PlanGate>
+}
 
+function ColorField({ label, value, onChange }) {
+  return (
+    <Field label={label}>
+      <div className="flex items-center gap-2">
+        <label className="relative h-11 w-11 shrink-0 cursor-pointer overflow-hidden rounded-field border border-line-strong" style={{ backgroundColor: value }}>
+          <span className="sr-only">{label}</span>
+          <input type="color" value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#000000'} onChange={e => onChange(e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
+        </label>
+        <Input value={value} onChange={e => onChange(e.target.value)} dir="ltr" className="font-mono" aria-label={`${label} (HEX)`} />
+      </div>
+    </Field>
+  )
+}
+
+function WhiteLabelContent() {
   const [dnsStatus, setDnsStatus] = useState(null) // null | 'ok' | 'pending' | 'error'
   const [dnsChecking, setDnsChecking] = useState(false)
 
@@ -33,6 +51,7 @@ export default function WhiteLabelPage() {
     favicon_url: '', support_email: '', support_whatsapp: '',
     hide_powered_by: false, custom_css: '', custom_footer: '',
   })
+  const [logoError, setLogoError] = useState(false)
 
   const { data, isLoading } = useQuery('white-label', () => axios.get('/api/white-label').then(r => r.data))
 
@@ -41,173 +60,175 @@ export default function WhiteLabelPage() {
       setForm(prev => ({ ...prev, ...data.settings }))
     }
   }, [data])
+  useEffect(() => { setLogoError(false) }, [form.brand_logo])
 
   const saveMut = useMutation(
     (body) => axios.put('/api/white-label', body),
     {
       onSuccess: (r) => {
         if (r.data.domain_status === 'configured') {
-          toast.success('✅ Settings saved — domain added to server')
+          toast.success('تم الحفظ وأُضيف النطاق إلى الخادم')
         } else if (r.data.domain_status === 'netlify_error') {
-          toast.success('✅ Settings saved')
+          toast.success('تم حفظ الإعدادات')
           // Don't expose internal infra error to user
         } else {
-          toast.success('✅ White label settings saved')
+          toast.success('تم حفظ إعدادات العلامة البيضاء')
         }
       },
-      onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
+      onError: (e) => toast.error(e?.response?.data?.error || 'تعذّر الحفظ'),
     }
   )
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }))
+  const subdomain = form.custom_domain?.split('.').slice(0, -2).join('.') || 'app'
 
   return (
     <DashboardLayout title="White Label">
-      <div className="max-w-2xl space-y-4">
+      <div className="space-y-6 pb-24">
+        <PageHeader
+          eyebrow="الإعدادات"
+          title="العلامة البيضاء"
+          description="قدّم المنصة لعملائك باسمك وألوانك وشعارك وعلى نطاقك الخاص."
+          actions={<Button variant="secondary" icon={BookOpenIcon} href="/docs/guides/white-label">الدليل</Button>}
+        />
 
-        <div className="card border-blue-200/50 bg-blue-50/10">
-          <div className="flex items-center gap-3">
-            <SwatchIcon className="w-6 h-6 text-blue-600" />
-            <div>
-              <h3 className="font-display font-semibold text-slate-900">White Label Branding</h3>
-              <p className="text-slate-400 text-sm">Customize the platform with your own brand identity</p>
-            </div>
+        {isLoading ? (
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
+            <div className="space-y-5">{[0, 1, 2].map(i => <Skeleton key={i} className="h-56 w-full rounded-panel" />)}</div>
+            <Skeleton className="h-80 w-full rounded-panel" />
           </div>
-        </div>
+        ) : (
+          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
+            <div className="space-y-5">
+              {/* Brand */}
+              <Card>
+                <SectionTitle icon={SwatchIcon} title="هوية العلامة" subtitle="الاسم والشعار والألوان التي يراها عملاؤك" />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="اسم العلامة">
+                    <Input value={form.brand_name} onChange={e => set('brand_name', e.target.value)} placeholder="شركتي" />
+                  </Field>
+                  <Field label="رابط الشعار" hint="رابط صورة مباشر (PNG أو SVG)">
+                    <Input value={form.brand_logo} onChange={e => set('brand_logo', e.target.value)} placeholder="https://..." dir="ltr" />
+                  </Field>
+                  <ColorField label="اللون الأساسي" value={form.brand_color} onChange={v => set('brand_color', v)} />
+                  <ColorField label="لون الخلفية" value={form.brand_secondary_color} onChange={v => set('brand_secondary_color', v)} />
+                  <Field label="رابط أيقونة المتصفح (Favicon)" className="sm:col-span-2">
+                    <Input value={form.favicon_url} onChange={e => set('favicon_url', e.target.value)} placeholder="https://..." dir="ltr" />
+                  </Field>
+                </div>
+              </Card>
 
-        <div className="card space-y-4">
-          <h3 className="font-display font-semibold text-slate-900">🎨 Brand Identity</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Brand Name</label>
-              <input value={form.brand_name} onChange={e => set('brand_name', e.target.value)} placeholder="My Company" className="input" />
+              {/* Domain */}
+              <Card>
+                <SectionTitle icon={GlobeAltIcon} title="النطاق المخصص" subtitle="اربط نطاقًا فرعيًا من نطاقك بالمنصة" />
+                <Field label="النطاق">
+                  <div className="flex gap-2">
+                    <Input value={form.custom_domain} onChange={e => { set('custom_domain', e.target.value); setDnsStatus(null) }} placeholder="app.mycompany.com" dir="ltr" wrapperClassName="flex-1" className="flex-1" />
+                    <Button variant="secondary" icon={MagnifyingGlassIcon} loading={dnsChecking} disabled={!form.custom_domain} onClick={checkDns}>فحص DNS</Button>
+                  </div>
+                </Field>
+                <div className="mt-3" aria-live="polite">
+                  {dnsStatus === 'ok' && <Notice tone="success" icon={CheckCircleIcon}>إعدادات DNS صحيحة. سيعمل نطاقك خلال 24–48 ساعة بعد اكتمال الانتشار.</Notice>}
+                  {dnsStatus === 'pending' && <Notice tone="warning" icon={ClockIcon}>لم يتصل النطاق بعد. قد يستغرق الانتشار حتى 24–48 ساعة.</Notice>}
+                  {dnsStatus === 'error' && <Notice tone="danger" icon={XCircleIcon}>لم يُعثر على النطاق. تحقق من كتابته أو من إعدادات DNS.</Notice>}
+                </div>
+
+                <div className="mt-4 overflow-hidden rounded-card border border-line">
+                  <p className="border-b border-line-soft bg-surface-2 px-4 py-2.5 text-sm font-medium text-ink">أضف هذا السجل لدى مزوّد النطاق (GoDaddy أو Namecheap أو Cloudflare…)</p>
+                  <Table minWidth={420} dense caption="سجل DNS المطلوب" wrapperClassName="rounded-none border-0">
+                    <THead><TR><TH>النوع</TH><TH>الاسم</TH><TH>القيمة</TH><TH align="end"><span className="sr-only">نسخ</span></TH></TR></THead>
+                    <TBody>
+                      <TR>
+                        <TD><code className="font-mono text-ink">CNAME</code></TD>
+                        <TD><code dir="ltr" className="font-mono text-ink">{subdomain}</code></TD>
+                        <TD><code dir="ltr" className="font-mono text-ink">{DNS_TARGET}</code></TD>
+                        <TD align="end"><CopyButton text={DNS_TARGET} label="نسخ القيمة" /></TD>
+                      </TR>
+                    </TBody>
+                  </Table>
+                  <p className="border-t border-line-soft px-4 py-2.5 text-xs text-muted">احفظ السجل وانتظر من 15 دقيقة إلى 48 ساعة حتى يكتمل الانتشار.</p>
+                </div>
+                <Notice tone="warning" className="mt-3" title="مستخدمو Cloudflare">
+                  اضبط الوكيل على <strong>DNS only</strong> (السحابة الرمادية) وليس Proxied، لأن وضع الوكيل يعطّل شهادة SSL.
+                </Notice>
+              </Card>
+
+              {/* Support */}
+              <Card>
+                <SectionTitle icon={LifebuoyIcon} title="بيانات الدعم" subtitle="تظهر لعملائك عند طلب المساعدة" />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="بريد الدعم">
+                    <Input type="email" value={form.support_email} onChange={e => set('support_email', e.target.value)} placeholder="support@..." dir="ltr" />
+                  </Field>
+                  <Field label="واتساب الدعم">
+                    <Input value={form.support_whatsapp} onChange={e => set('support_whatsapp', e.target.value)} placeholder="+201234567890" dir="ltr" />
+                  </Field>
+                </div>
+              </Card>
+
+              {/* Advanced */}
+              <Card>
+                <SectionTitle icon={AdjustmentsHorizontalIcon} title="خيارات متقدمة" />
+                <div className="space-y-4">
+                  <Switch checked={!!form.hide_powered_by} onChange={v => set('hide_powered_by', v)}
+                    label="إخفاء «Powered by WABEK»" description="إزالة علامة WABEK من التذييل" />
+                  <Field label="CSS مخصص">
+                    <Textarea value={form.custom_css} onChange={e => set('custom_css', e.target.value)} rows={4} dir="ltr" placeholder=":root { --brand: #ff0000; }" className="font-mono text-xs" />
+                  </Field>
+                  <Field label="نص التذييل">
+                    <Input value={form.custom_footer} onChange={e => set('custom_footer', e.target.value)} placeholder="© شركتي" />
+                  </Field>
+                </div>
+              </Card>
             </div>
-            <div>
-              <label className="label">Logo URL</label>
-              <input value={form.brand_logo} onChange={e => set('brand_logo', e.target.value)} placeholder="https://..." className="input" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Primary Color</label>
-              <div className="flex gap-2">
-                <input type="color" value={form.brand_color} onChange={e => set('brand_color', e.target.value)} className="w-10 h-10 rounded-lg border border-slate-200 cursor-pointer" />
-                <input value={form.brand_color} onChange={e => set('brand_color', e.target.value)} className="input flex-1 font-mono" />
+
+            {/* Live preview */}
+            <div className="space-y-3 lg:sticky lg:top-6">
+              <p className="flex items-center gap-2 text-sm font-medium text-ink"><EyeIcon className="h-4 w-4 text-brand-ink" aria-hidden="true" />معاينة مباشرة</p>
+              <div className="overflow-hidden rounded-panel border border-line shadow-hero" aria-label="معاينة العلامة" role="img">
+                <div className="flex items-center gap-1.5 border-b border-black/5 bg-[#EEF3F2] px-3 py-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#F28B9B]" /><span className="h-2.5 w-2.5 rounded-full bg-[#F5C26B]" /><span className="h-2.5 w-2.5 rounded-full bg-[#8BE07A]" />
+                  <span className="ms-2 flex-1 truncate rounded-md bg-white px-2 py-0.5 text-[11px] text-[#4A6668]" dir="ltr">{form.custom_domain || 'app.mycompany.com'}</span>
+                </div>
+                <div className="flex min-h-[15rem]" style={{ backgroundColor: form.brand_secondary_color }}>
+                  <div className="flex w-32 flex-col gap-2 p-3" style={{ backgroundColor: form.brand_color }}>
+                    <div className="mb-2 flex items-center gap-1.5">
+                      {form.brand_logo && !logoError ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={form.brand_logo} alt="" onError={() => setLogoError(true)} className="h-6 w-6 rounded object-contain" />
+                      ) : (
+                        <span className="flex h-6 w-6 items-center justify-center rounded bg-white/25 text-[11px] font-bold text-white">{(form.brand_name || 'B')[0]}</span>
+                      )}
+                      <span className="truncate text-[11px] font-bold text-white">{form.brand_name || 'اسم العلامة'}</span>
+                    </div>
+                    {[HomeIcon, ChatBubbleLeftRightIcon, UsersIcon].map((I, i) => (
+                      <span key={i} className={`flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[10px] text-white ${i === 0 ? 'bg-white/25' : 'opacity-80'}`}>
+                        <I className="h-3 w-3" aria-hidden="true" /><span className="h-1.5 w-12 rounded-full bg-white/60" />
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex flex-1 flex-col gap-2 p-3">
+                    <span className="h-2.5 w-20 rounded-full bg-black/15" />
+                    <div className="grid grid-cols-2 gap-2">
+                      {[0, 1].map(i => <div key={i} className="h-12 rounded-lg bg-white shadow-sm" />)}
+                    </div>
+                    <div className="h-16 rounded-lg bg-white shadow-sm" />
+                    <span className="mt-auto inline-flex w-fit rounded-md px-2.5 py-1 text-[10px] font-semibold text-white" style={{ backgroundColor: form.brand_color }}>زر أساسي</span>
+                  </div>
+                </div>
+                <div className="border-t border-black/5 bg-white px-3 py-1.5 text-center text-[10px] text-[#4A6668]">
+                  {form.custom_footer || (form.hide_powered_by ? '' : 'Powered by WABEK')}
+                </div>
               </div>
-            </div>
-            <div>
-              <label className="label">Background Color</label>
-              <div className="flex gap-2">
-                <input type="color" value={form.brand_secondary_color} onChange={e => set('brand_secondary_color', e.target.value)} className="w-10 h-10 rounded-lg border border-slate-200 cursor-pointer" />
-                <input value={form.brand_secondary_color} onChange={e => set('brand_secondary_color', e.target.value)} className="input flex-1 font-mono" />
-              </div>
-            </div>
-          </div>
-          <div>
-            <label className="label">Favicon URL</label>
-            <input value={form.favicon_url} onChange={e => set('favicon_url', e.target.value)} placeholder="https://..." className="input" />
-          </div>
-        </div>
-
-        <div className="card space-y-4">
-          <h3 className="font-display font-semibold text-slate-900">🌐 Domain & Support</h3>
-          <div>
-            <label className="label">Custom Domain</label>
-            <div className="flex gap-2">
-              <input value={form.custom_domain} onChange={e => { set('custom_domain', e.target.value); setDnsStatus(null) }} placeholder="app.mycompany.com" className="input flex-1" />
-              <button onClick={checkDns} disabled={!form.custom_domain || dnsChecking}
-                className="btn-secondary text-sm flex-shrink-0">
-                {dnsChecking ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : '🔍 Check'}
-              </button>
-            </div>
-            <div className="mt-2 space-y-1.5">
-              {dnsStatus === 'ok' && (
-                <div className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50/20 border border-blue-200/50 rounded-lg px-3 py-2">
-                  <CheckCircleIcon className="w-4 h-4 flex-shrink-0" />
-                  ✅ DNS is configured correctly! Your domain will be live within 24-48 hours after propagation completes.
-                </div>
-              )}
-              {dnsStatus === 'pending' && (
-                <div className="flex items-center gap-2 text-xs text-yellow-400 bg-yellow-900/20 border border-yellow-800/50 rounded-lg px-3 py-2">
-                  <ClockIcon className="w-4 h-4 flex-shrink-0" />
-                  ⏳ DNS not connected yet. May take up to 24-48 hours to propagate.
-                </div>
-              )}
-              {dnsStatus === 'error' && (
-                <div className="flex items-center gap-2 text-xs text-red-400 bg-red-900/20 border border-red-800/50 rounded-lg px-3 py-2">
-                  <XCircleIcon className="w-4 h-4 flex-shrink-0" />
-                  ❌ Domain not found. Check spelling or DNS settings.
-                </div>
-              )}
-              <div className="text-xs text-slate-500 space-y-1 bg-[#F8FAFC] rounded-lg px-3 py-2 border border-slate-200">
-                <p className="font-medium text-slate-400">📋 DNS Setup Instructions:</p>
-                <p>1. Login to your domain registrar (GoDaddy, Namecheap, Cloudflare…)</p>
-                <p>2. Go to DNS Settings → Add new record</p>
-                <p>3. Type: <code className="bg-[#F8FAFC] px-1 rounded text-blue-600">CNAME</code></p>
-                <p>4. Name: <code className="bg-[#F8FAFC] px-1 rounded text-blue-600">{form.custom_domain?.split('.').slice(0, -2).join('.') || 'app'}</code></p>
-                <p>5. Value: <code className="bg-[#F8FAFC] px-1 rounded text-blue-600">wabek.netlify.app</code></p>
-                <p>6. Save and wait 15 min – 48 hours for propagation</p>
-                <div className="mt-2 pt-2 border-t border-slate-200 text-yellow-600">
-                  ⚠️ <strong>Cloudflare users:</strong> Set the proxy to <strong>DNS only</strong> (grey cloud 🔘), not Proxied (orange ☁️). Proxied mode breaks SSL with Netlify.
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Support Email</label>
-              <input type="email" value={form.support_email} onChange={e => set('support_email', e.target.value)} placeholder="support@..." className="input" />
-            </div>
-            <div>
-              <label className="label">Support WhatsApp</label>
-              <input value={form.support_whatsapp} onChange={e => set('support_whatsapp', e.target.value)} placeholder="+201234567890" className="input" />
-            </div>
-          </div>
-        </div>
-
-        <div className="card space-y-4">
-          <h3 className="font-display font-semibold text-slate-900">⚙️ Advanced</h3>
-          <div className="flex items-center justify-between py-2 border-b border-slate-200">
-            <div>
-              <p className="text-sm font-medium text-slate-900">Hide "Powered by WABEK"</p>
-              <p className="text-xs text-slate-500">Remove the WABEK branding from the footer</p>
-            </div>
-            <button onClick={() => set('hide_powered_by', !form.hide_powered_by)}
-              className={clsx('relative inline-flex h-6 w-11 items-center rounded-full transition-colors', form.hide_powered_by ? 'bg-brand-500' : 'bg-slate-100')}>
-              <span className={clsx('inline-block h-4 w-4 transform rounded-full bg-white transition-transform', form.hide_powered_by ? 'translate-x-6' : 'translate-x-1')} />
-            </button>
-          </div>
-          <div>
-            <label className="label">Custom CSS</label>
-            <textarea value={form.custom_css} onChange={e => set('custom_css', e.target.value)}
-              rows={4} placeholder=":root { --brand: #ff0000; }" className="input font-mono text-xs resize-none" />
-          </div>
-          <div>
-            <label className="label">Custom Footer Text</label>
-            <input value={form.custom_footer} onChange={e => set('custom_footer', e.target.value)} placeholder="© 2025 My Company" className="input" />
-          </div>
-        </div>
-
-        {/* Preview */}
-        {(form.brand_name || form.brand_color !== '#00D46A') && (
-          <div className="card border-slate-200" style={{ borderLeftColor: form.brand_color, borderLeftWidth: '4px' }}>
-            <h3 className="font-display font-semibold text-slate-900 mb-3">👁️ Preview</h3>
-            <div className="flex items-center gap-3 p-3 rounded-xl" style={{ backgroundColor: form.brand_secondary_color }}>
-              {form.brand_logo ? (
-                <img src={form.brand_logo} alt="logo" className="w-8 h-8 object-contain" />
-              ) : (
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-900 font-bold text-sm" style={{ backgroundColor: form.brand_color }}>
-                  {(form.brand_name || 'B')[0]}
-                </div>
-              )}
-              <span className="font-bold text-slate-900">{form.brand_name || 'Brand Name'}</span>
+              {form.brand_logo && logoError && <p className="text-xs text-danger">تعذّر تحميل الشعار من الرابط المحدد.</p>}
             </div>
           </div>
         )}
+      </div>
 
-        <button onClick={() => saveMut.mutate(form)} disabled={saveMut.isLoading} className="btn-primary w-full justify-center">
-          {saveMut.isLoading ? <><ArrowPathIcon className="w-4 h-4 animate-spin" /> Saving...</> : '💾 Save White Label Settings'}
-        </button>
+      {/* Sticky save bar */}
+      <div className="pointer-events-none sticky bottom-4 z-10 -mt-20 flex justify-end">
+        <Button size="lg" className="pointer-events-auto shadow-hero" loading={saveMut.isLoading} disabled={isLoading} onClick={() => saveMut.mutate(form)}>حفظ إعدادات العلامة البيضاء</Button>
       </div>
     </DashboardLayout>
   )

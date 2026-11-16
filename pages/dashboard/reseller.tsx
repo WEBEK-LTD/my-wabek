@@ -1,61 +1,86 @@
 // @ts-nocheck
-import { usePlanGuard } from '@/hooks/usePlanFeature'
-import UpgradeWall from '@/components/UpgradeWall'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { format } from 'date-fns'
-import clsx from 'clsx'
 import {
-  PlusIcon, ClipboardIcon, TrashIcon, CheckIcon, CheckCircleIcon,
-  CurrencyDollarIcon, UserGroupIcon, LinkIcon,
-  ArrowPathIcon, XMarkIcon, BanknotesIcon,
+  PlusIcon, TrashIcon, CheckIcon, CurrencyDollarIcon, UserGroupIcon, LinkIcon, BanknotesIcon,
+  ChartPieIcon, CubeIcon, MegaphoneIcon, Cog6ToothIcon, GiftIcon, ClockIcon, RocketLaunchIcon,
+  ArrowLeftIcon, BuildingLibraryIcon, CreditCardIcon, ArrowsRightLeftIcon, ShieldCheckIcon, BookOpenIcon,
+  PaperAirplaneIcon, CalendarDaysIcon,
 } from '@heroicons/react/24/outline'
+import {
+  Avatar, Badge, Button, Card, CardHeader, ConfirmDialog, EmptyState, Field, Input, Modal, PageHeader,
+  Select, Skeleton, StatCard, StatusPill, Table, TBody, TD, TH, THead, TR, Tabs, Textarea, Tooltip, buttonClasses, cn,
+} from '@/components/ui'
+import { CopyButton, CopyField, Notice, PlanGate, SectionTitle } from '@/components/settings/Shared'
+import { fmtDate, fmtMoney } from '@/components/settings/format'
 
 const PAYOUT_METHODS = [
-  { value: 'bank_transfer', label: '🏦 Bank Transfer' },
-  { value: 'paypal', label: '💳 PayPal' },
-  { value: 'wise', label: '💸 Wise' },
-  { value: 'crypto', label: '₿ Crypto (USDT/BTC)' },
+  { value: 'bank_transfer', label: 'تحويل بنكي' },
+  { value: 'paypal', label: 'PayPal' },
+  { value: 'wise', label: 'Wise' },
+  { value: 'crypto', label: 'عملات رقمية (USDT/BTC)' },
 ]
 
 const PAYOUT_SCHEDULES = [
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'biweekly', label: 'Every 15 days' },
-  { value: 'monthly', label: 'Monthly' },
+  { value: 'weekly', label: 'أسبوعيًا' },
+  { value: 'biweekly', label: 'كل 15 يومًا' },
+  { value: 'monthly', label: 'شهريًا' },
+]
+const SCHEDULE_LABEL = Object.fromEntries(PAYOUT_SCHEDULES.map(s => [s.value, s.label]))
+
+const PAYMENT_OPTIONS = [
+  { value: 'platform', label: 'عبر منصة WABEK', desc: 'يدفع عملاؤك لنا ونحوّل أرباحك في كل دورة صرف.', icon: BuildingLibraryIcon },
+  { value: 'stripe_own', label: 'حسابي على Stripe', desc: 'يدفع عملاؤك مباشرة إلى حسابك وتتولى الفوترة بنفسك.', icon: CreditCardIcon },
+  { value: 'both', label: 'الخياران معًا', desc: 'اعرض طريقتَي الدفع على عملائك.', icon: ArrowsRightLeftIcon },
 ]
 
-function CopyBtn({ text }) {
-  const [copied, setCopied] = useState(false)
-  return (
-    <button onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
-      className="p-1.5 text-slate-400 hover:text-slate-900 flex-shrink-0">
-      {copied ? <CheckIcon className="w-3.5 h-3.5 text-blue-600" /> : <ClipboardIcon className="w-3.5 h-3.5" />}
-    </button>
-  )
+const PAYOUT_FIELDS = {
+  bank_transfer: [
+    { k: 'bank_name', label: 'اسم البنك', ph: 'HSBC' },
+    { k: 'account_name', label: 'اسم صاحب الحساب', ph: 'الاسم كما في الحساب' },
+    { k: 'iban', label: 'IBAN / رقم الحساب', ph: 'GB29 NWBK 6016 1331 9268 19', ltr: true },
+    { k: 'swift', label: 'SWIFT / BIC', ph: 'NWBKGB2L', ltr: true },
+    { k: 'country', label: 'الدولة', ph: 'المملكة المتحدة' },
+  ],
+  paypal: [{ k: 'email', label: 'بريد PayPal', ph: 'your@paypal.com', ltr: true, type: 'email' }],
+  wise: [
+    { k: 'email', label: 'بريد Wise', ph: 'your@wise.com', ltr: true },
+    { k: 'account_id', label: 'معرّف حساب Wise (اختياري)', ph: 'Pxxxx', ltr: true },
+  ],
+  crypto: [
+    { k: 'network', label: 'الشبكة', ph: 'TRC20 / ERC20 / BEP20', ltr: true },
+    { k: 'address', label: 'عنوان المحفظة', ph: 'T...', ltr: true, mono: true },
+    { k: 'currency', label: 'العملة', ph: 'USDT / BTC / ETH', ltr: true },
+  ],
 }
 
-export default function ResellerPage() {
-  const { blocked, isLoading: planLoading } = usePlanGuard('allow_reseller')
-  if (planLoading) return null
-  if (blocked) return <UpgradeWall feature="allow_reseller" />
+const STATUS_AR = { active: 'نشط', inactive: 'غير نشط', completed: 'مكتملة', sending: 'قيد الإرسال', scheduled: 'مجدولة', failed: 'فشلت', paid: 'مدفوعة', processing: 'قيد المعالجة', pending: 'معلّقة', cancelled: 'ملغاة' }
 
+const money = (n) => fmtMoney(Number(n || 0))
+
+export default function ResellerPage() {
+  return <PlanGate feature="allow_reseller"><ResellerContent /></PlanGate>
+}
+
+function ResellerContent() {
   const qc = useQueryClient()
   const router = useRouter()
   const [tab, setTab] = useState(router.query.tab as string || 'overview')
+  useEffect(() => { if (router.query.tab) setTab(router.query.tab as string) }, [router.query.tab])
 
   // Handle Stripe Connect callback
   useEffect(() => {
     if (router.query.success === 'stripe_connected') {
-      toast.success('✅ Stripe account connected successfully!')
+      toast.success('تم ربط حساب Stripe بنجاح')
       router.replace('/dashboard/reseller?tab=settings', undefined, { shallow: true })
     }
     if (router.query.error) {
-      const errors = { stripe_denied: 'Stripe connection cancelled', expired: 'Link expired, try again', stripe_error: 'Stripe error, try again', server_error: 'Server error' }
-      toast.error(errors[router.query.error as string] || 'Connection failed')
+      const errors = { stripe_denied: 'أُلغي ربط Stripe', expired: 'انتهت صلاحية الرابط، حاول مجددًا', stripe_error: 'خطأ من Stripe، حاول مجددًا', server_error: 'خطأ في الخادم' }
+      toast.error(errors[router.query.error as string] || 'تعذّر الربط')
       router.replace('/dashboard/reseller?tab=settings', undefined, { shallow: true })
     }
   }, [router.query])
@@ -65,26 +90,27 @@ export default function ResellerPage() {
   const [planForm, setPlanForm] = useState({ base_plan_id: '', custom_name: '', custom_price_monthly: '', custom_price_yearly: '' })
   const [profileForm, setProfileForm] = useState(null)
   const [giftCode, setGiftCode] = useState('')
-  const [showGift, setShowGift] = useState(false)
+  const [toDeleteInvite, setToDeleteInvite] = useState(null)
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
 
   const redeemGiftMut = useMutation(
     (code: string) => axios.post('/api/billing/redeem-gift', { code }).then(r => r.data),
     {
       onSuccess: (r) => {
-        toast.success(`🎁 ${r.plan} activated for ${r.duration_days} days!`)
+        toast.success(`تم تفعيل ${r.plan} لمدة ${r.duration_days} يومًا`)
         qc.invalidateQueries('reseller-profile')
-        setShowGift(false)
         setGiftCode('')
       },
-      onError: (e: any) => toast.error(e?.response?.data?.error || 'Invalid gift code'),
+      onError: (e: any) => toast.error(e?.response?.data?.error || 'رمز الهدية غير صالح'),
     }
   )
 
   const { data: profileData, isLoading } = useQuery('reseller-profile', () => axios.get('/api/reseller/profile').then(r => r.data), {
     onSuccess: (d) => { if (!profileForm && d.profile) setProfileForm(d.profile) }
   })
-  const { data: plansData } = useQuery('reseller-plans', () => axios.get('/api/reseller/plans').then(r => r.data))
-  const { data: invitesData } = useQuery('reseller-invites', () => axios.get('/api/reseller/invites').then(r => r.data))
+  const { data: plansData, isLoading: plansLoading } = useQuery('reseller-plans', () => axios.get('/api/reseller/plans').then(r => r.data))
+  const { data: invitesData, isLoading: invitesLoading } = useQuery('reseller-invites', () => axios.get('/api/reseller/invites').then(r => r.data))
   const { data: campData, refetch: refetchCamp } = useQuery('reseller-campaigns', () => axios.get('/api/reseller/campaigns').then(r => r.data))
 
   const profile = profileData?.profile
@@ -106,20 +132,20 @@ export default function ResellerPage() {
         refetchCamp()
         setShowCampForm(false)
         setCampForm({ instance_id: '', message: '', target: 'all', scheduled_at: '', delay_seconds: 3 })
-        toast.success(`📢 Campaign sent to ${r.target_count} users!`)
+        toast.success(`أُرسلت الحملة إلى ${r.target_count} مستخدم`)
       },
-      onError: e => toast.error(e?.response?.data?.error || 'Failed'),
+      onError: e => toast.error(e?.response?.data?.error || 'تعذّر الإرسال'),
     }
   )
 
   const saveProfileMut = useMutation(
     (body) => axios.put('/api/reseller/profile', body),
-    { onSuccess: () => { qc.invalidateQueries('reseller-profile'); toast.success('Settings saved ✅') }, onError: e => toast.error(e?.response?.data?.error || 'Failed') }
+    { onSuccess: () => { qc.invalidateQueries('reseller-profile'); toast.success('تم حفظ الإعدادات') }, onError: e => toast.error(e?.response?.data?.error || 'تعذّر الحفظ') }
   )
 
   const createPlanMut = useMutation(
     (body) => axios.post('/api/reseller/plans', body),
-    { onSuccess: () => { qc.invalidateQueries('reseller-plans'); setShowPlanForm(false); toast.success('Plan created!') }, onError: e => toast.error(e?.response?.data?.error || 'Failed') }
+    { onSuccess: () => { qc.invalidateQueries('reseller-plans'); setShowPlanForm(false); toast.success('تم إنشاء الباقة') }, onError: e => toast.error(e?.response?.data?.error || 'تعذّر إنشاء الباقة') }
   )
 
   const createInviteMut = useMutation(
@@ -129,718 +155,512 @@ export default function ResellerPage() {
         qc.invalidateQueries('reseller-invites')
         setShowInviteForm(false)
         setInviteForm({ label: '', reseller_plan_id: '', trial_days: 14, discount_pct: 0, max_uses: '', custom_code: '' })
-        navigator.clipboard.writeText(r.data.url)
-        toast.success('Invite created! Link copied to clipboard 🎉')
+        navigator.clipboard.writeText(r.data.url).catch(() => {})
+        toast.success('أُنشئ رابط الدعوة ونُسخ إلى الحافظة')
       },
-      onError: e => toast.error(e?.response?.data?.error || 'Failed')
+      onError: e => toast.error(e?.response?.data?.error || 'تعذّر إنشاء الرابط')
     }
   )
 
   const deleteInviteMut = useMutation(
     id => axios.delete(`/api/reseller/invites/${id}`),
-    { onSuccess: () => { qc.invalidateQueries('reseller-invites'); toast.success('Deleted') } }
+    { onSuccess: () => { qc.invalidateQueries('reseller-invites'); setToDeleteInvite(null); toast.success('تم حذف الرابط') } }
   )
 
+  const disconnectStripe = () => {
+    setDisconnecting(true)
+    axios.post('/api/reseller/stripe-connect/disconnect')
+      .then(() => { qc.invalidateQueries('reseller-profile'); toast.success('تم فصل Stripe') })
+      .catch(e => toast.error(e?.response?.data?.error || 'تعذّر فصل Stripe'))
+      .finally(() => { setDisconnecting(false); setConfirmDisconnect(false) })
+  }
+
   const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://waabek.com'
+  const locked = profile && !profile.is_approved && tab !== 'overview' && tab !== 'settings'
+  const selectedBase = basePlans.find(p => p.id === planForm.base_plan_id)
+  const profit = planForm.custom_price_monthly && selectedBase ? parseFloat(planForm.custom_price_monthly) - (selectedBase.price_monthly || 0) : null
+  const method = profileForm?.payout_method || 'bank_transfer'
+  const details = typeof profileForm?.payout_details === 'object' && profileForm?.payout_details ? profileForm.payout_details : {}
+  const setDetail = (k: string, v: string) =>
+    setProfileForm(f => ({ ...f, payout_details: { ...(typeof f?.payout_details === 'object' ? f.payout_details : {}), [k]: v } }))
+  const showStripe = profileForm?.payment_method === 'stripe_own' || profileForm?.payment_method === 'both'
+  const showPayout = profileForm?.payment_method === 'platform' || profileForm?.payment_method === 'both'
 
   const tabs = [
-    { id: 'overview', label: '📊 Overview' },
-    { id: 'plans', label: '📦 Plans & Pricing' },
-    { id: 'invites', label: '🔗 Invite Links' },
-    { id: 'referrals', label: '👥 Referrals' },
-    { id: 'campaigns', label: '📢 Campaigns' },
-    { id: 'payouts', label: '💰 Payouts' },
-    { id: 'settings', label: '⚙️ Settings' },
+    { id: 'overview', label: 'نظرة عامة', icon: ChartPieIcon },
+    { id: 'plans', label: 'الباقات والأسعار', icon: CubeIcon, count: plans.length || undefined },
+    { id: 'invites', label: 'روابط الدعوة', icon: LinkIcon, count: invites.length || undefined },
+    { id: 'referrals', label: 'العملاء', icon: UserGroupIcon, count: referrals.length || undefined },
+    { id: 'campaigns', label: 'الحملات', icon: MegaphoneIcon },
+    { id: 'payouts', label: 'الأرباح والمدفوعات', icon: BanknotesIcon },
+    { id: 'settings', label: 'الإعدادات', icon: Cog6ToothIcon },
   ]
+
+  const changeTab = (id) => { setTab(id); router.replace({ pathname: router.pathname, query: { tab: id } }, undefined, { shallow: true }) }
 
   return (
     <DashboardLayout title="Reseller Dashboard">
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-slate-200 overflow-x-auto pb-0">
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={clsx('px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors',
-              tab === t.id ? 'border-brand-500 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700')}>
-            {t.label}
-          </button>
-        ))}
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="الإعدادات"
+          title="برنامج الموزّعين"
+          description="سعّر الباقات لعملائك، وادعهم بروابط خاصة، وتابع أرباحك ومدفوعاتك."
+          actions={<Button variant="secondary" icon={BookOpenIcon} href="/docs/guides/reseller">الدليل</Button>}
+        >
+          <Tabs idPrefix="reseller" aria-label="أقسام الموزّع" value={tab} onChange={changeTab} tabs={tabs} />
+        </PageHeader>
+
+        {locked && (
+          <Notice tone="warning" icon={ClockIcon} title="الحساب بانتظار الموافقة"
+            action={<Button size="sm" variant="secondary" onClick={() => changeTab('overview')}>العودة إلى النظرة العامة</Button>}>
+            ستُفتح هذه الميزة بعد موافقة الإدارة على حساب الموزّع.
+          </Notice>
+        )}
+
+        {/* ── Overview ───────────────────────────── */}
+        {tab === 'overview' && (
+          <div className="space-y-5">
+            {isLoading ? <Skeleton className="h-24 w-full rounded-panel" /> : !profile ? (
+              <Card variant="deep" padding="lg" className="overflow-hidden">
+                <div aria-hidden="true" className="pointer-events-none absolute -end-16 -top-16 h-56 w-56 rounded-full bg-brand-green/20 blur-3xl" />
+                <div className="relative flex flex-wrap items-center gap-5">
+                  <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-gradient text-[#04282C] shadow-glow"><RocketLaunchIcon className="h-7 w-7" aria-hidden="true" /></span>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-xl font-bold text-deep-ink">انضم إلى برنامج الموزّعين</h2>
+                    <p className="mt-1 text-sm text-deep-muted">اختر طريقة الدفع في الإعدادات واحفظها، وسيُرسل طلبك إلى الإدارة للمراجعة.</p>
+                  </div>
+                  <Button variant="on-deep" iconEnd={ArrowLeftIcon} onClick={() => changeTab('settings')}>قدّم الآن</Button>
+                </div>
+              </Card>
+            ) : !profile.is_approved ? (
+              <Notice tone="warning" icon={ClockIcon} title="حسابك قيد المراجعة">سنُعلمك فور الموافقة. يمكنك ضبط إعداداتك في الأثناء.</Notice>
+            ) : null}
+
+            <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+              <StatCard label="الرصيد المعلّق" value={money(profile?.balance_pending)} icon={BanknotesIcon} loading={isLoading} />
+              <StatCard label="إجمالي الأرباح" value={money(profile?.balance_total)} icon={CurrencyDollarIcon} loading={isLoading} />
+              <StatCard label="العملاء المُحالون" value={String(referrals.length)} icon={UserGroupIcon} loading={isLoading} />
+              <StatCard label="نسبة العمولة" value={profile?.referral_commission_pct ? `${profile.referral_commission_pct}%` : 'تحددها الإدارة'} icon={LinkIcon} loading={isLoading} />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              {[
+                { icon: LinkIcon, title: 'أنشئ رابط دعوة', desc: 'رابط خاص لدعوة مستخدمين جدد تحت حسابك', go: () => { changeTab('invites'); setShowInviteForm(true) } },
+                { icon: CubeIcon, title: 'حدّد أسعارك', desc: 'خصّص أسعار الباقات لعملائك', go: () => changeTab('plans') },
+                { icon: Cog6ToothIcon, title: 'إعدادات الدفع', desc: 'اختر طريقة استلام أرباحك', go: () => changeTab('settings') },
+              ].map(a => (
+                <button key={a.title} type="button" onClick={a.go}
+                  className="group flex items-start gap-3 rounded-panel border border-line bg-surface p-5 text-start shadow-card transition hover:-translate-y-0.5 hover:shadow-card-hover">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-chip text-brand-ink transition group-hover:bg-brand-gradient group-hover:text-[#04282C]"><a.icon className="h-5 w-5" aria-hidden="true" /></span>
+                  <span>
+                    <span className="block font-semibold text-ink">{a.title}</span>
+                    <span className="mt-0.5 block text-xs text-muted">{a.desc}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <Card padding="none">
+                <CardHeader title="أحدث العملاء" action={referrals.length > 5 ? <button className="text-link hover:text-link-hover" onClick={() => changeTab('referrals')}>عرض الكل</button> : undefined} divider />
+                {referrals.length === 0 ? (
+                  <EmptyState size="sm" icon={UserGroupIcon} title="لا يوجد عملاء بعد" description="شارك روابط الدعوة لتبدأ." />
+                ) : (
+                  <ul className="divide-y divide-line-soft">
+                    {referrals.slice(0, 5).map(r => (
+                      <li key={r.id} className="flex items-center gap-3 px-5 py-3">
+                        <Avatar name={r.referred_user?.name || r.referred_user?.email || '?'} size="sm" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-ink">{r.referred_user?.name || 'غير معروف'}</p>
+                          <p className="truncate text-xs text-muted" dir="ltr">{r.referred_user?.email}</p>
+                        </div>
+                        <div className="text-end">
+                          <p className="text-sm font-semibold text-success tabular">{money(r.total_earned)}</p>
+                          <p className="text-xs text-muted">{fmtDate(r.referred_user?.created_at, '')}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
+              <Card className="h-fit">
+                <SectionTitle icon={GiftIcon} title="استخدام رمز هدية" subtitle="فعّل باقة فورًا دون دفع" />
+                <form className="flex gap-2" onSubmit={e => { e.preventDefault(); if (giftCode) redeemGiftMut.mutate(giftCode) }}>
+                  <Field label="رمز الهدية" srOnlyLabel className="min-w-0 flex-1">
+                    <Input value={giftCode} onChange={e => setGiftCode(e.target.value.toUpperCase())} placeholder="GIFT-XXXX-XXXX" dir="ltr" className="font-mono" />
+                  </Field>
+                  <Button type="submit" variant="secondary" loading={redeemGiftMut.isLoading} disabled={!giftCode}>استخدام</Button>
+                </form>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {/* ── Plans ──────────────────────────────── */}
+        {tab === 'plans' && !locked && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-muted">حدّد أسعارًا مخصصة لعملائك، والفرق بين سعرك وتكلفتك ربح لك.</p>
+              <Button icon={PlusIcon} onClick={() => setShowPlanForm(true)}>باقة مخصصة</Button>
+            </div>
+            {plansLoading ? <Skeleton className="h-40 w-full rounded-panel" /> : plans.length === 0 ? (
+              <EmptyState variant="card" icon={CubeIcon} title="لا توجد باقات مخصصة بعد"
+                description="أنشئ باقات بأسعارك الخاصة؛ تحتفظ بالفرق بين سعرك وتكلفتنا."
+                action={<Button icon={PlusIcon} onClick={() => setShowPlanForm(true)}>إنشاء باقة</Button>} />
+            ) : (
+              <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))]">
+                {plans.map(plan => {
+                  const cost = plan.base_plan?.price_monthly || 0
+                  const p = plan.custom_price_monthly - cost
+                  return (
+                    <Card key={plan.id} interactive>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-lg font-bold text-ink">{plan.custom_name || plan.base_plan?.name}</p>
+                          <p className="text-xs text-muted">مبنية على: {plan.base_plan?.name}</p>
+                        </div>
+                        <Badge tone="success" size="sm" dot>نشطة</Badge>
+                      </div>
+                      <p className="mt-4 text-3xl font-bold text-ink tabular" dir="ltr">{money(plan.custom_price_monthly)}<span className="ms-1 text-sm font-normal text-muted">/ شهر</span></p>
+                      <div className="mt-4 space-y-2 rounded-card bg-surface-2 p-3 text-sm">
+                        <div className="flex justify-between"><span className="text-muted">تكلفتك</span><span className="tabular text-body">{money(cost)} / شهر</span></div>
+                        <div className="flex justify-between border-t border-line-soft pt-2"><span className="font-medium text-success">ربحك</span><span className="font-bold text-success tabular">{money(p)} / شهر</span></div>
+                      </div>
+                    </Card>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Invites ────────────────────────────── */}
+        {tab === 'invites' && !locked && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-muted">{invites.length} رابط دعوة</p>
+              <Button icon={PlusIcon} onClick={() => setShowInviteForm(true)}>رابط دعوة جديد</Button>
+            </div>
+            {invitesLoading ? <Skeleton className="h-32 w-full rounded-panel" /> : invites.length === 0 ? (
+              <EmptyState variant="card" icon={LinkIcon} title="لا توجد روابط دعوة بعد" description="أنشئ روابط لجذب العملاء إلى منصتك."
+                action={<Button icon={PlusIcon} onClick={() => setShowInviteForm(true)}>إنشاء رابط</Button>} />
+            ) : (
+              <div className="grid gap-3">
+                {invites.map(invite => {
+                  const url = `${appUrl}/auth/register?code=${invite.code}`
+                  return (
+                    <Card key={invite.id} padding="sm" className={cn(!invite.is_active && 'opacity-60')}>
+                      <div className="flex flex-wrap items-start gap-3">
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-semibold text-ink">{invite.label || invite.code}</p>
+                            <code dir="ltr" className="rounded-md bg-chip px-2 py-0.5 font-mono text-xs text-chip-ink">{invite.code}</code>
+                            <Badge tone={invite.is_active ? 'success' : 'neutral'} size="sm" dot>{invite.is_active ? 'نشط' : 'غير نشط'}</Badge>
+                          </div>
+                          <CopyField value={url} />
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+                            {invite.trial_days > 0 && <span>تجربة {invite.trial_days} يومًا</span>}
+                            {invite.discount_pct > 0 && <span>خصم {invite.discount_pct}%</span>}
+                            <span className="tabular">الاستخدام: {invite.use_count}{invite.max_uses ? `/${invite.max_uses}` : ''}</span>
+                            {invite.reseller_plan && <span>الباقة: {invite.reseller_plan.custom_name || invite.reseller_plan.base_plan?.name}</span>}
+                          </div>
+                        </div>
+                        <Tooltip content="حذف الرابط">
+                          <Button size="icon-sm" variant="ghost" icon={TrashIcon} aria-label={`حذف ${invite.label || invite.code}`} className="text-muted hover:text-danger" onClick={() => setToDeleteInvite(invite)} />
+                        </Tooltip>
+                      </div>
+                    </Card>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Referrals ──────────────────────────── */}
+        {tab === 'referrals' && !locked && (
+          <Card padding="none">
+            <CardHeader icon={UserGroupIcon} title="عملاؤك" subtitle={`${referrals.length} عميل`} divider />
+            {referrals.length === 0 ? (
+              <EmptyState size="sm" icon={UserGroupIcon} title="لا يوجد عملاء بعد" description="شارك روابط الدعوة لتبدأ."
+                action={<Button size="sm" onClick={() => changeTab('invites')}>روابط الدعوة</Button>} />
+            ) : (
+              <Table minWidth={620} caption="العملاء المُحالون">
+                <THead><TR><TH>العميل</TH><TH>تاريخ الانضمام</TH><TH>الحالة</TH><TH align="end">إجمالي الأرباح</TH></TR></THead>
+                <TBody>
+                  {referrals.map(r => (
+                    <TR key={r.id}>
+                      <TD>
+                        <div className="flex items-center gap-2.5">
+                          <Avatar name={r.referred_user?.name || r.referred_user?.email || '?'} size="sm" />
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-ink">{r.referred_user?.name}</p>
+                            <p className="truncate text-xs text-muted" dir="ltr">{r.referred_user?.email}</p>
+                          </div>
+                        </div>
+                      </TD>
+                      <TD className="text-sm text-muted">{fmtDate(r.referred_user?.created_at)}</TD>
+                      <TD><StatusPill status={r.status === 'active' ? 'completed' : 'draft'} tone={r.status === 'active' ? 'success' : 'neutral'}>{STATUS_AR[r.status] || r.status}</StatusPill></TD>
+                      <TD align="end" className="font-semibold text-success tabular">{money(r.total_earned)}</TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            )}
+          </Card>
+        )}
+
+        {/* ── Campaigns ──────────────────────────── */}
+        {tab === 'campaigns' && !locked && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-muted">أرسل رسائل واتساب إلى عملائك المُحالين ({referralCount} مستخدم).</p>
+              {referralCount > 0 && <Button icon={PlusIcon} onClick={() => setShowCampForm(true)}>حملة جديدة</Button>}
+            </div>
+            {referralCount === 0 && (
+              <EmptyState variant="card" icon={MegaphoneIcon} title="لا يوجد مستخدمون مُحالون بعد" description="أنشئ روابط دعوة لتكسب مستخدمين، ثم أرسل إليهم حملاتك."
+                action={<Button onClick={() => changeTab('invites')}>روابط الدعوة</Button>} />
+            )}
+            {campaigns.length > 0 && (
+              <Card padding="none">
+                <CardHeader title="سجل الحملات" divider />
+                <Table minWidth={640} caption="سجل الحملات">
+                  <THead><TR><TH>التاريخ</TH><TH>الرسالة</TH><TH align="center">المستهدفون</TH><TH align="center">المرسلة</TH><TH>الحالة</TH></TR></THead>
+                  <TBody>
+                    {campaigns.map(c => (
+                      <TR key={c.id}>
+                        <TD className="text-sm text-muted">{fmtDate(c.created_at)}</TD>
+                        <TD className="max-w-xs"><p className="truncate text-sm text-body">{c.message}</p></TD>
+                        <TD align="center" className="tabular">{c.target_count}</TD>
+                        <TD align="center" className="font-semibold tabular">{c.sent_count || 0}</TD>
+                        <TD><StatusPill status={c.status}>{STATUS_AR[c.status] || c.status}</StatusPill></TD>
+                      </TR>
+                    ))}
+                  </TBody>
+                </Table>
+              </Card>
+            )}
+          </div>
+        )}
+
+        {/* ── Payouts ────────────────────────────── */}
+        {tab === 'payouts' && !locked && (
+          <div className="space-y-5">
+            <div className="grid gap-3.5 sm:grid-cols-3">
+              <Card variant="deep" className="overflow-hidden">
+                <div aria-hidden="true" className="pointer-events-none absolute -end-10 -top-10 h-32 w-32 rounded-full bg-brand-green/25 blur-2xl" />
+                <p className="relative text-[13px] text-deep-muted">الدفعة القادمة</p>
+                <p className="relative mt-1 text-3xl font-bold text-deep-ink tabular">{money(profile?.balance_pending)}</p>
+                <p className="relative mt-1 text-xs text-deep-muted">تُصرف في الدورة التالية ({SCHEDULE_LABEL[profile?.payout_schedule] || 'شهريًا'})</p>
+              </Card>
+              <StatCard label="إجمالي المصروف" value={money(profile?.balance_paid)} icon={CheckIcon} />
+              <StatCard label="إجمالي الأرباح" value={money(profile?.balance_total)} icon={CurrencyDollarIcon} />
+            </div>
+            <Card padding="none">
+              <CardHeader title="سجل المدفوعات" subtitle={`الجدول: ${SCHEDULE_LABEL[profile?.payout_schedule] || 'شهريًا'}`} divider />
+              {payouts.length === 0 ? (
+                <EmptyState size="sm" icon={BanknotesIcon} title="لا توجد مدفوعات بعد" />
+              ) : (
+                <Table minWidth={620} caption="سجل المدفوعات">
+                  <THead><TR><TH>التاريخ</TH><TH>المبلغ</TH><TH>الطريقة</TH><TH>المرجع</TH><TH>الحالة</TH></TR></THead>
+                  <TBody>
+                    {payouts.map(p => (
+                      <TR key={p.id}>
+                        <TD className="text-sm text-muted">{fmtDate(p.created_at)}</TD>
+                        <TD className="font-semibold text-ink tabular">{money(p.amount)}</TD>
+                        <TD className="text-sm text-muted">{PAYOUT_METHODS.find(m => m.value === p.method)?.label || p.method}</TD>
+                        <TD><code dir="ltr" className="font-mono text-xs text-muted">{p.reference || '—'}</code></TD>
+                        <TD><StatusPill status={p.status === 'paid' ? 'completed' : p.status === 'processing' ? 'pending' : p.status} tone={p.status === 'paid' ? 'success' : p.status === 'processing' ? 'warning' : 'neutral'}>{STATUS_AR[p.status] || p.status}</StatusPill></TD>
+                      </TR>
+                    ))}
+                  </TBody>
+                </Table>
+              )}
+            </Card>
+          </div>
+        )}
+
+        {/* ── Settings ───────────────────────────── */}
+        {tab === 'settings' && (
+          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="space-y-5">
+              <Card>
+                <SectionTitle icon={CreditCardIcon} title="طريقة الدفع" subtitle="كيف يدفع عملاؤك؟" />
+                <div role="radiogroup" aria-label="طريقة الدفع" className="grid gap-2 sm:grid-cols-3">
+                  {PAYMENT_OPTIONS.map(opt => {
+                    const selected = profileForm?.payment_method === opt.value
+                    return (
+                      <button key={opt.value} type="button" role="radio" aria-checked={selected}
+                        onClick={() => setProfileForm(f => ({ ...f, payment_method: opt.value }))}
+                        className={cn('rounded-card border p-4 text-start transition', selected ? 'border-brand-teal bg-chip/40 shadow-ring' : 'border-line hover:border-line-strong')}>
+                        <span className={cn('flex h-9 w-9 items-center justify-center rounded-lg', selected ? 'bg-brand-gradient text-[#04282C]' : 'bg-surface-3 text-muted')}><opt.icon className="h-5 w-5" aria-hidden="true" /></span>
+                        <span className="mt-3 block text-sm font-semibold text-ink">{opt.label}</span>
+                        <span className="mt-1 block text-xs leading-relaxed text-muted">{opt.desc}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </Card>
+
+              {showStripe && (
+                <Card>
+                  <SectionTitle icon={ShieldCheckIcon} title="حساب Stripe" subtitle="ربط آمن عبر OAuth" />
+                  {profile?.stripe_connect_account_id ? (
+                    <div className="flex flex-wrap items-center gap-3 rounded-card border border-success/20 bg-success-bg/60 p-4">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-success text-white"><CheckIcon className="h-5 w-5" aria-hidden="true" /></span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-ink">Stripe متصل</p>
+                        <p className="text-xs text-muted">يدفع عملاؤك مباشرة إلى حسابك · <span dir="ltr" className="font-mono">{String(profile.stripe_connect_account_id).replace(/^(acct_).*(.{4})$/, '$1••••$2')}</span></p>
+                      </div>
+                      <Button size="sm" variant="danger-soft" onClick={() => setConfirmDisconnect(true)}>فصل</Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="text-sm text-body">اربط حسابك على Stripe ليدفع عملاؤك لك مباشرة.</p>
+                      <a href="/api/reseller/stripe-connect/authorize" className={buttonClasses({ variant: 'dark' })}><CreditCardIcon className="h-[18px] w-[18px]" aria-hidden="true" />الربط مع Stripe</a>
+                      <ul className="space-y-1 text-xs text-muted">
+                        <li className="flex items-center gap-1.5"><CheckIcon className="h-3.5 w-3.5 text-success" aria-hidden="true" />لا نرى كلمة مرورك أو مفاتيحك على Stripe</li>
+                        <li className="flex items-center gap-1.5"><CheckIcon className="h-3.5 w-3.5 text-success" aria-hidden="true" />تذهب المدفوعات مباشرة إلى حسابك</li>
+                        <li className="flex items-center gap-1.5"><CheckIcon className="h-3.5 w-3.5 text-success" aria-hidden="true" />يمكنك الفصل في أي وقت</li>
+                      </ul>
+                    </div>
+                  )}
+                </Card>
+              )}
+
+              {showPayout && (
+                <Card>
+                  <SectionTitle icon={BanknotesIcon} title="استلام الأرباح" subtitle="متى وكيف نحوّل أرباحك" />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="جدول الصرف">
+                      <Select value={profileForm?.payout_schedule || 'monthly'} onChange={e => setProfileForm(f => ({ ...f, payout_schedule: e.target.value }))} options={PAYOUT_SCHEDULES} />
+                    </Field>
+                    <Field label="طريقة الصرف">
+                      <Select value={method} onChange={e => setProfileForm(f => ({ ...f, payout_method: e.target.value }))} options={PAYOUT_METHODS} />
+                    </Field>
+                  </div>
+                  <fieldset className="mt-4 rounded-card border border-line-soft bg-surface-2/60 p-4">
+                    <legend className="px-1 text-sm font-medium text-ink">بيانات الصرف</legend>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {(PAYOUT_FIELDS[method] || []).map(f => (
+                        <Field key={f.k} label={f.label}>
+                          <Input value={details[f.k] || ''} onChange={e => setDetail(f.k, e.target.value)} placeholder={f.ph} type={f.type || 'text'}
+                            dir={f.ltr ? 'ltr' : undefined} className={f.mono ? 'font-mono' : undefined} />
+                        </Field>
+                      ))}
+                    </div>
+                  </fieldset>
+                </Card>
+              )}
+
+              <Button size="lg" fullWidth loading={saveProfileMut.isLoading} disabled={!profileForm} onClick={() => saveProfileMut.mutate(profileForm)}>
+                {profile ? 'حفظ الإعدادات' : 'حفظ وإرسال الطلب'}
+              </Button>
+            </div>
+
+            <Card variant="muted" className="lg:sticky lg:top-6">
+              <h3 className="font-semibold text-ink">حالة الحساب</h3>
+              <div className="mt-3">
+                {!profile ? <Badge tone="neutral">لم يُقدَّم طلب بعد</Badge>
+                  : profile.is_approved ? <Badge tone="success" dot>معتمد</Badge>
+                  : <Badge tone="warning" dot>قيد المراجعة</Badge>}
+              </div>
+              <p className="mt-3 text-sm leading-relaxed text-muted">لا تُعرض أي مفاتيح أو أسرار هنا؛ تُحفظ بيانات الربط مشفّرة على الخادم.</p>
+            </Card>
+          </div>
+        )}
       </div>
 
-      {/* ── Approval gate - disable functional tabs until approved */}
-      {profile && !profile.is_approved && tab !== 'overview' && tab !== 'settings' && (
-        <div className="card border-yellow-800/50 bg-yellow-900/10 mb-4">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">⏳</span>
-            <div>
-              <p className="font-semibold text-slate-900">Account pending approval</p>
-              <p className="text-sm text-slate-400 mt-0.5">This feature will be unlocked once your reseller account is approved by the admin.</p>
-            </div>
-            <button onClick={() => setTab('overview')} className="btn-secondary text-sm flex-shrink-0">Back to Overview</button>
-          </div>
+      {/* Create plan */}
+      <Modal open={showPlanForm} onClose={() => setShowPlanForm(false)} size="lg" icon={CubeIcon} title="باقة مخصصة"
+        description="اختر الباقة الأساسية (ما تدفعه لنا) وحدّد سعرك لعملائك."
+        footer={<><Button variant="secondary" onClick={() => setShowPlanForm(false)}>إلغاء</Button>
+          <Button loading={createPlanMut.isLoading} disabled={!planForm.base_plan_id || !planForm.custom_price_monthly} onClick={() => createPlanMut.mutate(planForm)}>إنشاء الباقة</Button></>}>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="الباقة الأساسية" required>
+            <Select value={planForm.base_plan_id} onChange={e => setPlanForm(f => ({ ...f, base_plan_id: e.target.value }))} placeholder="اختر الباقة"
+              options={basePlans.filter(p => p.price_monthly > 0).map(p => ({ value: p.id, label: `${p.name} — ${money(p.price_monthly)} / شهر (تكلفتك)` }))} />
+          </Field>
+          <Field label="اسم الباقة لعملائك">
+            <Input value={planForm.custom_name} onChange={e => setPlanForm(f => ({ ...f, custom_name: e.target.value }))} placeholder="الباقة الأساسية" />
+          </Field>
+          <Field label="سعرك الشهري ($)" required>
+            <Input type="number" min="0" step="0.01" dir="ltr" value={planForm.custom_price_monthly} onChange={e => setPlanForm(f => ({ ...f, custom_price_monthly: e.target.value }))} placeholder="49" />
+          </Field>
+          <Field label="سعرك السنوي (اختياري)">
+            <Input type="number" min="0" step="0.01" dir="ltr" value={planForm.custom_price_yearly} onChange={e => setPlanForm(f => ({ ...f, custom_price_yearly: e.target.value }))} placeholder="499" />
+          </Field>
         </div>
-      )}
-
-      {/* ── Overview ─────────────────────────────────────── */}
-      {tab === 'overview' && (
-        <div className="space-y-5">
-
-          {/* Gift Code Redeem */}
-          <div className="card">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-display font-semibold text-slate-900">🎁 Redeem Gift Code</h3>
-                <p className="text-sm text-slate-500 mt-0.5">Have a gift code? Activate a plan instantly — no payment needed</p>
-              </div>
-              <button onClick={() => setShowGift(v => !v)} className="btn-secondary text-sm">
-                {showGift ? 'Hide' : 'Redeem'}
-              </button>
-            </div>
-            {showGift && (
-              <div className="mt-4 flex gap-2">
-                <input value={giftCode} onChange={e => setGiftCode(e.target.value.toUpperCase())}
-                  placeholder="GIFT-XXXX-XXXX" className="input flex-1 font-mono"
-                  onKeyDown={e => e.key === 'Enter' && giftCode && redeemGiftMut.mutate(giftCode)} />
-                <button onClick={() => giftCode && redeemGiftMut.mutate(giftCode)}
-                  disabled={redeemGiftMut.isLoading || !giftCode} className="btn-primary px-4">
-                  {redeemGiftMut.isLoading ? '...' : 'Redeem'}
-                </button>
-              </div>
-            )}
+        {profit !== null && (
+          <div className={cn('mt-4 flex items-center justify-between rounded-card px-4 py-3 text-sm', profit >= 0 ? 'bg-success-bg text-success' : 'bg-danger-bg text-danger')}>
+            <span>ربحك من كل عميل</span>
+            <span className="font-bold tabular">{money(profit)} / شهر</span>
           </div>
+        )}
+      </Modal>
 
-          {/* Profile exists + not approved = pending review */}
-          {profile && !profile.is_approved && (
-            <div className="card border-yellow-800/50 bg-yellow-900/10">
-              <div className="flex items-start gap-3">
-                <span className="text-2xl">⏳</span>
-                <div>
-                  <p className="font-semibold text-slate-900">Account pending approval</p>
-                  <p className="text-sm text-slate-400 mt-0.5">Your reseller account is being reviewed. You'll be notified once approved. Set up your settings in the meantime.</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* No profile yet = prompt to apply */}
-          {!profile && (
-            <div className="card border-blue-200/50 bg-blue-50/10">
-              <div className="flex items-start gap-3">
-                <span className="text-2xl">🚀</span>
-                <div className="flex-1">
-                  <p className="font-semibold text-slate-900">Apply to become a Reseller</p>
-                  <p className="text-sm text-slate-400 mt-0.5">Fill in your payment settings below and click Save — your application will be sent to the admin for review.</p>
-                </div>
-                <button onClick={() => setTab('settings')} className="btn-primary text-sm flex-shrink-0">
-                  Apply Now →
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { label: 'Pending Balance', value: `$${(profile?.balance_pending || 0).toFixed(2)}`, icon: BanknotesIcon, color: 'text-blue-600' },
-              { label: 'Total Earned', value: `$${(profile?.balance_total || 0).toFixed(2)}`, icon: CurrencyDollarIcon, color: 'text-yellow-400' },
-              { label: 'Total Referrals', value: referrals.length, icon: UserGroupIcon, color: 'text-blue-400' },
-              { label: 'Commission Rate', value: profile?.referral_commission_pct ? `${profile.referral_commission_pct}%` : 'Set by admin', icon: LinkIcon, color: 'text-purple-400' },
-            ].map(s => (
-              <div key={s.label} className="stat-card">
-                <div className="flex items-center gap-2 mb-1">
-                  <s.icon className={`w-4 h-4 ${s.color}`} />
-                  <p className="text-xs text-slate-500">{s.label}</p>
-                </div>
-                <p className="text-2xl font-display font-bold text-slate-900">{s.value}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Quick actions */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <button onClick={() => { setTab('invites'); setShowInviteForm(true) }}
-              className="card hover:border-blue-200 transition-colors text-left">
-              <div className="text-2xl mb-2">🔗</div>
-              <p className="font-semibold text-slate-900">Create Invite Link</p>
-              <p className="text-xs text-slate-500 mt-1">Generate a link to invite new users under your account</p>
-            </button>
-            <button onClick={() => setTab('plans')}
-              className="card hover:border-blue-200 transition-colors text-left">
-              <div className="text-2xl mb-2">💰</div>
-              <p className="font-semibold text-slate-900">Set Your Prices</p>
-              <p className="text-xs text-slate-500 mt-1">Customize plan prices for your customers</p>
-            </button>
-            <button onClick={() => setTab('settings')}
-              className="card hover:border-blue-200 transition-colors text-left">
-              <div className="text-2xl mb-2">⚙️</div>
-              <p className="font-semibold text-slate-900">Payment Settings</p>
-              <p className="text-xs text-slate-500 mt-1">Configure how you want to receive your earnings</p>
-            </button>
-          </div>
-
-          {/* Recent referrals */}
-          {referrals.length > 0 && (
-            <div className="card">
-              <h3 className="font-display font-semibold text-slate-900 mb-3">Recent Referrals</h3>
-              <div className="space-y-2">
-                {referrals.slice(0, 5).map(r => (
-                  <div key={r.id} className="flex items-center justify-between py-2 border-b border-slate-200/50 last:border-0">
-                    <div>
-                      <p className="text-sm text-slate-900">{r.referred_user?.name || 'Unknown'}</p>
-                      <p className="text-xs text-slate-500">{r.referred_user?.email}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-blue-600">${r.total_earned.toFixed(2)}</p>
-                      <p className="text-xs text-slate-500">{r.referred_user?.created_at ? format(new Date(r.referred_user.created_at), 'MMM d') : ''}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+      {/* Create invite */}
+      <Modal open={showInviteForm} onClose={() => setShowInviteForm(false)} size="lg" icon={LinkIcon} title="رابط دعوة جديد"
+        description="يُنسخ الرابط تلقائيًا بعد إنشائه."
+        footer={<><Button variant="secondary" onClick={() => setShowInviteForm(false)}>إلغاء</Button>
+          <Button icon={LinkIcon} loading={createInviteMut.isLoading} onClick={() => createInviteMut.mutate({ ...inviteForm, max_uses: inviteForm.max_uses ? parseInt(inviteForm.max_uses) : null })}>إنشاء ونسخ الرابط</Button></>}>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="وصف داخلي">
+            <Input value={inviteForm.label} onChange={e => setInviteForm(f => ({ ...f, label: e.target.value }))} placeholder="حملة فيسبوك" />
+          </Field>
+          <Field label="رمز مخصص (اختياري)" hint="اتركه فارغًا لإنشائه تلقائيًا">
+            <Input value={inviteForm.custom_code} onChange={e => setInviteForm(f => ({ ...f, custom_code: e.target.value.toUpperCase() }))} placeholder="JOHN50" dir="ltr" className="font-mono" />
+          </Field>
+          <Field label="الباقة" className="sm:col-span-2">
+            <Select value={inviteForm.reseller_plan_id} onChange={e => setInviteForm(f => ({ ...f, reseller_plan_id: e.target.value }))}
+              options={[{ value: '', label: 'أي باقة (يختار المستخدم)' }, ...plans.map(p => ({ value: p.id, label: `${p.custom_name || p.base_plan?.name} — ${money(p.custom_price_monthly)} / شهر` }))]} />
+          </Field>
+          <Field label="أيام التجربة المجانية">
+            <Input type="number" min={0} max={90} dir="ltr" value={inviteForm.trial_days} onChange={e => setInviteForm(f => ({ ...f, trial_days: parseInt(e.target.value) || 0 }))} />
+          </Field>
+          <Field label="نسبة الخصم %">
+            <Input type="number" min={0} max={100} dir="ltr" value={inviteForm.discount_pct} onChange={e => setInviteForm(f => ({ ...f, discount_pct: parseFloat(e.target.value) || 0 }))} />
+          </Field>
+          <Field label="الحد الأقصى للاستخدام" hint="فارغ = غير محدود">
+            <Input type="number" dir="ltr" value={inviteForm.max_uses} onChange={e => setInviteForm(f => ({ ...f, max_uses: e.target.value }))} placeholder="غير محدود" />
+          </Field>
         </div>
-      )}
+      </Modal>
 
-      {/* ── Plans & Pricing ──────────────────────────────── */}
-      {tab === 'plans' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-slate-400 text-sm">Set custom prices for your customers. You keep the difference!</p>
-            <button onClick={() => setShowPlanForm(v => !v)} className="btn-primary text-sm">
-              <PlusIcon className="w-4 h-4" /> Add Custom Plan
-            </button>
-          </div>
-
-          {showPlanForm && (
-            <div className="card space-y-4">
-              <h3 className="font-display font-semibold text-slate-900">Create Custom Plan</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Base Plan (what you pay us)</label>
-                  <select value={planForm.base_plan_id} onChange={e => setPlanForm(f => ({ ...f, base_plan_id: e.target.value }))} className="input">
-                    <option value="">Select base plan</option>
-                    {basePlans.filter(p => p.price_monthly > 0).map(p => (
-                      <option key={p.id} value={p.id}>{p.name} — ${p.price_monthly}/mo (your cost)</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Plan Name (shown to customers)</label>
-                  <input value={planForm.custom_name} onChange={e => setPlanForm(f => ({ ...f, custom_name: e.target.value }))} placeholder="e.g. Basic Plan" className="input" />
-                </div>
-                <div>
-                  <label className="label">Your Price / Month ($)</label>
-                  <input type="number" value={planForm.custom_price_monthly} onChange={e => setPlanForm(f => ({ ...f, custom_price_monthly: e.target.value }))}
-                    placeholder="e.g. 49" className="input" min="0" step="0.01" />
-                  {planForm.custom_price_monthly && planForm.base_plan_id && (
-                    <p className="text-xs text-blue-600 mt-1">
-                      💰 Your profit: ${(parseFloat(planForm.custom_price_monthly) - (basePlans.find(p => p.id === planForm.base_plan_id)?.price_monthly || 0)).toFixed(2)}/mo per customer
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label className="label">Your Price / Year (optional)</label>
-                  <input type="number" value={planForm.custom_price_yearly} onChange={e => setPlanForm(f => ({ ...f, custom_price_yearly: e.target.value }))}
-                    placeholder="e.g. 499" className="input" min="0" step="0.01" />
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <button onClick={() => createPlanMut.mutate(planForm)} disabled={createPlanMut.isLoading || !planForm.base_plan_id || !planForm.custom_price_monthly} className="btn-primary">
-                  {createPlanMut.isLoading ? 'Creating...' : 'Create Plan'}
-                </button>
-                <button onClick={() => setShowPlanForm(false)} className="btn-secondary">Cancel</button>
-              </div>
-            </div>
-          )}
-
-          {plans.length === 0 && !showPlanForm ? (
-            <div className="card text-center py-12">
-              <p className="text-slate-500 text-sm mb-3">No custom plans yet</p>
-              <p className="text-slate-600 text-xs">Create plans with your own pricing — you keep the profit between your price and our cost</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {plans.map(plan => {
-                const cost = plan.base_plan?.price_monthly || 0
-                const profit = plan.custom_price_monthly - cost
-                return (
-                  <div key={plan.id} className="card">
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <p className="font-bold text-slate-900">{plan.custom_name || plan.base_plan?.name}</p>
-                        <p className="text-xs text-slate-500">Based on: {plan.base_plan?.name}</p>
-                      </div>
-                      <span className="badge-green text-xs">Active</span>
-                    </div>
-                    <div className="space-y-1 text-sm mb-3">
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Your price</span>
-                        <span className="text-slate-900 font-bold">${plan.custom_price_monthly}/mo</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Your cost</span>
-                        <span className="text-slate-400">${cost}/mo</span>
-                      </div>
-                      <div className="flex justify-between border-t border-slate-200 pt-1 mt-1">
-                        <span className="text-blue-600">Your profit</span>
-                        <span className="text-blue-600 font-bold">${profit.toFixed(2)}/mo</span>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+      {/* Campaign */}
+      <Modal open={showCampForm && referralCount > 0} onClose={() => setShowCampForm(false)} size="lg" icon={MegaphoneIcon} title="حملة جديدة"
+        description={`تُرسل إلى عملائك المُحالين (${referralCount} مستخدم).`}
+        footer={<><Button variant="secondary" onClick={() => setShowCampForm(false)}>إلغاء</Button>
+          <Button icon={campForm.scheduled_at ? CalendarDaysIcon : PaperAirplaneIcon} loading={sendCampMut.isLoading} disabled={!campForm.instance_id || !campForm.message}
+            onClick={() => sendCampMut.mutate({ ...campForm, scheduled_at: campForm.scheduled_at ? new Date(campForm.scheduled_at).toISOString() : undefined })}>
+            {campForm.scheduled_at ? 'جدولة الحملة' : 'إرسال الآن'}
+          </Button></>}>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="رقم واتساب" required error={campInstances.length === 0 ? 'لا توجد أرقام متصلة. اربط رقم واتساب أولًا.' : undefined}>
+            <Select value={campForm.instance_id} onChange={e => setCampForm(f => ({ ...f, instance_id: e.target.value }))} placeholder="اختر الرقم"
+              options={campInstances.map(inst => ({ value: inst.id, label: `${inst.display_name || inst.phone_number} (${inst.type === 'cloud_api' ? 'Cloud API' : 'WhatsApp Web'})` }))} />
+          </Field>
+          <Field label="الجمهور">
+            <Select value={campForm.target} onChange={e => setCampForm(f => ({ ...f, target: e.target.value }))}
+              options={[{ value: 'all', label: `كل المُحالين (${referralCount})` }, { value: 'active', label: 'المشتركون النشطون فقط' }]} />
+          </Field>
+          <Field label="الرسالة" required className="sm:col-span-2" hint={<>المتغيرات: <code dir="ltr" className="font-mono">{'{{name}}'}</code> <code dir="ltr" className="font-mono">{'{{phone}}'}</code></>}>
+            <Textarea rows={4} value={campForm.message} onChange={e => setCampForm(f => ({ ...f, message: e.target.value }))} placeholder={'مرحبًا {{name}}! لدينا عرض خاص لك…'} />
+          </Field>
+          <Field label="موعد الإرسال (اختياري)" hint="اتركه فارغًا للإرسال الآن">
+            <Input type="datetime-local" dir="ltr" value={campForm.scheduled_at} onChange={e => setCampForm(f => ({ ...f, scheduled_at: e.target.value }))} />
+          </Field>
+          <Field label="الفاصل بين الرسائل (ثوانٍ)">
+            <Input type="number" min={1} max={30} dir="ltr" value={campForm.delay_seconds} onChange={e => setCampForm(f => ({ ...f, delay_seconds: parseInt(e.target.value) || 3 }))} />
+          </Field>
         </div>
-      )}
+      </Modal>
 
-      {/* ── Invite Links ─────────────────────────────────── */}
-      {tab === 'invites' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-slate-400 text-sm">{invites.length} invite links</p>
-            <button onClick={() => setShowInviteForm(v => !v)} className="btn-primary text-sm">
-              <PlusIcon className="w-4 h-4" /> New Invite Link
-            </button>
-          </div>
-
-          {showInviteForm && (
-            <div className="card space-y-4">
-              <h3 className="font-display font-semibold text-slate-900">Create Invite Link</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Label (internal)</label>
-                  <input value={inviteForm.label} onChange={e => setInviteForm(f => ({ ...f, label: e.target.value }))} placeholder="e.g. Facebook Campaign" className="input" />
-                </div>
-                <div>
-                  <label className="label">Custom Code (optional)</label>
-                  <input value={inviteForm.custom_code} onChange={e => setInviteForm(f => ({ ...f, custom_code: e.target.value.toUpperCase() }))} placeholder="e.g. JOHN50" className="input font-mono" />
-                  <p className="text-xs text-slate-500 mt-1">Leave empty to auto-generate</p>
-                </div>
-                <div>
-                  <label className="label">Plan</label>
-                  <select value={inviteForm.reseller_plan_id} onChange={e => setInviteForm(f => ({ ...f, reseller_plan_id: e.target.value }))} className="input">
-                    <option value="">Any plan (user chooses)</option>
-                    {plans.map(p => <option key={p.id} value={p.id}>{p.custom_name || p.base_plan?.name} — ${p.custom_price_monthly}/mo</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Free Trial Days</label>
-                  <input type="number" value={inviteForm.trial_days} onChange={e => setInviteForm(f => ({ ...f, trial_days: parseInt(e.target.value) || 0 }))} min={0} max={90} className="input" />
-                </div>
-                <div>
-                  <label className="label">Discount %</label>
-                  <input type="number" value={inviteForm.discount_pct} onChange={e => setInviteForm(f => ({ ...f, discount_pct: parseFloat(e.target.value) || 0 }))} min={0} max={100} className="input" />
-                </div>
-                <div>
-                  <label className="label">Max Uses (empty = unlimited)</label>
-                  <input type="number" value={inviteForm.max_uses} onChange={e => setInviteForm(f => ({ ...f, max_uses: e.target.value }))} placeholder="Unlimited" className="input" />
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <button onClick={() => createInviteMut.mutate({ ...inviteForm, max_uses: inviteForm.max_uses ? parseInt(inviteForm.max_uses) : null })}
-                  disabled={createInviteMut.isLoading} className="btn-primary">
-                  {createInviteMut.isLoading ? 'Creating...' : '🔗 Create & Copy Link'}
-                </button>
-                <button onClick={() => setShowInviteForm(false)} className="btn-secondary">Cancel</button>
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-3">
-            {invites.map(invite => {
-              const url = `${appUrl}/auth/register?code=${invite.code}`
-              return (
-                <div key={invite.id} className={clsx('card', !invite.is_active && 'opacity-60')}>
-                  <div className="flex items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="font-medium text-slate-900">{invite.label || invite.code}</p>
-                        <code className="text-xs text-blue-600 bg-blue-50/20 px-2 py-0.5 rounded font-mono">{invite.code}</code>
-                        <span className={clsx('text-xs px-2 py-0.5 rounded', invite.is_active ? 'badge-green' : 'badge-gray')}>
-                          {invite.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <code className="text-xs text-slate-500 truncate flex-1">{url}</code>
-                        <CopyBtn text={url} />
-                      </div>
-                      <div className="flex gap-3 mt-1 text-xs text-slate-500">
-                        {invite.trial_days > 0 && <span>🎁 {invite.trial_days} days trial</span>}
-                        {invite.discount_pct > 0 && <span>💸 {invite.discount_pct}% off</span>}
-                        <span>👥 {invite.use_count}{invite.max_uses ? `/${invite.max_uses}` : ''} uses</span>
-                        {invite.reseller_plan && <span>📦 {invite.reseller_plan.custom_name || invite.reseller_plan.base_plan?.name}</span>}
-                      </div>
-                    </div>
-                    <button onClick={() => { if (confirm('Delete?')) deleteInviteMut.mutate(invite.id) }} className="p-1.5 text-slate-500 hover:text-red-400">
-                      <TrashIcon className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-            {invites.length === 0 && !showInviteForm && (
-              <div className="card text-center py-12">
-                <p className="text-3xl mb-3">🔗</p>
-                <p className="text-slate-900 font-semibold mb-1">No invite links yet</p>
-                <p className="text-slate-500 text-sm">Create invite links to bring customers to your platform</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Referrals ────────────────────────────────────── */}
-      {tab === 'referrals' && (
-        <div className="card">
-          <h3 className="font-display font-semibold text-slate-900 mb-4">Your Customers ({referrals.length})</h3>
-          {referrals.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-slate-500 text-sm">No referrals yet — share your invite links to get started</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead><tr className="border-b border-slate-200">
-                  {['Customer', 'Joined', 'Status', 'Total Earned'].map(h => <th key={h} className="table-head">{h}</th>)}
-                </tr></thead>
-                <tbody>
-                  {referrals.map(r => (
-                    <tr key={r.id} className="table-row">
-                      <td className="table-cell">
-                        <p className="text-sm text-slate-900">{r.referred_user?.name}</p>
-                        <p className="text-xs text-slate-500">{r.referred_user?.email}</p>
-                      </td>
-                      <td className="table-cell text-xs text-slate-400">
-                        {r.referred_user?.created_at ? format(new Date(r.referred_user.created_at), 'MMM d, yyyy') : '—'}
-                      </td>
-                      <td className="table-cell">
-                        <span className={r.status === 'active' ? 'badge-green' : 'badge-gray'}>{r.status}</span>
-                      </td>
-                      <td className="table-cell text-blue-600 font-medium">${r.total_earned.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Campaigns ───────────────────────────────────── */}
-      {tab === 'campaigns' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400 text-sm">Send WhatsApp messages to all your referred users ({referralCount} users)</p>
-            </div>
-            <button onClick={() => setShowCampForm(v => !v)} className="btn-primary text-sm">
-              <PlusIcon className="w-4 h-4" /> New Campaign
-            </button>
-          </div>
-
-          {referralCount === 0 && (
-            <div className="card text-center py-10">
-              <p className="text-3xl mb-2">👥</p>
-              <p className="text-slate-900 font-semibold mb-1">No referred users yet</p>
-              <p className="text-slate-500 text-sm">Create invite links to get users first, then send them campaigns</p>
-            </div>
-          )}
-
-          {referralCount > 0 && showCampForm && (
-            <div className="card space-y-4">
-              <h3 className="font-display font-semibold text-slate-900">New Campaign</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="label">WhatsApp Instance *</label>
-                  <select value={campForm.instance_id} onChange={e => setCampForm(f => ({ ...f, instance_id: e.target.value }))} className="input">
-                    <option value="">Select instance</option>
-                    {campInstances.map(inst => (
-                      <option key={inst.id} value={inst.id}>
-                        {inst.display_name || inst.phone_number} ({inst.type === 'cloud_api' ? 'Cloud API' : 'WhatsApp Web'})
-                      </option>
-                    ))}
-                  </select>
-                  {campInstances.length === 0 && <p className="text-xs text-red-400 mt-1">No connected instances. Connect WhatsApp first.</p>}
-                </div>
-                <div>
-                  <label className="label">Target Audience</label>
-                  <select value={campForm.target} onChange={e => setCampForm(f => ({ ...f, target: e.target.value }))} className="input">
-                    <option value="all">All {referralCount} referred users</option>
-                    <option value="active">Active subscribers only</option>
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <label className="label">Message</label>
-                  <textarea value={campForm.message} onChange={e => setCampForm(f => ({ ...f, message: e.target.value }))}
-                    rows={4} placeholder={"Hi {{name}}! We have a special offer for you..."} className="input resize-none" />
-                  <p className="text-xs text-slate-500 mt-1">Variables: <code className="bg-[#F8FAFC] px-1 rounded text-blue-600">{"{{name}}"}</code> <code className="bg-[#F8FAFC] px-1 rounded text-blue-600">{"{{phone}}"}</code></p>
-                </div>
-                <div>
-                  <label className="label">Schedule (optional)</label>
-                  <input type="datetime-local" value={campForm.scheduled_at} onChange={e => setCampForm(f => ({ ...f, scheduled_at: e.target.value }))} className="input" />
-                  <p className="text-xs text-slate-500 mt-1">Leave empty to send now</p>
-                </div>
-                <div>
-                  <label className="label">Delay between messages (seconds)</label>
-                  <input type="number" value={campForm.delay_seconds} onChange={e => setCampForm(f => ({ ...f, delay_seconds: parseInt(e.target.value) || 3 }))} min={1} max={30} className="input" />
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => sendCampMut.mutate({ ...campForm, scheduled_at: campForm.scheduled_at ? new Date(campForm.scheduled_at).toISOString() : undefined })}
-                  disabled={sendCampMut.isLoading || !campForm.instance_id || !campForm.message}
-                  className="btn-primary">
-                  {sendCampMut.isLoading ? <><ArrowPathIcon className="w-4 h-4 animate-spin" /> Sending...</> : campForm.scheduled_at ? '📅 Schedule Campaign' : '📢 Send Now'}
-                </button>
-                <button onClick={() => setShowCampForm(false)} className="btn-secondary">Cancel</button>
-              </div>
-            </div>
-          )}
-
-          {campaigns.length > 0 && (
-            <div className="card">
-              <h3 className="font-display font-semibold text-slate-900 mb-4">Campaign History</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead><tr className="border-b border-slate-200">
-                    {['Date', 'Message', 'Target', 'Sent', 'Status'].map(h => <th key={h} className="table-head">{h}</th>)}
-                  </tr></thead>
-                  <tbody>
-                    {campaigns.map(c => (
-                      <tr key={c.id} className="table-row">
-                        <td className="table-cell text-xs text-slate-400">{new Date(c.created_at).toLocaleDateString()}</td>
-                        <td className="table-cell text-sm text-slate-700 max-w-xs truncate">{c.message}</td>
-                        <td className="table-cell text-sm text-slate-400">{c.target_count} users</td>
-                        <td className="table-cell text-sm text-slate-900">{c.sent_count || 0}</td>
-                        <td className="table-cell">
-                          <span className={clsx('text-xs px-2 py-0.5 rounded font-medium',
-                            c.status === 'completed' ? 'badge-green' : c.status === 'sending' ? 'badge-yellow' : 'badge-gray')}>
-                            {c.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Payouts ──────────────────────────────────────── */}
-      {tab === 'payouts' && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="stat-card border-blue-200/50 bg-blue-50/10">
-              <p className="text-xs text-slate-500 mb-1">💰 Pending Payout</p>
-              <p className="text-3xl font-display font-bold text-blue-600">${(profile?.balance_pending || 0).toFixed(2)}</p>
-              <p className="text-xs text-slate-500 mt-1">Will be paid on next {profile?.payout_schedule || 'monthly'} cycle</p>
-            </div>
-            <div className="stat-card">
-              <p className="text-xs text-slate-500 mb-1">✅ Total Paid Out</p>
-              <p className="text-3xl font-display font-bold text-slate-900">${(profile?.balance_paid || 0).toFixed(2)}</p>
-            </div>
-            <div className="stat-card">
-              <p className="text-xs text-slate-500 mb-1">📈 All Time Earned</p>
-              <p className="text-3xl font-display font-bold text-slate-900">${(profile?.balance_total || 0).toFixed(2)}</p>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-display font-semibold text-slate-900">Payout History</h3>
-              <span className="text-xs text-slate-500">Schedule: {profile?.payout_schedule || 'monthly'}</span>
-            </div>
-            {payouts.length === 0 ? (
-              <p className="text-slate-500 text-sm text-center py-6">No payouts yet</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead><tr className="border-b border-slate-200">
-                    {['Date', 'Amount', 'Method', 'Reference', 'Status'].map(h => <th key={h} className="table-head">{h}</th>)}
-                  </tr></thead>
-                  <tbody>
-                    {payouts.map(p => (
-                      <tr key={p.id} className="table-row">
-                        <td className="table-cell text-xs">{format(new Date(p.created_at), 'MMM d, yyyy')}</td>
-                        <td className="table-cell font-medium text-slate-900">${p.amount.toFixed(2)}</td>
-                        <td className="table-cell text-xs text-slate-400">{p.method}</td>
-                        <td className="table-cell font-mono text-xs text-slate-500">{p.reference || '—'}</td>
-                        <td className="table-cell">
-                          <span className={p.status === 'paid' ? 'badge-green' : p.status === 'processing' ? 'badge-yellow' : 'badge-gray'}>{p.status}</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Settings ─────────────────────────────────────── */}
-      {tab === 'settings' && (
-        <div className="max-w-xl space-y-4">
-          <div className="card space-y-4">
-            <h3 className="font-display font-semibold text-slate-900">💳 Payment Method</h3>
-            <div>
-              <label className="label">How do your customers pay?</label>
-              <div className="space-y-2">
-                {[
-                  { value: 'platform', label: '🏦 Through WABEK platform', desc: 'Customers pay us, we send you your earnings every payout cycle. You keep 100% profit.' },
-                  { value: 'stripe_own', label: '💳 My own Stripe account', desc: 'Customers pay directly to your Stripe. You handle billing entirely.' },
-                  { value: 'both', label: '🔄 Both options', desc: 'Offer both payment methods.' },
-                ].map(opt => (
-                  <label key={opt.value} className={clsx('flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors',
-                    profileForm?.payment_method === opt.value ? 'border-brand-500 bg-blue-50/20' : 'border-slate-200 hover:border-wabek-muted')}>
-                    <input type="radio" value={opt.value} checked={profileForm?.payment_method === opt.value}
-                      onChange={e => setProfileForm(f => ({ ...f, payment_method: e.target.value }))} className="mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">{opt.label}</p>
-                      <p className="text-xs text-slate-500">{opt.desc}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {(profileForm?.payment_method === 'stripe_own' || profileForm?.payment_method === 'both') && (
-              <div className="space-y-3 border-t border-slate-200 pt-4">
-                <h4 className="text-sm font-semibold text-slate-900">Stripe Account</h4>
-                {profile?.stripe_connect_account_id ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3 p-3 bg-blue-50/20 border border-blue-200/50 rounded-xl">
-                      <div className="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <CheckIcon className="w-4 h-4 text-slate-900" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-900">Stripe Connected ✅</p>
-                        <p className="text-xs text-slate-400 font-mono">{profile.stripe_connect_account_id}</p>
-                      </div>
-                      <button onClick={() => {
-                        if (confirm('Disconnect Stripe?'))
-                          axios.post('/api/reseller/stripe-connect/disconnect')
-                            .then(() => { qc.invalidateQueries('reseller-profile'); toast.success('Disconnected') })
-                      }} className="text-xs text-red-400 hover:text-red-300 px-2 py-1 border border-red-900/50 rounded-lg">
-                        Disconnect
-                      </button>
-                    </div>
-                    <p className="text-xs text-slate-500">✅ Your customers pay directly to your Stripe account.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="p-4 bg-[#F8FAFC] border border-slate-200 rounded-xl">
-                      <p className="text-sm text-slate-700 mb-3">Connect your Stripe account so your customers pay you directly.</p>
-                      <a href="/api/reseller/stripe-connect/authorize"
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm text-slate-900 transition-colors"
-                        style={{ backgroundColor: '#635BFF' }}>
-                        <svg viewBox="0 0 24 24" className="w-4 h-4 fill-white">
-                          <path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.591-7.305z"/>
-                        </svg>
-                        Connect with Stripe
-                      </a>
-                    </div>
-                    <div className="text-xs text-slate-500 space-y-1">
-                      <p>✅ Secure OAuth — we never see your Stripe password or keys</p>
-                      <p>✅ Payments go directly to your Stripe account</p>
-                      <p>✅ You can disconnect anytime</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {(profileForm?.payment_method === 'platform' || profileForm?.payment_method === 'both') && (
-            <div className="card space-y-4">
-              <h3 className="font-display font-semibold text-slate-900">🏦 Payout Settings</h3>
-              <div>
-                <label className="label">Payout Schedule</label>
-                <select value={profileForm?.payout_schedule || 'monthly'} onChange={e => setProfileForm(f => ({ ...f, payout_schedule: e.target.value }))} className="input">
-                  {PAYOUT_SCHEDULES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="label">Payout Method</label>
-                <select value={profileForm?.payout_method || 'bank_transfer'} onChange={e => setProfileForm(f => ({ ...f, payout_method: e.target.value }))} className="input">
-                  {PAYOUT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="label">Payout Details</label>
-                {(() => {
-                  const method = profileForm?.payout_method || 'bank_transfer'
-                  const details = typeof profileForm?.payout_details === 'object'
-                    ? profileForm?.payout_details || {}
-                    : {}
-                  const setField = (k: string, v: string) =>
-                    setProfileForm(f => ({ ...f, payout_details: { ...(typeof f?.payout_details === 'object' ? f.payout_details : {}), [k]: v } }))
-
-                  if (method === 'bank_transfer') return (
-                    <div className="space-y-2">
-                      {[
-                        { k: 'bank_name', label: 'Bank Name', ph: 'e.g. HSBC' },
-                        { k: 'account_name', label: 'Account Name', ph: 'Full name on account' },
-                        { k: 'iban', label: 'IBAN / Account Number', ph: 'GB29 NWBK 6016 1331 9268 19' },
-                        { k: 'swift', label: 'SWIFT / BIC', ph: 'NWBKGB2L' },
-                        { k: 'country', label: 'Country', ph: 'United Kingdom' },
-                      ].map(f => (
-                        <div key={f.k}>
-                          <label className="text-xs text-slate-500 block mb-1">{f.label}</label>
-                          <input value={details[f.k] || ''} onChange={e => setField(f.k, e.target.value)}
-                            placeholder={f.ph} className="input text-sm" />
-                        </div>
-                      ))}
-                    </div>
-                  )
-                  if (method === 'paypal') return (
-                    <div>
-                      <label className="text-xs text-slate-500 block mb-1">PayPal Email</label>
-                      <input value={details['email'] || ''} onChange={e => setField('email', e.target.value)}
-                        placeholder="your@paypal.com" className="input text-sm" type="email" />
-                    </div>
-                  )
-                  if (method === 'wise') return (
-                    <div className="space-y-2">
-                      {[
-                        { k: 'email', label: 'Wise Email', ph: 'your@wise.com' },
-                        { k: 'account_id', label: 'Wise Account ID (optional)', ph: 'Pxxxx' },
-                      ].map(f => (
-                        <div key={f.k}>
-                          <label className="text-xs text-slate-500 block mb-1">{f.label}</label>
-                          <input value={details[f.k] || ''} onChange={e => setField(f.k, e.target.value)}
-                            placeholder={f.ph} className="input text-sm" />
-                        </div>
-                      ))}
-                    </div>
-                  )
-                  if (method === 'crypto') return (
-                    <div className="space-y-2">
-                      {[
-                        { k: 'network', label: 'Network', ph: 'TRC20 / ERC20 / BEP20' },
-                        { k: 'address', label: 'Wallet Address', ph: 'T...' },
-                        { k: 'currency', label: 'Currency', ph: 'USDT / BTC / ETH' },
-                      ].map(f => (
-                        <div key={f.k}>
-                          <label className="text-xs text-slate-500 block mb-1">{f.label}</label>
-                          <input value={details[f.k] || ''} onChange={e => setField(f.k, e.target.value)}
-                            placeholder={f.ph} className="input text-sm font-mono" />
-                        </div>
-                      ))}
-                    </div>
-                  )
-                  return null
-                })()}
-              </div>
-            </div>
-          )}
-
-          <button onClick={() => saveProfileMut.mutate(profileForm)} disabled={saveProfileMut.isLoading || !profileForm} className="btn-primary w-full justify-center">
-            {saveProfileMut.isLoading ? <><ArrowPathIcon className="w-4 h-4 animate-spin" /> Saving...</> : '💾 Save Settings'}
-          </button>
-        </div>
-      )}
+      <ConfirmDialog destructive open={!!toDeleteInvite} onClose={() => setToDeleteInvite(null)}
+        onConfirm={() => { if (toDeleteInvite) deleteInviteMut.mutate(toDeleteInvite.id) }} loading={deleteInviteMut.isLoading}
+        title="حذف رابط الدعوة؟" description="لن يعمل الرابط بعد الحذف، ويبقى العملاء الذين سجّلوا به." confirmLabel="حذف" />
+      <ConfirmDialog destructive open={confirmDisconnect} onClose={() => setConfirmDisconnect(false)} onConfirm={disconnectStripe} loading={disconnecting}
+        title="فصل حساب Stripe؟" description="لن يتمكن عملاؤك من الدفع مباشرة إلى حسابك حتى تعيد الربط." confirmLabel="فصل" />
     </DashboardLayout>
   )
 }
