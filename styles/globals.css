@@ -240,10 +240,10 @@
     @apply flex items-center gap-3 rounded-btn px-3 py-2.5 text-[14.5px] font-semibold bg-white/[0.12] text-white;
   }
 
-  /* Tables */
-  .table-head { @apply bg-surface-2 px-5 py-3 text-start text-[12.5px] font-medium text-muted; }
-  .table-cell { @apply border-t border-line-soft px-5 py-3.5 text-sm text-ink; }
-  .table-row  { @apply transition-colors hover:bg-surface-2; }
+  /* Tables (legacy; named tbl-* so they never collide with Tailwind display utilities like md:table-cell) */
+  .tbl-head { @apply bg-surface-2 px-5 py-3 text-start text-[12.5px] font-medium text-muted; }
+  .tbl-cell { @apply border-t border-line-soft px-5 py-3.5 text-sm text-ink; }
+  .tbl-row  { @apply transition-colors hover:bg-surface-2; }
 
   /* Modals (legacy markup) */
   .modal-backdrop { @apply fixed inset-0 z-modal flex items-center justify-center bg-overlay/50 p-4 backdrop-blur-sm; }
