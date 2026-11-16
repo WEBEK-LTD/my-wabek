@@ -88,48 +88,84 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (csv_data.length > 5 * 1024 * 1024) return res.status(413).json({ error: 'CSV too large' })
 
     const parsed = Papa.parse(csv_data, { header: true, skipEmptyLines: true })
-    const contacts = (parsed.data as Array<Record<string, string>>)
-      .filter(row => row.phone)
-      .slice(0, 20000)
-      .map(row => ({
-        id: uuidv4(),
-        user_id: user.userId,
-        phone: row.phone?.replace(/\D/g, ''),
-        name: row.name ? String(row.name).slice(0, 200) : null,
-        email: row.email ? String(row.email).slice(0, 254) : null,
-        tags: row.tags ? row.tags.split(';').map((t: string) => t.trim()).filter(Boolean).slice(0, 50) : [],
-        custom_fields: {},
-      }))
+    const clean = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
+
+    // One row per normalized phone (the last occurrence in the file wins), so
+    // the upsert never touches the same (user_id, phone) twice.
+    type Row = { phone: string; name: string; email: string; tags: string[] }
+    const byPhone = new Map<string, Row>()
+    for (const row of (parsed.data as Array<Record<string, string>>)) {
+      const phone = typeof row?.phone === 'string' ? row.phone.replace(/\D/g, '') : ''
+      if (!phone) continue
+      if (!byPhone.has(phone) && byPhone.size >= 20000) continue
+      byPhone.delete(phone) // keep insertion order = last occurrence
+      byPhone.set(phone, {
+        phone,
+        name: clean(row.name, 200),
+        email: clean(row.email, 254),
+        tags: typeof row.tags === 'string'
+          ? row.tags.split(';').map(t => t.trim().slice(0, 100)).filter(Boolean).slice(0, 50)
+          : [],
+      })
+    }
+    const rows = Array.from(byPhone.values())
+    const phones = rows.map(r => r.phone)
+
+    // Existing contacts for these phones: an empty CSV cell must not erase a
+    // saved name/email, and imported tags are added to the saved ones.
+    const existing = new Map<string, { name: string | null; email: string | null; tags: string[] | null }>()
+    for (let i = 0; i < phones.length; i += 500) {
+      const { data: found, error: findErr } = await db.from('contacts')
+        .select('phone, name, email, tags')
+        .eq('user_id', user.userId).in('phone', phones.slice(i, i + 500))
+      if (findErr) {
+        console.error('[contacts] import lookup error:', findErr.message)
+        return res.status(500).json({ error: 'Import failed' })
+      }
+      for (const c of found || []) existing.set(c.phone, c)
+    }
+    const newCount = phones.length - existing.size
 
     // Plan: max_contacts — only rows that would be NEW count against it
     const lim = await checkPlanLimit(user.userId, 'contacts')
-    if (lim.limit > 0 || !lim.allowed) {
-      const phones = Array.from(new Set(contacts.map(c => c.phone).filter(Boolean)))
-      let existingCount = 0
-      for (let i = 0; i < phones.length; i += 500) {
-        const { count } = await db.from('contacts').select('id', { count: 'exact', head: true })
-          .eq('user_id', user.userId).in('phone', phones.slice(i, i + 500))
-        existingCount += count || 0
-      }
-      const newCount = phones.length - existingCount
-      if (newCount > 0 && (!lim.allowed || lim.current + newCount > lim.limit)) {
-        return res.status(403).json({
-          ...contactLimitError(lim.limit),
-          detail: `This import would add ${newCount} new contact(s); your plan allows ${lim.limit} and you have ${lim.current}.`,
-        })
-      }
+    if (newCount > 0 && (!lim.allowed || (lim.limit > 0 && lim.current + newCount > lim.limit))) {
+      return res.status(403).json({
+        ...contactLimitError(lim.limit),
+        detail: `This import would add ${newCount} new contact(s); your plan allows ${lim.limit} and you have ${lim.current}.`,
+      })
     }
 
-    // Upsert all
-    const { data, error } = await db.from('contacts')
-      .upsert(contacts, { onConflict: 'user_id,phone', ignoreDuplicates: false })
-      .select()
+    // Every row carries the same columns (no id: the DB default applies to new
+    // rows and existing rows keep theirs), with the saved values filled in.
+    const payload = rows.map(r => {
+      const prev = existing.get(r.phone)
+      const prevTags = Array.isArray(prev?.tags) ? prev!.tags : []
+      return {
+        user_id: user.userId,
+        phone: r.phone,
+        name: r.name || prev?.name || null,
+        email: r.email || prev?.email || null,
+        tags: Array.from(new Set([...prevTags, ...r.tags])).slice(0, 100),
+      }
+    })
 
-    if (error) {
-      console.error('[contacts] import error:', error.message)
-      return res.status(500).json({ error: 'Import failed' })
+    let imported = 0
+    for (let i = 0; i < payload.length; i += 1000) {
+      const { data, error } = await db.from('contacts')
+        .upsert(payload.slice(i, i + 1000), { onConflict: 'user_id,phone', ignoreDuplicates: false })
+        .select('id')
+      if (error) {
+        console.error('[contacts] import error:', error.message)
+        return res.status(500).json({ error: 'Import failed', imported })
+      }
+      imported += data?.length || 0
     }
-    return res.status(200).json({ imported: data?.length, total: contacts.length })
+    return res.status(200).json({
+      imported,
+      total: payload.length,
+      inserted: newCount,
+      updated: existing.size,
+    })
   }
 
   return res.status(405).json({ error: 'Method not allowed' })

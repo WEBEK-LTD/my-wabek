@@ -2,7 +2,6 @@ import { NextApiRequest, NextApiResponse } from 'next'
 import { requireOwnerOrRole } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { checkPlanFeature } from '@/lib/middleware'
-import { v4 as uuidv4 } from 'uuid'
 
 function money(v: unknown): number | null {
   const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''))
@@ -44,8 +43,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { data: basePlan } = await db.from('plans').select('id, is_active').eq('id', base_plan_id).maybeSingle()
     if (!basePlan || basePlan.is_active === false) return res.status(400).json({ error: 'This plan cannot be resold' })
 
+    // No id: a new row gets the DB default, an existing (reseller, plan) row
+    // keeps its id instead of having its primary key rewritten.
     const { data, error } = await db.from('reseller_plans').upsert({
-      id: uuidv4(),
       reseller_id: user.userId,
       base_plan_id: basePlan.id,
       custom_name: custom_name || null,
