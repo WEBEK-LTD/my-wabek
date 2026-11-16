@@ -228,7 +228,7 @@ export default function LinksPage() {
                     </div>
                   ),
                 },
-                { key: 'created', header: 'أُنشئ', hideBelow: 'md', cell: l => <span className="text-[13px] text-muted">{formatDate(l.created_at)}</span> },
+                { key: 'created', header: 'أُنشئ', cell: l => <span className="text-[13px] text-muted">{formatDate(l.created_at)}</span> },
                 { key: 'clicks', header: 'النقرات', align: 'end', cell: l => <span className="tabular text-base font-semibold text-ink">{formatNumber(l.click_count || 0)}</span> },
                 {
                   key: 'actions', header: <span className="sr-only">إجراءات</span>, align: 'end',

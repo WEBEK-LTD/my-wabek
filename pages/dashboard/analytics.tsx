@@ -143,9 +143,9 @@ export default function AnalyticsPage() {
             </div>
 
             {/* Messages over time + status donut */}
-            <div className="grid gap-5 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
               <Card padding="lg" className="lg:col-span-2">
-                <CardHeader
+                <CardHeader className="!p-0"
                   title="الرسائل عبر الوقت"
                   subtitle={`آخر ${RANGES.find(r => r.id === range)?.label}`}
                   action={!isLoading && (
@@ -175,7 +175,7 @@ export default function AnalyticsPage() {
               </Card>
 
               <Card padding="lg">
-                <CardHeader title="حالة الرسائل" subtitle="الرسائل الصادرة هذا الشهر" />
+                <CardHeader className="!p-0" title="حالة الرسائل" subtitle="الرسائل الصادرة هذا الشهر" />
                 <div className="mt-5 flex justify-center">
                   {isLoading ? <Skeleton circle className="h-36 w-36" /> : statusTotal === 0 ? (
                     <EmptyState size="sm" icon={PaperAirplaneIcon} title="لا توجد رسائل صادرة بعد" />
@@ -191,7 +191,7 @@ export default function AnalyticsPage() {
                         { label: 'مقروءة', value: sb.read, color: CHART_COLORS[0] },
                         { label: 'فشلت', value: sb.failed, color: CHART_COLORS[5] },
                       ]}
-                      formatValue={(s, p) => `${formatNumber(s.value)} · ${p}%`}
+                      formatValue={(s, p) => `${formatNumber(s.value)} · ${Math.round(p)}%`}
                     />
                   )}
                 </div>
@@ -201,7 +201,7 @@ export default function AnalyticsPage() {
             {/* Campaign performance */}
             <Card padding="none">
               <div className="px-5 pt-5 sm:px-6">
-                <CardHeader title="أداء الحملات" subtitle="آخر 8 حملات" icon={MegaphoneIcon}
+                <CardHeader className="!p-0" title="أداء الحملات" subtitle="آخر 8 حملات" icon={MegaphoneIcon}
                   action={<Button variant="ghost" size="sm" href="/dashboard/campaigns">جميع الحملات</Button>} />
               </div>
               <div className="mt-4">
@@ -233,9 +233,9 @@ export default function AnalyticsPage() {
               </div>
             </Card>
 
-            <div className="grid gap-5 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
               <Card padding="lg">
-                <CardHeader title="أكثر الروبوتات تفاعلًا" subtitle="عدد مرات التشغيل" icon={CpuChipIcon} />
+                <CardHeader className="!p-0" title="أكثر الروبوتات تفاعلًا" subtitle="عدد مرات التشغيل" icon={CpuChipIcon} />
                 <div className="mt-5">
                   {isLoading ? <Skeleton lines={4} /> : chatbots.length === 0 ? (
                     <EmptyState size="sm" title="لا توجد روبوتات محادثة" action={<Button size="sm" variant="secondary" href="/dashboard/chatbot">إنشاء روبوت</Button>} />
@@ -247,7 +247,7 @@ export default function AnalyticsPage() {
               </Card>
 
               <Card padding="lg">
-                <CardHeader title="أكثر الروابط نقرًا" subtitle="الروابط المتتبَّعة" icon={LinkIcon}
+                <CardHeader className="!p-0" title="أكثر الروابط نقرًا" subtitle="الروابط المتتبَّعة" icon={LinkIcon}
                   action={<Button variant="ghost" size="xs" href="/dashboard/links">الكل</Button>} />
                 <div className="mt-5">
                   {isLoading ? <Skeleton lines={4} /> : topLinks.length === 0 ? (
@@ -260,7 +260,7 @@ export default function AnalyticsPage() {
               </Card>
 
               <Card padding="lg">
-                <CardHeader title="أرقام واتساب" icon={DevicePhoneMobileIcon}
+                <CardHeader className="!p-0" title="أرقام واتساب" icon={DevicePhoneMobileIcon}
                   action={<Button variant="ghost" size="xs" href="/dashboard/instances">إدارة</Button>} />
                 <div className="mt-4">
                   {isLoading ? <Skeleton lines={3} /> : instances.length === 0 ? (

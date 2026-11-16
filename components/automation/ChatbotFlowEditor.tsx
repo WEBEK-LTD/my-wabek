@@ -275,10 +275,10 @@ export function ChatbotFlowEditor({ initial, instances, teamMembers, saving, onB
       </div>
       {nameError && <p role="alert" className="-mt-3 text-xs font-medium text-danger">اسم المسار مطلوب.</p>}
 
-      <div className="grid items-start gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
         {/* Trigger */}
         <Card padding="lg" className="lg:sticky lg:top-24">
-          <CardHeader title="متى يبدأ المسار؟" />
+          <CardHeader className="!p-0" title="متى يبدأ المسار؟" />
           <div className="mt-4 flex flex-col gap-2" role="radiogroup" aria-label="نوع المشغّل">
             {triggerOptions.map(t => (
               <button key={t} type="button" role="radio" aria-checked={triggerType === t} onClick={() => setTriggerType(t)}

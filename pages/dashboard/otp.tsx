@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useMutation, useQuery } from 'react-query'
 import axios from 'axios'
@@ -194,7 +194,9 @@ export default function OTPPage() {
   const [docTab, setDocTab] = useState('send')
   const [showKey, setShowKey] = useState(false)
 
-  const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://your-site.netlify.app'
+  // Set after mount so server and client render the same markup.
+  const [appUrl, setAppUrl] = useState('https://your-site.netlify.app')
+  useEffect(() => { setAppUrl(window.location.origin) }, [])
   const keyInCode = showKey && apiKey ? apiKey : 'YOUR_API_KEY'
   const code = snippets(appUrl, keyInCode)
 
@@ -244,10 +246,10 @@ export default function OTPPage() {
           actions={<Button variant="secondary" icon={KeyIcon} href="/dashboard/api-keys">مفاتيح API</Button>}
         />
 
-        <div className="grid gap-5 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
           {/* Live test */}
           <Card padding="lg" className="lg:col-span-3">
-            <CardHeader title="تجربة مباشرة" subtitle="أرسل رمزًا إلى رقمك ثم أدخله للتحقق." icon={ShieldCheckIcon} />
+            <CardHeader className="!p-0" title="تجربة مباشرة" subtitle="أرسل رمزًا إلى رقمك ثم أدخله للتحقق." icon={ShieldCheckIcon} />
             <ol className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2" aria-label="مراحل التجربة">
               <StepDot n={1} label="إرسال الرمز" state={step === 'send' ? 'current' : 'done'} />
               <span className="hidden h-px w-8 bg-line sm:block" aria-hidden="true" />
@@ -308,9 +310,9 @@ export default function OTPPage() {
           </Card>
 
           {/* Settings + key */}
-          <div className="flex flex-col gap-5 lg:col-span-2">
+          <div className="flex min-w-0 flex-col gap-5 lg:col-span-2">
             <Card padding="lg">
-              <CardHeader title="مفتاح API الافتراضي" icon={KeyIcon} />
+              <CardHeader className="!p-0" title="مفتاح API الافتراضي" icon={KeyIcon} />
               <div className="mt-4">
                 {keyLoading ? <div className="skeleton h-11 w-full rounded-field" /> : apiKey ? (
                   <div className="flex items-center gap-2">
@@ -329,7 +331,7 @@ export default function OTPPage() {
             </Card>
 
             <Card padding="lg">
-              <CardHeader title="إعدادات الرموز" />
+              <CardHeader className="!p-0" title="إعدادات الرموز" />
               <dl className="mt-3 divide-y divide-line-soft text-sm">
                 {[
                   { label: 'طول الرمز', value: '6 أرقام' },
@@ -352,7 +354,7 @@ export default function OTPPage() {
         {/* API docs */}
         <Card padding="none">
           <div className="px-5 pt-5 sm:px-6 sm:pt-6">
-            <CardHeader title="الربط عبر الواجهة البرمجية" subtitle="خطوتان: أرسل الرمز واحفظ otpId، ثم تحقّق من الرمز الذي يدخله العميل." icon={CodeBracketIcon} />
+            <CardHeader className="!p-0" title="الربط عبر الواجهة البرمجية" subtitle="خطوتان: أرسل الرمز واحفظ otpId، ثم تحقّق من الرمز الذي يدخله العميل." icon={CodeBracketIcon} />
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-b border-line-soft px-5 sm:px-6">
             <Tabs idPrefix="otp-doc" value={docTab} onChange={setDocTab} aria-label="أقسام التوثيق"

@@ -219,20 +219,20 @@ export default function ContactsPage() {
     },
     { key: 'phone', header: 'الرقم', cell: c => <span dir="ltr" className="tabular font-mono text-[13px]">{c.phone}</span> },
     {
-      key: 'tags', header: 'الوسوم', hideBelow: 'md',
+      key: 'tags', header: 'الوسوم',
       cell: c => {
         const tags = c.tags || []
         if (!tags.length) return <span className="text-muted">—</span>
         return (
           <div className="flex max-w-[240px] flex-wrap gap-1">
             {tags.slice(0, 3).map(t => <Badge key={t} tone="brand" size="sm">{t}</Badge>)}
-            {tags.length > 3 && <Badge tone="neutral" size="sm">+{tags.length - 3}</Badge>}
+            {tags.length > 3 && <Badge tone="neutral" size="sm"><span dir="ltr">+{tags.length - 3}</span></Badge>}
           </div>
         )
       },
     },
     { key: 'status', header: 'الحالة', cell: c => <StatusBadge c={c} /> },
-    { key: 'created', header: 'أُضيفت', hideBelow: 'lg', cell: c => <span className="text-[13px] text-muted">{formatDate(c.created_at)}</span> },
+    { key: 'created', header: 'أُضيفت', cell: c => <span className="text-[13px] text-muted">{formatDate(c.created_at)}</span> },
     {
       key: 'actions', header: <span className="sr-only">إجراءات</span>, align: 'end',
       cell: c => (

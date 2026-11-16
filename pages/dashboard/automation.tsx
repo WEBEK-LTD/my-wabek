@@ -41,7 +41,7 @@ function ActionStrip({ nodes }: { nodes: AutomationNode[] }) {
           </span>
         )
       })}
-      {nodes.length > 5 && <span className="text-xs text-muted">+{nodes.length - 5}</span>}
+      {nodes.length > 5 && <span dir="ltr" className="text-xs text-muted">+{nodes.length - 5}</span>}
     </div>
   )
 }

@@ -7,7 +7,7 @@ import {
 } from '@heroicons/react/24/outline'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import {
-  Avatar, Badge, Button, Card, ConfirmDialog, Dropdown, EmptyState, Field, Input, PageHeader, Skeleton, Textarea, cn, formatNumber,
+  Avatar, Badge, Button, Card, ConfirmDialog, Dropdown, EmptyState, Field, Input, PageHeader, Skeleton, cn, formatNumber,
 } from '@/components/ui'
 import { RuleBuilder } from '@/components/contacts/RuleBuilder'
 import {
@@ -121,7 +121,7 @@ export default function SegmentsPage() {
 
         {showForm && (
           <Card padding="none" className="overflow-hidden border-brand-teal/40">
-            <form onSubmit={save} className="grid lg:grid-cols-[1fr_340px]">
+            <form onSubmit={save} className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px]">
               <div className="flex flex-col gap-5 p-5 sm:p-6">
                 <h2 className="text-base font-semibold text-ink">شريحة جديدة</h2>
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -129,7 +129,7 @@ export default function SegmentsPage() {
                     <Input value={form.name} maxLength={200} placeholder="عملاء VIP" autoFocus onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
                   </Field>
                   <Field label="الوصف" hint="اختياري — لتذكير فريقك بالغرض منها.">
-                    <Textarea rows={1} maxLength={1000} value={form.description} placeholder="عملاء اشتروا أكثر من مرة" onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+                    <Input maxLength={1000} value={form.description} placeholder="عملاء اشتروا أكثر من مرة" onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
                   </Field>
                 </div>
                 <div>

@@ -40,7 +40,7 @@ function ReplyForm({ initial, saving, onCancel, onSave, taken }: {
 
   return (
     <form
-      className="grid gap-5 lg:grid-cols-[1fr_minmax(0,320px)]"
+      className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]"
       onSubmit={e => { e.preventDefault(); if (valid) onSave(form) }}
     >
       <div className="flex flex-col gap-4">
@@ -49,8 +49,10 @@ function ReplyForm({ initial, saving, onCancel, onSave, taken }: {
             <Input value={form.title} maxLength={200} placeholder="مثال: ترحيب" onChange={e => setForm(f => ({ ...f, title: e.target.value }))} autoFocus />
           </Field>
           <Field label="الاختصار" hint="اكتب / ثم الاختصار في المحادثة للعثور على الرد بسرعة." error={keyError || undefined}>
-            <Input dir="ltr" value={key} maxLength={49} placeholder="hi" startAdornment={<span className="font-mono text-muted">/</span>}
-              className="font-mono" onChange={e => setForm(f => ({ ...f, shortcut: e.target.value.replace(/\s+/g, '') }))} />
+            <div dir="ltr">
+              <Input value={key} maxLength={49} placeholder="hi" startAdornment={<span className="font-mono text-muted">/</span>}
+                className="font-mono" onChange={e => setForm(f => ({ ...f, shortcut: e.target.value.replace(/\s+/g, '') }))} />
+            </div>
           </Field>
         </div>
         <Field label="نص الرسالة" required>

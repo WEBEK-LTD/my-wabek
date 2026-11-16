@@ -58,7 +58,7 @@ function tempLabel(t: number) {
 function SectionCard({ icon, title, subtitle, children }: { icon: React.ElementType; title: string; subtitle?: string; children: React.ReactNode }) {
   return (
     <Card padding="lg" as="section">
-      <CardHeader icon={icon} title={title} subtitle={subtitle} />
+      <CardHeader className="!p-0" icon={icon} title={title} subtitle={subtitle} />
       <div className="mt-5 flex flex-col gap-4">{children}</div>
     </Card>
   )
@@ -220,7 +220,7 @@ export default function AISettingsPage() {
 
         {/* Instance picker */}
         <Card padding="lg">
-          <CardHeader icon={DevicePhoneMobileIcon} title="اختر رقم واتساب" subtitle="لكل رقم إعدادات مساعد مستقلة." />
+          <CardHeader className="!p-0" icon={DevicePhoneMobileIcon} title="اختر رقم واتساب" subtitle="لكل رقم إعدادات مساعد مستقلة." />
           <div className="mt-5">
             {instError ? <LoadError size="sm" onRetry={() => refetchInst()} /> : instLoading ? (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1].map(i => <Skeleton key={i} className="h-[68px] w-full rounded-card" />)}</div>
@@ -251,7 +251,7 @@ export default function AISettingsPage() {
         </Card>
 
         {selectedInstance && (
-          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
             <div className="flex flex-col gap-5">
               <SectionCard icon={SparklesIcon} title="الحالة والهوية" subtitle={current ? `إعدادات ${current.display_name || current.phone_number}` : undefined}>
                 <Switch checked={form.is_enabled} onChange={v => set('is_enabled', v)}
@@ -272,7 +272,7 @@ export default function AISettingsPage() {
                   ))}
                 </div>
                 <Field label="تعليمات النظام" srOnlyLabel>
-                  <Textarea rows={10} maxLength={8000} showCount value={form.system_prompt} onChange={e => set('system_prompt', e.target.value)} className="font-mono text-[13px] leading-relaxed"
+                  <Textarea rows={10} maxLength={8000} showCount value={form.system_prompt} onChange={e => set('system_prompt', e.target.value)} className="text-[13px] leading-relaxed" dir="auto"
                     placeholder={'أنت مساعد خدمة عملاء لشركة [اسم الشركة].\n\n- المنتجات والخدمات: …\n- الأسعار: …\n- ساعات الدعم: من الأحد إلى الخميس، 9 صباحًا – 5 مساءً\n- لمشكلات الفواتير: اطلب بريد الحساب\n- اللغة: أجب دائمًا بلغة العميل\n- الأسلوب: ودود ومهني ومختصر'} />
                 </Field>
               </SectionCard>

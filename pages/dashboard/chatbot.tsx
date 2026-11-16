@@ -176,7 +176,7 @@ export default function ChatbotPage() {
                         <div className="flex flex-wrap items-center gap-1.5">
                           <KeyIcon className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
                           {(flow.trigger_keywords || []).slice(0, 4).map(kw => <span key={kw} className="rounded-full bg-surface-3 px-2 py-0.5 text-xs text-ink">{kw}</span>)}
-                          {(flow.trigger_keywords || []).length > 4 && <span className="text-xs text-muted">+{(flow.trigger_keywords || []).length - 4}</span>}
+                          {(flow.trigger_keywords || []).length > 4 && <span dir="ltr" className="text-xs text-muted">+{(flow.trigger_keywords || []).length - 4}</span>}
                         </div>
                       )}
 
