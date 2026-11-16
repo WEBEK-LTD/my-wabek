@@ -39,3 +39,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Firebase config for Android push (kept out of git; added on EAS as a file env var)
+google-services.json
+GoogleService-Info.plist

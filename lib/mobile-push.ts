@@ -102,7 +102,11 @@ export async function sendMobilePush(userId: string, kind: MobilePushKind, vars:
     try {
       res = await fetch(EXPO_PUSH_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'Accept-Encoding': 'gzip, deflate' },
+        headers: {
+          'Content-Type': 'application/json', Accept: 'application/json', 'Accept-Encoding': 'gzip, deflate',
+          // Optional: with "Enhanced push security" on in Expo, only requests with this token are accepted.
+          ...(process.env.EXPO_ACCESS_TOKEN ? { Authorization: `Bearer ${process.env.EXPO_ACCESS_TOKEN}` } : {}),
+        },
         body: JSON.stringify(messages),
         signal: ctrl.signal,
       })

@@ -1,0 +1,65 @@
+# Build (and optionally publish) the app on Expo's servers — run it from
+# GitHub → Actions → "Mobile app — build & publish" → Run workflow.
+# Needs the repository secret EXPO_TOKEN (expo.dev → Account → Access tokens).
+# Apple / Google signing keys and store credentials are kept by EAS
+# (`eas credentials`), never in this repository.
+name: Mobile app — build & publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform
+        type: choice
+        options: [all, ios, android]
+        default: all
+      profile:
+        description: Build profile
+        type: choice
+        options: [production, preview]
+        default: production
+      submit:
+        description: Send the build to App Store Connect / Google Play when it finishes
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Check the Expo token
+        working-directory: .
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::Add the EXPO_TOKEN secret (GitHub → Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: npm ci
+      - run: npm run typecheck && npm run i18n:check
+      - name: Build on EAS
+        run: |
+          ARGS="--platform ${{ inputs.platform }} --profile ${{ inputs.profile }} --non-interactive --no-wait"
+          if [ "${{ inputs.submit }}" = "true" ] && [ "${{ inputs.profile }}" = "production" ]; then ARGS="$ARGS --auto-submit"; fi
+          eas build $ARGS
