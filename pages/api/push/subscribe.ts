@@ -1,7 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuth } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
-import { v4 as uuidv4 } from 'uuid'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'POST') {
@@ -19,9 +18,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const db = supabaseAdmin()
+    // One subscription per logged-in person (user_id is UNIQUE): a team
+    // member keeps their own row instead of replacing the owner's. No id, so
+    // an existing row keeps its primary key.
+    const selfId = user.actualUserId || user.userId
     await db.from('push_subscriptions').upsert({
-      id: uuidv4(),
-      user_id: user.userId,
+      user_id: selfId,
       subscription: serialized,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' })
@@ -33,7 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const user = await requireAuth(req, res)
     if (!user) return
     const db = supabaseAdmin()
-    await db.from('push_subscriptions').delete().eq('user_id', user.userId)
+    await db.from('push_subscriptions').delete().eq('user_id', user.actualUserId || user.userId)
     return res.status(200).json({ success: true })
   }
 
