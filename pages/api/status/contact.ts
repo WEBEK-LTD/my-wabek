@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
+import { isMissingDbObject } from '@/lib/db-compat'
 import { requireAdmin } from '@/lib/auth'
 import { sendEmail } from '@/lib/email'
 import { escapeHtml } from '@/lib/security'
@@ -36,7 +37,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const row = { name: name.trim(), email: cleanEmail, subject: subject.trim(), message }
     let { error } = await db.from('status_messages').insert({ ...row, ip_address: ip })
-    if (error && ipErr) {
+    if (error && (ipErr || isMissingDbObject(error))) {
       // ip_address column missing (migration 026 not yet applied)
       ({ error } = await db.from('status_messages').insert(row))
     }

@@ -2,6 +2,7 @@
 import { z } from 'zod'
 import { supabaseAdmin } from './supabase'
 import { CampaignContactFilter, cleanSegmentConditions } from './segments'
+import { isMissingDbObject, warnMissingOnce } from './db-compat'
 
 const LANG = /^[a-z]{2,3}(_[A-Z]{2,4})?$/
 
@@ -138,4 +139,55 @@ export function buildTemplateBodyParams(values: string[], c: CampaignContactVars
     const name = paramNames?.[i]
     return name ? { type: 'text', parameter_name: name, text } : { type: 'text', text }
   })
+}
+
+// ── Pre-032 databases (no campaigns.template_* columns) ───────────────────────
+// Migration 032 makes sure campaigns.template_name / template_language /
+// template_variables exist. Until it has run, writes that fail on a missing
+// column are retried with those values inside `meta`, and readers take them
+// from the column or, failing that, from `meta`.
+export const CAMPAIGN_TEMPLATE_COLUMNS = ['template_name', 'template_language', 'template_variables'] as const
+
+/** Copy of `row` with the template columns moved into `meta` (null removes the key). */
+export function templateColumnsIntoMeta(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...row }
+  const meta: Record<string, unknown> = { ...((row.meta as Record<string, unknown> | null) || {}) }
+  for (const k of CAMPAIGN_TEMPLATE_COLUMNS) {
+    if (!(k in out)) continue
+    const v = out[k]
+    if (v === null) delete meta[k]
+    else if (v !== undefined) meta[k] = v
+    delete out[k]
+  }
+  out.meta = meta
+  return out
+}
+
+/** Campaign row with template fields resolved from the columns or `meta`. */
+export function withTemplateFields<T extends Record<string, any> | null | undefined>(c: T): T {
+  if (!c) return c
+  const meta = (c.meta as Record<string, any> | null) || {}
+  return {
+    ...c,
+    template_name: c.template_name ?? meta.template_name ?? null,
+    template_language: c.template_language ?? meta.template_language ?? null,
+    template_variables: c.template_variables ?? meta.template_variables ?? null,
+  }
+}
+
+type DbResult = { data: any; error: { message: string; code?: string } | null }
+
+/**
+ * Run a campaigns insert/update; on a missing-column error (pre-032) retry
+ * once with the template columns stored in `meta`.
+ */
+export async function writeCampaignCompat(
+  row: Record<string, unknown>,
+  op: (row: Record<string, unknown>) => PromiseLike<DbResult>
+): Promise<DbResult> {
+  const first = await op(row)
+  if (!first.error || !isMissingDbObject(first.error)) return first
+  if (!CAMPAIGN_TEMPLATE_COLUMNS.some(k => k in row)) return first
+  warnMissingOnce('campaigns.template_* columns (stored in meta)', first.error)
+  return op(templateColumnsIntoMeta(row))
 }

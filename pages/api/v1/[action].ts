@@ -8,6 +8,7 @@ import {
 } from '@/lib/api-key-auth'
 import { insertMessage } from '@/lib/message-insert'
 import { emitWebhookEvent } from '@/lib/outgoing-webhooks'
+import { isMissingDbObject, warnMissingOnce } from '@/lib/db-compat'
 
 // Per-IP ceiling before authentication (slows key guessing), then the
 // per-API-key limit. Both are shared across serverless instances and answer
@@ -112,17 +113,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Optional Idempotency-Key: a retried request with the same key returns
     // the first result instead of sending the message twice.
     const idemHeader = req.headers['idempotency-key']
-    const idemKey = typeof idemHeader === 'string' && /^[A-Za-z0-9._:-]{8,100}$/.test(idemHeader) ? idemHeader : null
+    let idemKey = typeof idemHeader === 'string' && /^[A-Za-z0-9._:-]{8,100}$/.test(idemHeader) ? idemHeader : null
     if (idemKey) {
-      const { data: prior } = await db.from('api_idempotency_keys')
+      // Best effort: if api_idempotency_keys (migration 031) is missing or
+      // unreachable, the send goes ahead without idempotency (old behaviour)
+      // instead of failing with 409.
+      const { data: prior, error: priorErr } = await db.from('api_idempotency_keys')
         .select('response, created_at')
         .eq('user_id', auth.userId).eq('key', idemKey)
         .gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString())
         .maybeSingle()
-      if (prior?.response) return res.status(200).json({ ...(prior.response as object), idempotent_replay: true })
-      if (prior) return res.status(409).json({ error: 'A request with this Idempotency-Key is still in progress', code: 'idempotency_in_progress' })
-      const { error: claimErr } = await db.from('api_idempotency_keys').insert({ user_id: auth.userId, key: idemKey })
-      if (claimErr) return res.status(409).json({ error: 'A request with this Idempotency-Key is still in progress', code: 'idempotency_in_progress' })
+      if (priorErr) {
+        if (isMissingDbObject(priorErr)) warnMissingOnce('api_idempotency_keys', priorErr)
+        else console.error('[v1/send] idempotency lookup failed (sending without it):', priorErr.message)
+        idemKey = null
+      } else {
+        if (prior?.response) return res.status(200).json({ ...(prior.response as object), idempotent_replay: true })
+        if (prior) return res.status(409).json({ error: 'A request with this Idempotency-Key is still in progress', code: 'idempotency_in_progress' })
+        const { error: claimErr } = await db.from('api_idempotency_keys').insert({ user_id: auth.userId, key: idemKey })
+        if (claimErr) {
+          // Only a unique violation means another request holds the key.
+          if (claimErr.code === '23505') return res.status(409).json({ error: 'A request with this Idempotency-Key is still in progress', code: 'idempotency_in_progress' })
+          if (isMissingDbObject(claimErr)) warnMissingOnce('api_idempotency_keys', claimErr)
+          else console.error('[v1/send] idempotency claim failed (sending without it):', claimErr.message)
+          idemKey = null
+        }
+      }
     }
     const releaseIdem = async () => {
       if (idemKey) await db.from('api_idempotency_keys').delete().eq('user_id', auth.userId).eq('key', idemKey).is('response', null)
