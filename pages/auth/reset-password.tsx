@@ -14,7 +14,7 @@ import type { MessageKey as AuthCopyKey } from '@/locales/auth'
 export default function ResetPasswordPage() {
   const router = useRouter()
   const token = typeof router.query.token === 'string' ? router.query.token : ''
-  const { t } = useT(messages)
+  const { t, lang } = useT(messages)
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [errors, setErrors] = useState<{ password?: AuthCopyKey; confirm?: AuthCopyKey }>({})
@@ -79,7 +79,7 @@ export default function ResetPasswordPage() {
             </Field>
             {serverError && (
               <AuthAlert tone="danger">
-                {serverError.raw || t(serverError.key)}{' '}
+                {(lang === 'en' && serverError.raw) || t(serverError.key)}{' '}
                 {serverError.key === 'rp_expired' && (
                   <Link href="/auth/forgot-password" className="font-semibold text-inherit underline underline-offset-4">{t('rp_request_new')}</Link>
                 )}

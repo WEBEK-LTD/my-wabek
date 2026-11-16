@@ -18,7 +18,7 @@ import { MessageBubble } from '@/components/inbox/MessageBubble'
 import { Composer } from '@/components/inbox/Composer'
 import { CustomerPanel } from '@/components/inbox/CustomerPanel'
 import { TemplatesModal, type InboxTemplate, type TemplateParams } from '@/components/inbox/TemplatesModal'
-import { dayLabel, isAiMessage, windowState } from '@/components/inbox/utils'
+import { apiErrorText, dayLabel, isAiMessage, windowState } from '@/components/inbox/utils'
 
 /** ≥1280px: the customer panel sits beside the thread instead of over it. */
 function useIsWide() {
@@ -408,7 +408,7 @@ export default function ChatPage() {
         setWindowWarning('outside')
       } else {
         setMessages(prev => prev.map(m => m.id === tempMsg.id ? { ...m, status: 'failed' } : m))
-        toast.error(data?.error || t('send_failed'))
+        toast.error(apiErrorText(e, t, lang, 'send_failed'))
         setText(msgText)
       }
     } finally { setSending(false) }
@@ -437,7 +437,7 @@ export default function ChatPage() {
       ))
       toast.success(t('tpl_sent'))
     } catch (e: any) {
-      toast.error(e?.response?.data?.error || t('tpl_send_failed'))
+      toast.error(apiErrorText(e, t, lang, 'tpl_send_failed'))
       throw e
     }
   }
@@ -516,7 +516,7 @@ export default function ChatPage() {
         setWindowWarning('outside')
       } else {
         setMessages(prev => prev.map(m => m.status === 'sending' ? { ...m, status: 'failed' } : m))
-        toast.error(data?.error || t('attachment_failed'))
+        toast.error(apiErrorText(e, t, lang, 'attachment_failed'))
       }
     } finally { setUploadingAttachment(false) }
   }
@@ -559,7 +559,7 @@ export default function ChatPage() {
       else toast.error(t('ai_failed'))
     } catch (e: any) {
       if (e?.response?.data?.upgrade_required) { setAiBlocked(true); toast.error(t('ai_upgrade')) }
-      else toast.error(e?.response?.data?.error || t('ai_failed'))
+      else toast.error(apiErrorText(e, t, lang, 'ai_failed'))
     } finally { setAiLoading(false) }
   }
 

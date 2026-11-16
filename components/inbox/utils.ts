@@ -81,3 +81,29 @@ export function windowState(messages: any[], instance: { id?: string; instance_t
 export function isAiMessage(m: any): boolean {
   return m?.type === 'ai_reply' || m?.meta?.source === 'ai_assistant'
 }
+
+const ERROR_CODES: Record<string, InboxCopyKey> = {
+  templates_cloud_only: 'err_templates_cloud_only',
+  template_not_approved: 'err_template_not_approved',
+  no_inbound: 'err_no_inbound',
+  opted_out: 'err_blocked',
+  blocked: 'err_blocked',
+  plan_limit: 'err_plan_limit',
+}
+
+/**
+ * Localized text for a failed inbox API call: known error codes and HTTP
+ * statuses are translated; otherwise the server's (English) message is shown
+ * only in the English UI and other languages get the translated fallback.
+ */
+export function apiErrorText(e: any, c: C, lang: string, fallback: InboxCopyKey): string {
+  const data = e?.response?.data ?? e
+  const code = typeof data?.code === 'string' ? data.code : ''
+  if (code && ERROR_CODES[code]) return c(ERROR_CODES[code])
+  const status = e?.response?.status
+  if (status === 413) return c('file_too_large')
+  if (status === 415) return c('err_file_type')
+  if (status === 429) return c('err_rate_limit')
+  const raw = typeof data?.error === 'string' ? data.error : ''
+  return lang === 'en' && raw ? raw : c(fallback)
+}

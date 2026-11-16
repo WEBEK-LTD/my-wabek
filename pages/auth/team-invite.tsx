@@ -31,7 +31,7 @@ function describeAcceptError(e: any): { key: AuthCopyKey; raw?: string } {
 export default function TeamInvitePage() {
   const router = useRouter()
   const { token } = router.query
-  const { t } = useT(messages)
+  const { t, lang } = useT(messages)
   const { user: me, setUser, setToken, fetchMe } = useAuthStore()
   const [step, setStep] = useState<'loading' | 'info' | 'invalid'>('loading')
   const [invite, setInvite] = useState<Invite | null>(null)
@@ -153,7 +153,7 @@ export default function TeamInvitePage() {
               </>
             )}
 
-            {acceptError && <AuthAlert tone="danger">{acceptError.raw || t(acceptError.key)}</AuthAlert>}
+            {acceptError && <AuthAlert tone="danger">{(lang === 'en' && acceptError.raw) || t(acceptError.key)}</AuthAlert>}
 
             <Button type="submit" size="lg" fullWidth loading={loading} icon={CheckBadgeIcon} disabled={!loggedInAsInvitee && !form.password}>
               {loading ? t('ti_joining') : t('ti_accept')}

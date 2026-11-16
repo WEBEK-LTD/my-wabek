@@ -234,11 +234,11 @@ export function AuthAlert({ tone = 'danger', title, children, className }: { ton
 
 /** Renders a described server error (see describeAuthError). */
 export function AuthErrorAlert({ error, className }: { error: AuthErrorView | null; className?: string }) {
-  const { t } = useT(messages)
+  const { t, lang } = useT(messages)
   if (!error) return null
   return (
     <AuthAlert tone={error.tone} title={error.title ? t(error.title) : undefined} className={className}>
-      {error.raw || t(error.body, error.vars)}
+      {(lang === 'en' && error.raw) || t(error.body, error.vars)}
     </AuthAlert>
   )
 }

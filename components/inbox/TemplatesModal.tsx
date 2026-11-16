@@ -8,6 +8,7 @@ import {
 import { Badge, Button, EmptyState, Field, Input, Modal, Skeleton } from '@/components/ui'
 import { useT } from '@/lib/i18n-local'
 import messages from '@/locales/dashboard/inbox'
+import { apiErrorText } from './utils'
 
 export interface InboxTemplate {
   name: string
@@ -48,7 +49,7 @@ export function TemplatesModal({ open, onClose, instanceId, onSend, defaults }: 
   /** Suggested value for the first variable (e.g. the contact's name). */
   defaults?: { first?: string }
 }) {
-  const { t } = useT(messages)
+  const { t, lang } = useT(messages)
   const { data, isLoading, isError } = useQuery(['inbox-templates', instanceId],
     () => axios.get('/api/whatsapp/templates', { params: { instance_id: instanceId } }).then(r => r.data),
     { enabled: open && !!instanceId, staleTime: 5 * 60000, retry: false })
@@ -131,7 +132,7 @@ export function TemplatesModal({ open, onClose, instanceId, onSend, defaults }: 
       ) : isError ? (
         <EmptyState size="sm" icon={ExclamationTriangleIcon} title={t('tpl_error')} />
       ) : templates.length === 0 ? (
-        <EmptyState size="sm" icon={DocumentDuplicateIcon} title={t('tpl_empty')} description={data?.note ? t('tpl_wa_web') : data?.error || undefined} />
+        <EmptyState size="sm" icon={DocumentDuplicateIcon} title={t('tpl_empty')} description={data?.note ? t('tpl_wa_web') : data?.error ? apiErrorText(data, t, lang, 'tpl_error') : undefined} />
       ) : (
         <ul className="flex max-h-[50vh] flex-col gap-2.5 overflow-y-auto">
           {templates.map(tpl => (
