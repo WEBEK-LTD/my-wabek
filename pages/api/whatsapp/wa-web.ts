@@ -145,6 +145,53 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
+    // Link with an 8-character code typed in WhatsApp (Linked devices → Link
+    // with phone number instead) — for the mobile app, where the number's own
+    // phone cannot scan a QR shown on itself. Creates the instance when no
+    // instanceId is given (same plan limit as "create").
+    if (action === 'pair') {
+      if (!WA_SERVER) {
+        return res.status(400).json({ code: 'WA_WEB_NOT_CONFIGURED', error: 'WA Web server not configured' })
+      }
+      const digits = String((req.body || {}).phone || '').replace(/\D/g, '')
+      if (!/^\d{8,15}$/.test(digits)) return res.status(400).json({ error: 'Enter the number with its country code', code: 'invalid_phone' })
+
+      let instance = instanceId ? await ownInstance(instanceId) : null
+      if (instanceId && !instance) return res.status(404).json({ error: 'Instance not found' })
+      let created = false
+      if (!instance) {
+        const limit = await checkInstanceCreateAllowed(user.userId)
+        if (!limit.allowed) return res.status(403).json({ error: limit.error, code: 'PLAN_LIMIT' })
+        const { data, error } = await db.from('whatsapp_instances').insert({
+          id: uuidv4(),
+          user_id: user.userId,
+          phone_number: 'pending',
+          display_name: typeof display_name === 'string' ? display_name.slice(0, 100) : null,
+          instance_type: 'wa_web',
+          status: 'initializing',
+          webhook_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/whatsapp/webhook`,
+        }).select(PUBLIC_COLUMNS).single()
+        if (error || !data) {
+          console.error('[wa-web] pair: create instance failed:', error?.message)
+          return res.status(500).json({ error: 'Failed to create instance' })
+        }
+        instance = data
+        created = true
+      }
+
+      try {
+        const r = await callWAServer(`/instance/${instance.id}/pair`, { phone: digits }) as { pairingCode?: string; connected?: boolean; phoneNumber?: string; expiresIn?: number }
+        if (r?.connected) return res.status(200).json({ instance, status: 'connected', phoneNumber: r.phoneNumber })
+        if (!r?.pairingCode) throw new Error('no pairing code')
+        await db.from('whatsapp_instances').update({ status: 'qr_pending', qr_code: null }).eq('id', instance.id).eq('user_id', user.userId)
+        return res.status(created ? 201 : 200).json({ instance, pairingCode: r.pairingCode, expiresIn: r.expiresIn || 60, status: 'pairing' })
+      } catch (err) {
+        console.error('[wa-web] pair failed:', err instanceof Error ? err.message : err)
+        if (created) await db.from('whatsapp_instances').delete().eq('id', instance.id).eq('user_id', user.userId)
+        return res.status(502).json({ error: 'Could not get a linking code. Try again or use the QR code.', code: 'pairing_failed' })
+      }
+    }
+
     if (action === 'disconnect' && instanceId) {
       const instance = await ownInstance(instanceId)
       if (!instance) return res.status(404).json({ error: 'Instance not found' })

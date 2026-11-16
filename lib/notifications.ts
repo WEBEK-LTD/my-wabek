@@ -1,4 +1,5 @@
 import { supabaseAdmin } from './supabase'
+import { sendMobilePush } from './mobile-push'
 
 type NotifType = 'info' | 'success' | 'warning' | 'error' | 'message' | 'campaign' | 'system'
 
@@ -32,6 +33,7 @@ export async function notifyCampaignComplete(userId: string, campaignName: strin
     body: `${sent} sent, ${failed} failed`,
     link: '/dashboard/campaigns',
   })
+  await sendMobilePush(userId, 'campaign_done', { name: campaignName, sent, failed })
 }
 
 export async function notifyNewMessage(userId: string, from: string, preview: string) {
@@ -42,6 +44,7 @@ export async function notifyNewMessage(userId: string, from: string, preview: st
     body: preview.slice(0, 100),
     link: '/dashboard/chat',
   })
+  await sendMobilePush(userId, 'message', { from, preview: preview.slice(0, 160) })
 }
 
 export async function notifyInstanceConnected(userId: string, phoneNumber: string) {
@@ -52,6 +55,7 @@ export async function notifyInstanceConnected(userId: string, phoneNumber: strin
     body: `${phoneNumber} is now connected`,
     link: '/dashboard/instances',
   })
+  await sendMobilePush(userId, 'number_connected', { phone: phoneNumber })
 }
 
 export async function notifyInstanceDisconnected(userId: string, phoneNumber: string) {
@@ -62,4 +66,5 @@ export async function notifyInstanceDisconnected(userId: string, phoneNumber: st
     body: `${phoneNumber} disconnected. Reconnect to continue sending messages.`,
     link: '/dashboard/instances',
   })
+  await sendMobilePush(userId, 'number_disconnected', { phone: phoneNumber })
 }
