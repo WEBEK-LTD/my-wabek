@@ -10,40 +10,47 @@ import {
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { Badge, Button, Card, CardHeader, Field, Input, PageHeader, Select, Switch, Tabs, cn } from '@/components/ui'
 import { apiError } from '@/components/analytics/format'
+import { rich } from '@/components/campaigns/rich'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/dashboard/otp'
+
+type Key = keyof typeof messages.en
+type T = (key: Key, vars?: Record<string, string | number>) => string
 
 type Step = 'send' | 'verify' | 'done'
 
-const PURPOSES = [
-  { value: 'verification', label: 'تحقق' },
-  { value: 'login', label: 'تسجيل الدخول' },
-  { value: 'transaction', label: 'عملية مالية' },
+const PURPOSES: Array<{ value: string; label: Key }> = [
+  { value: 'verification', label: 'p_verification' },
+  { value: 'login', label: 'p_login' },
+  { value: 'transaction', label: 'p_transaction' },
 ]
 
-const VERIFY_REASONS: Record<string, string> = {
-  'OTP not found': 'الرمز غير موجود',
-  'OTP already used': 'استُخدم هذا الرمز من قبل',
-  'OTP expired': 'انتهت صلاحية الرمز',
-  'Too many attempts': 'محاولات كثيرة، اطلب رمزًا جديدًا',
-  'Invalid OTP': 'الرمز غير صحيح',
+const VERIFY_REASONS: Record<string, Key> = {
+  'OTP not found': 'vr_not_found',
+  'OTP already used': 'vr_used',
+  'OTP expired': 'vr_expired',
+  'Too many attempts': 'vr_attempts',
+  'Invalid OTP': 'vr_invalid',
 }
 
-const SEND_ERRORS: Record<string, string> = {
-  no_instance: 'لا يوجد رقم واتساب متصل لإرسال الرمز. اربط رقمًا أولًا.',
+const SEND_ERRORS: Record<string, Key> = {
+  no_instance: 'err_no_instance',
 }
 
 function CodeBlock({ code, label }: { code: string; label: string }) {
+  const { t } = useT(messages)
   const [copied, setCopied] = useState(false)
   const copy = () => {
     navigator.clipboard?.writeText(code).then(() => {
-      setCopied(true); toast.success('تم النسخ')
+      setCopied(true); toast.success(t('copied'))
       setTimeout(() => setCopied(false), 1500)
-    }, () => toast.error('تعذّر النسخ'))
+    }, () => toast.error(t('copy_failed')))
   }
   return (
     <div className="relative overflow-hidden rounded-card border border-white/10 bg-[#04282C]">
       <Button size="xs" variant="on-deep-ghost" icon={copied ? CheckIcon : ClipboardDocumentIcon} onClick={copy}
-        className="absolute end-2 top-2" aria-label={`نسخ ${label}`}>
-        {copied ? 'نُسخ' : 'نسخ'}
+        className="absolute end-2 top-2" aria-label={t('copy_x', { label })}>
+        {copied ? t('copied_short') : t('copy')}
       </Button>
       <pre dir="ltr" className="scrollbar-none overflow-x-auto p-4 pt-11 text-start font-mono text-[12.5px] leading-relaxed text-[#EAF7F5]"><code>{code}</code></pre>
     </div>
@@ -178,15 +185,16 @@ function StepDot({ n, label, state }: { n: number; label: string; state: 'done' 
   )
 }
 
-/** Arabic count of minutes with the correct noun form. */
-function arabicMinutes(n: number): string {
-  if (n === 1) return 'دقيقة واحدة'
-  if (n === 2) return 'دقيقتان'
-  if (n >= 3 && n <= 10) return `${n} دقائق`
-  return `${n} دقيقة`
+/** Count of minutes with the right plural form (Arabic: 1 / 2 / 3–10 / 11+). */
+function minutesLabel(n: number, t: T): string {
+  if (n === 1) return t('min_1')
+  if (n === 2) return t('min_2')
+  if (n >= 3 && n <= 10) return t('min_few', { n })
+  return t('min_many', { n })
 }
 
 export default function OTPPage() {
+  const { t } = useT(messages)
   // The default API key is fetched on demand (owner-only), not from the user object.
   const { data: defaultKeyData, isLoading: keyLoading } = useQuery<{ api_key: string | null }>('default-api-key',
     () => axios.get('/api/settings/default-api-key').then(r => r.data), { retry: false, staleTime: Infinity })
@@ -218,11 +226,11 @@ export default function OTPPage() {
         setOtpId(data.otpId)
         setOtp(''); setVerifyError('')
         setStep('verify')
-        toast.success('أُرسل الرمز عبر واتساب')
+        toast.success(t('sent_toast'))
       },
       onError: (e: unknown) => {
         const errCode = (e as { response?: { data?: { code?: string } } })?.response?.data?.code
-        toast.error((errCode && SEND_ERRORS[errCode]) || apiError(e, 'تعذّر إرسال الرمز'))
+        toast.error((errCode && SEND_ERRORS[errCode] ? t(SEND_ERRORS[errCode]) : '') || apiError(e, t('send_failed')))
       },
     },
   )
@@ -231,57 +239,57 @@ export default function OTPPage() {
     () => axios.post('/api/v1/otp-verify', { otp_id: otpId, otp }).then(r => r.data),
     {
       onSuccess: (data: { valid: boolean; reason?: string }) => {
-        if (data.valid) { setStep('done'); setVerifyError(''); toast.success('تم التحقق من الرمز بنجاح') }
+        if (data.valid) { setStep('done'); setVerifyError(''); toast.success(t('verified_toast')) }
         else {
-          const msg = (data.reason && VERIFY_REASONS[data.reason]) || data.reason || 'الرمز غير صالح'
+          const msg = (data.reason && VERIFY_REASONS[data.reason] ? t(VERIFY_REASONS[data.reason]) : '') || data.reason || t('invalid')
           setVerifyError(msg)
           toast.error(msg)
         }
       },
-      onError: () => { toast.error('تعذّر التحقق') },
+      onError: () => { toast.error(t('verify_failed')) },
     },
   )
 
   const reset = () => { setStep('send'); setOtp(''); setOtpId(''); setVerifyError('') }
 
-  const copyKey = () => apiKey && navigator.clipboard?.writeText(apiKey).then(() => toast.success('نُسخ المفتاح'), () => toast.error('تعذّر النسخ'))
+  const copyKey = () => apiKey && navigator.clipboard?.writeText(apiKey).then(() => toast.success(t('key_copied')), () => toast.error(t('copy_failed')))
   const maskedKey = apiKey ? `${apiKey.slice(0, 6)}${'•'.repeat(18)}${apiKey.slice(-4)}` : ''
 
   return (
-    <DashboardLayout title="OTP System">
+    <DashboardLayout title={t('page_title')}>
       <div className="flex flex-col gap-6">
         <PageHeader
-          eyebrow="الحملات"
-          title="رموز التحقق (OTP)"
-          description="أرسل رموز تحقق لمرة واحدة إلى عملائك عبر واتساب، وتحقّق منها من موقعك أو تطبيقك عبر واجهة برمجية بسيطة."
-          actions={<Button variant="secondary" icon={KeyIcon} href="/dashboard/api-keys">مفاتيح API</Button>}
+          eyebrow={t('eyebrow')}
+          title={t('title')}
+          description={t('description')}
+          actions={<Button variant="secondary" icon={KeyIcon} href="/dashboard/api-keys">{t('api_keys')}</Button>}
         />
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
           {/* Live test */}
           <Card padding="lg" className="lg:col-span-3">
-            <CardHeader className="!p-0" title="تجربة مباشرة" subtitle="أرسل رمزًا إلى رقمك ثم أدخله للتحقق." icon={ShieldCheckIcon} />
-            <ol className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2" aria-label="مراحل التجربة">
-              <StepDot n={1} label="إرسال الرمز" state={step === 'send' ? 'current' : 'done'} />
+            <CardHeader className="!p-0" title={t('live_title')} subtitle={t('live_sub')} icon={ShieldCheckIcon} />
+            <ol className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2" aria-label={t('steps_aria')}>
+              <StepDot n={1} label={t('s_send')} state={step === 'send' ? 'current' : 'done'} />
               <span className="hidden h-px w-8 bg-line sm:block" aria-hidden="true" />
-              <StepDot n={2} label="إدخال الرمز" state={step === 'verify' ? 'current' : step === 'done' ? 'done' : 'todo'} />
+              <StepDot n={2} label={t('s_enter')} state={step === 'verify' ? 'current' : step === 'done' ? 'done' : 'todo'} />
               <span className="hidden h-px w-8 bg-line sm:block" aria-hidden="true" />
-              <StepDot n={3} label="تم التحقق" state={step === 'done' ? 'done' : 'todo'} />
+              <StepDot n={3} label={t('s_done')} state={step === 'done' ? 'done' : 'todo'} />
             </ol>
 
             <div className="mt-6">
               {step === 'send' && (
                 <form className="flex flex-col gap-4" onSubmit={e => { e.preventDefault(); if (phone) sendMut.mutate() }}>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="رقم الهاتف" hint="بالصيغة الدولية، مثل ‎+905551234567" required>
+                    <Field label={t('phone')} hint={t('phone_hint')} required>
                       <Input dir="ltr" type="tel" icon={PhoneIcon} value={phone} onChange={e => setPhone(e.target.value)} placeholder="+905551234567" />
                     </Field>
-                    <Field label="الغرض">
-                      <Select value={purpose} onChange={e => setPurpose(e.target.value)} options={PURPOSES} />
+                    <Field label={t('purpose')}>
+                      <Select value={purpose} onChange={e => setPurpose(e.target.value)} options={PURPOSES.map(p => ({ value: p.value, label: t(p.label) }))} />
                     </Field>
                   </div>
                   <div>
-                    <Button type="submit" icon={PaperAirplaneIcon} loading={sendMut.isLoading} disabled={!phone}>إرسال الرمز عبر واتساب</Button>
+                    <Button type="submit" icon={PaperAirplaneIcon} loading={sendMut.isLoading} disabled={!phone}>{t('send_btn')}</Button>
                   </div>
                 </form>
               )}
@@ -290,19 +298,19 @@ export default function OTPPage() {
                 <form className="flex flex-col gap-4" onSubmit={e => { e.preventDefault(); if (otp.length === 6) verifyMut.mutate() }}>
                   <div className="flex items-start gap-3 rounded-card bg-chip p-4 text-sm text-chip-ink">
                     <CheckCircleIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
-                    <p>أُرسل الرمز إلى <strong dir="ltr">{phone}</strong>. افتح واتساب وأدخل الرمز المكوّن من 6 أرقام.</p>
+                    <p>{rich(t('sent_to'), { phone: <strong dir="ltr">{phone}</strong> })}</p>
                   </div>
-                  <Field label="معرّف الرمز (otp_id)" hint="يُملأ تلقائيًا — هذا ما تحفظه في نظامك بعد الخطوة الأولى.">
+                  <Field label={t('otp_id')} hint={t('otp_id_hint')}>
                     <Input dir="ltr" readOnly value={otpId} className="font-mono text-xs text-muted" />
                   </Field>
-                  <Field label="الرمز المكوّن من 6 أرقام" error={verifyError || undefined}>
+                  <Field label={t('code_6')} error={verifyError || undefined}>
                     <Input dir="ltr" inputMode="numeric" autoComplete="one-time-code" value={otp} maxLength={6} placeholder="123456" size="lg"
                       className="text-center font-mono text-xl tracking-[0.5em]"
                       onChange={e => { setOtp(e.target.value.replace(/\D/g, '').slice(0, 6)); setVerifyError('') }} />
                   </Field>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="submit" icon={CheckCircleIcon} loading={verifyMut.isLoading} disabled={otp.length < 6}>تحقّق من الرمز</Button>
-                    <Button type="button" variant="secondary" icon={ArrowPathIcon} onClick={reset}>إعادة الإرسال</Button>
+                    <Button type="submit" icon={CheckCircleIcon} loading={verifyMut.isLoading} disabled={otp.length < 6}>{t('verify_btn')}</Button>
+                    <Button type="button" variant="secondary" icon={ArrowPathIcon} onClick={reset}>{t('resend')}</Button>
                   </div>
                 </form>
               )}
@@ -312,9 +320,9 @@ export default function OTPPage() {
                   <span className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-gradient text-[#04282C] shadow-glow">
                     <CheckCircleIcon className="h-8 w-8" aria-hidden="true" />
                   </span>
-                  <p className="text-xl font-bold text-ink">تم التحقق من الرمز</p>
-                  <p className="text-sm text-muted">كان الرمز صالحًا، وقد عُلّم الآن بأنه مستخدم.</p>
-                  <Button variant="secondary" onClick={() => { reset(); setPhone('') }}>تجربة رقم آخر</Button>
+                  <p className="text-xl font-bold text-ink">{t('done_title')}</p>
+                  <p className="text-sm text-muted">{t('done_desc')}</p>
+                  <Button variant="secondary" onClick={() => { reset(); setPhone('') }}>{t('try_other')}</Button>
                 </div>
               )}
             </div>
@@ -323,33 +331,33 @@ export default function OTPPage() {
           {/* Settings + key */}
           <div className="flex min-w-0 flex-col gap-5 lg:col-span-2">
             <Card padding="lg">
-              <CardHeader className="!p-0" title="مفتاح API الافتراضي" icon={KeyIcon} />
+              <CardHeader className="!p-0" title={t('key_title')} icon={KeyIcon} />
               <div className="mt-4">
                 {keyLoading ? <div className="skeleton h-11 w-full rounded-field" /> : apiKey ? (
                   <div className="flex items-center gap-2">
                     <code dir="ltr" className="min-w-0 flex-1 truncate rounded-field border border-line bg-surface-2 px-3 py-2.5 font-mono text-[13px] text-ink">{showKey ? apiKey : maskedKey}</code>
-                    <Button size="icon" variant="secondary" icon={showKey ? EyeSlashIcon : EyeIcon} aria-label={showKey ? 'إخفاء المفتاح' : 'إظهار المفتاح'} onClick={() => setShowKey(v => !v)} />
-                    <Button size="icon" variant="secondary" icon={ClipboardDocumentIcon} aria-label="نسخ المفتاح" onClick={copyKey} />
+                    <Button size="icon" variant="secondary" icon={showKey ? EyeSlashIcon : EyeIcon} aria-label={showKey ? t('hide_key') : t('show_key')} onClick={() => setShowKey(v => !v)} />
+                    <Button size="icon" variant="secondary" icon={ClipboardDocumentIcon} aria-label={t('copy_key')} onClick={copyKey} />
                   </div>
                 ) : (
-                  <p className="text-sm text-muted">لا يظهر المفتاح الافتراضي إلا لمالك الحساب. يمكنك إنشاء مفتاح من صفحة <Link href="/dashboard/api-keys" className="text-link hover:text-link-hover">مفاتيح API</Link>.</p>
+                  <p className="text-sm text-muted">{rich(t('key_owner_only'), { link: <Link href="/dashboard/api-keys" className="text-link hover:text-link-hover">{t('api_keys')}</Link> })}</p>
                 )}
                 {apiKey && (
                   <Switch size="sm" className="mt-4" checked={showKey} onChange={setShowKey}
-                    label="إظهار مفتاحي في أمثلة الكود" description="أبقِه مخفيًا عند مشاركة الشاشة." />
+                    label={t('show_in_code')} description={t('show_in_code_desc')} />
                 )}
               </div>
             </Card>
 
             <Card padding="lg">
-              <CardHeader className="!p-0" title="إعدادات الرموز" />
+              <CardHeader className="!p-0" title={t('settings_title')} />
               <dl className="mt-3 divide-y divide-line-soft text-sm">
                 {[
-                  { label: 'طول الرمز', value: '6 أرقام' },
-                  { label: 'مدة الصلاحية', value: otpConfigQ.data ? arabicMinutes(otpConfigQ.data.expiry_minutes) : '…' },
-                  { label: 'الاستخدام', value: 'مرة واحدة فقط' },
-                  { label: 'التخزين', value: 'مُشفّر بـ SHA-256' },
-                  { label: 'الإرسال', value: 'عبر رقم واتساب المتصل' },
+                  { label: t('s_length'), value: t('s_length_v') },
+                  { label: t('s_expiry'), value: otpConfigQ.data ? minutesLabel(otpConfigQ.data.expiry_minutes, t) : '…' },
+                  { label: t('s_usage'), value: t('s_usage_v') },
+                  { label: t('s_storage'), value: t('s_storage_v') },
+                  { label: t('s_sending'), value: t('s_sending_v') },
                 ].map(s => (
                   <div key={s.label} className="flex items-center justify-between gap-3 py-2.5">
                     <dt className="text-muted">{s.label}</dt>
@@ -357,7 +365,7 @@ export default function OTPPage() {
                   </div>
                 ))}
               </dl>
-              <p className="mt-3 text-xs text-muted">لتغيير مدة الصلاحية عدّل متغير البيئة <code dir="ltr" className="rounded bg-surface-3 px-1 font-mono">OTP_EXPIRY_MINUTES</code> في Netlify.</p>
+              <p className="mt-3 text-xs text-muted">{rich(t('expiry_note'), { env: <code dir="ltr" className="rounded bg-surface-3 px-1 font-mono">OTP_EXPIRY_MINUTES</code> })}</p>
             </Card>
           </div>
         </div>
@@ -365,11 +373,11 @@ export default function OTPPage() {
         {/* API docs */}
         <Card padding="none">
           <div className="px-5 pt-5 sm:px-6 sm:pt-6">
-            <CardHeader className="!p-0" title="الربط عبر الواجهة البرمجية" subtitle="خطوتان: أرسل الرمز واحفظ otpId، ثم تحقّق من الرمز الذي يدخله العميل." icon={CodeBracketIcon} />
+            <CardHeader className="!p-0" title={t('api_title')} subtitle={t('api_sub')} icon={CodeBracketIcon} />
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-b border-line-soft px-5 sm:px-6">
-            <Tabs idPrefix="otp-doc" value={docTab} onChange={setDocTab} aria-label="أقسام التوثيق"
-              tabs={[{ id: 'send', label: '1 · إرسال الرمز' }, { id: 'verify', label: '2 · التحقق' }, { id: 'whmcs', label: 'WHMCS' }]} />
+            <Tabs idPrefix="otp-doc" value={docTab} onChange={setDocTab} aria-label={t('docs_aria')}
+              tabs={[{ id: 'send', label: t('tab_send') }, { id: 'verify', label: t('tab_verify') }, { id: 'whmcs', label: 'WHMCS' }]} />
           </div>
           <div className="flex flex-col gap-4 p-5 sm:p-6">
             {docTab !== 'whmcs' ? (
@@ -379,22 +387,26 @@ export default function OTPPage() {
                     <Badge tone="brand" size="md">POST</Badge>
                     <code dir="ltr" className="font-mono text-sm text-ink">{docTab === 'send' ? '/api/v1/otp' : '/api/v1/otp-verify'}</code>
                   </div>
-                  <Tabs variant="segmented" size="sm" value={lang} onChange={setLang} tabs={LANGS} aria-label="لغة البرمجة" />
+                  <Tabs variant="segmented" size="sm" value={lang} onChange={setLang} tabs={LANGS} aria-label={t('lang_aria')} />
                 </div>
                 {docTab === 'send' ? (
                   <p className="text-sm text-muted">
-                    الحقول: <code dir="ltr" className="font-mono text-ink">phone</code> (إلزامي) و<code dir="ltr" className="font-mono text-ink">purpose</code> (verification | login | transaction).
-                    اختياريًا: <code dir="ltr" className="font-mono text-ink">instance_id</code> لاختيار رقم الإرسال، و<code dir="ltr" className="font-mono text-ink">brand_name</code>.
+                    {rich(t('send_fields'), {
+                      phone: <code dir="ltr" className="font-mono text-ink">phone</code>,
+                      purpose: <code dir="ltr" className="font-mono text-ink">purpose</code>,
+                      instance: <code dir="ltr" className="font-mono text-ink">instance_id</code>,
+                      brand: <code dir="ltr" className="font-mono text-ink">brand_name</code>,
+                    })}
                   </p>
                 ) : (
-                  <p className="text-sm text-muted">أرسل <code dir="ltr" className="font-mono text-ink">otp_id</code> من الخطوة الأولى مع <code dir="ltr" className="font-mono text-ink">otp</code> الذي أدخله العميل. يُرفض الرمز بعد استخدامه أو انتهاء صلاحيته.</p>
+                  <p className="text-sm text-muted">{rich(t('verify_fields'), { otp_id: <code dir="ltr" className="font-mono text-ink">otp_id</code>, otp: <code dir="ltr" className="font-mono text-ink">otp</code> })}</p>
                 )}
-                <CodeBlock label="المثال" code={(docTab === 'send' ? code.send : code.verify)[lang as keyof typeof code.send]} />
+                <CodeBlock label={t('example')} code={(docTab === 'send' ? code.send : code.verify)[lang as keyof typeof code.send]} />
               </>
             ) : (
               <>
-                <p className="text-sm text-muted">ضع الملف في مجلد <code dir="ltr" className="font-mono text-ink">/includes/hooks/</code> في WHMCS باسم <code dir="ltr" className="font-mono text-ink">wabek_otp.php</code>.</p>
-                <CodeBlock label="ملف WHMCS" code={code.whmcs} />
+                <p className="text-sm text-muted">{rich(t('whmcs_note'), { dir: <code dir="ltr" className="font-mono text-ink">/includes/hooks/</code>, file: <code dir="ltr" className="font-mono text-ink">wabek_otp.php</code> })}</p>
+                <CodeBlock label={t('whmcs_file')} code={code.whmcs} />
               </>
             )}
           </div>
