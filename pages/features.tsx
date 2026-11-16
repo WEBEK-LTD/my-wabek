@@ -2,22 +2,25 @@ import React from 'react'
 import Head from 'next/head'
 import {
   BellAlertIcon, BoltIcon, ChartBarIcon, ChatBubbleLeftRightIcon, DevicePhoneMobileIcon, InboxStackIcon,
-  KeyIcon, LinkIcon, MegaphoneIcon, RectangleStackIcon, SparklesIcon,
+  KeyIcon, LinkIcon, MegaphoneIcon, RectangleStackIcon, SparklesIcon, UserGroupIcon,
 } from '@heroicons/react/24/outline'
 import { useWhiteLabel } from '@/hooks/useWhiteLabel'
 import { Button } from '@/components/ui'
 import { MarketingPage, PageHero, Section } from '@/components/marketing/MarketingPage'
 import { CtaBand, IconTile } from '@/components/marketing/Blocks'
-import { usePublicLang } from '@/components/marketing/usePublicLang'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/public/features'
 
 type Tone = 'brand' | 'violet' | 'warning' | 'success'
+type Key = keyof typeof messages.en
 
-const FEATURES: { icon: React.ElementType; tone: Tone; tk: string; dk: string; bk: string }[] = [
+const FEATURES: { icon: React.ElementType; tone: Tone; tk: Key; dk: Key; bk: Key }[] = [
   { icon: MegaphoneIcon, tone: 'brand', tk: 'feat_campaigns_title', dk: 'feat_campaigns_desc', bk: 'feat_badge_marketing' },
   { icon: SparklesIcon, tone: 'violet', tk: 'feat_ai_title', dk: 'feat_ai_desc', bk: 'feat_badge_ai' },
   { icon: InboxStackIcon, tone: 'brand', tk: 'feat_inbox_title', dk: 'feat_inbox_desc', bk: 'feat_badge_support' },
   { icon: ChatBubbleLeftRightIcon, tone: 'warning', tk: 'feat_chatbot_title', dk: 'feat_chatbot_desc', bk: 'feat_badge_automation' },
   { icon: ChartBarIcon, tone: 'success', tk: 'feat_analytics_title', dk: 'feat_analytics_desc', bk: 'feat_badge_analytics' },
+  { icon: UserGroupIcon, tone: 'violet', tk: 'feat_inbox_title', dk: 'feat_inbox_desc', bk: 'feat_badge_crm' },
   { icon: BoltIcon, tone: 'warning', tk: 'feat_automation_title', dk: 'feat_automation_desc', bk: 'feat_badge_automation' },
   { icon: KeyIcon, tone: 'brand', tk: 'feat_otp_title', dk: 'feat_otp_desc', bk: 'feat_badge_security' },
   { icon: RectangleStackIcon, tone: 'success', tk: 'feat_quick_title', dk: 'feat_quick_desc', bk: 'feat_badge_support' },
@@ -29,7 +32,7 @@ const FEATURES: { icon: React.ElementType; tone: Tone; tk: string; dk: string; b
 export default function FeaturesPage() {
   const { brandName } = useWhiteLabel()
   const name = brandName || 'WABEK'
-  const { lang, setLang, dir, t } = usePublicLang()
+  const { t, lang, dir } = useT(messages)
   const [lead, ...rest] = FEATURES
 
   return (
@@ -42,7 +45,6 @@ export default function FeaturesPage() {
         active="/features"
         lang={lang}
         dir={dir}
-        onLangChange={setLang}
         hero={
           <PageHero
             eyebrow={t('pub_product')}
@@ -88,7 +90,7 @@ export default function FeaturesPage() {
         <CtaBand
           title={t('feat_cta_title')}
           subtitle={t('feat_cta_subtitle')}
-          actions={<Button href="/auth/register" size="xl" className="rounded-2xl px-8 text-lg font-bold">{t('pub_start_free')}</Button>}
+          actions={<Button href="/auth/register" size="xl" className="rounded-2xl px-8 text-lg font-bold">{t('feat_cta_btn')}</Button>}
         />
       </MarketingPage>
     </>
