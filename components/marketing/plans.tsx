@@ -4,6 +4,8 @@ import axios from 'axios'
 import { CheckIcon, CreditCardIcon, ExclamationTriangleIcon, MinusIcon } from '@heroicons/react/24/outline'
 import { Button, EmptyState, Skeleton, Table, THead, TBody, TR, TH, TD } from '@/components/ui'
 import { cn } from '@/components/ui/utils'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/public/plans'
 
 /**
  * A row of the public `plans` table as returned by GET /api/plans.
@@ -19,28 +21,49 @@ export interface PublicPlan {
   features?: string[] | null
   is_popular?: boolean
   sort_order?: number
+  /** Optional card overrides (fallback catalogue). */
+  cta_text?: string
+  cta_href?: string
+  badge?: string
   [column: string]: unknown
 }
 
 export type Cycle = 'monthly' | 'yearly'
 
-/** Loads the real plans from /api/plans. No fallback prices are ever shown. */
+type PlanT = (k: keyof typeof messages.en, vars?: Record<string, string | number>) => string
+
+/**
+ * The original fallback catalogue (hooks/usePlans FALLBACK_PLANS), localised.
+ * Shown when the database has no plans or /api/plans cannot be reached.
+ */
+export function fallbackPlans(t: PlanT): PublicPlan[] {
+  const f = (p: string) => [1, 2, 3, 4, 5].map(i => t(`fb_${p}_f${i}` as keyof typeof messages.en))
+  return [
+    { id: 'free', name: t('fb_free_name'), price_monthly: 0, price_yearly: 0, is_popular: false, sort_order: 0, features: f('free'), cta_text: t('fb_cta_free') },
+    { id: 'starter', name: t('fb_starter_name'), price_monthly: 29, price_yearly: 23 * 12, is_popular: true, sort_order: 1, features: f('starter'), cta_text: t('fb_cta_trial'), badge: t('mk_most_popular') },
+    { id: 'pro', name: t('fb_pro_name'), price_monthly: 79, price_yearly: 63 * 12, is_popular: false, sort_order: 2, features: f('pro'), cta_text: t('fb_cta_trial') },
+    { id: 'business', name: t('fb_business_name'), price_monthly: 199, price_yearly: 159 * 12, is_popular: false, sort_order: 3, features: f('business'), cta_text: t('fb_cta_sales'), cta_href: '/support#contact' },
+  ]
+}
+
+/** Loads the plans from /api/plans, falling back to the original catalogue when none are published. */
 export function usePublicPlans() {
-  const [plans, setPlans] = useState<PublicPlan[]>([])
+  const { t } = useT(messages)
+  const [apiPlans, setApiPlans] = useState<PublicPlan[] | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
-    setError(false)
     axios.get('/api/plans')
-      .then(r => setPlans(Array.isArray(r.data?.plans) ? r.data.plans : []))
-      .catch(() => setError(true))
+      .then(r => setApiPlans(Array.isArray(r.data?.plans) ? r.data.plans : []))
+      .catch(() => setApiPlans([]))
       .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => { load() }, [load])
-  return { plans, loading, error, reload: load }
+  const isFallback = !loading && (!apiPlans || apiPlans.length === 0)
+  const plans = isFallback ? fallbackPlans(t) : apiPlans || []
+  return { plans, loading, error: false, isFallback, reload: load }
 }
 
 export const num = (v: unknown): number => {
@@ -74,19 +97,22 @@ export interface PlanCardsProps {
   error: boolean
   onRetry: () => void
   cycle?: Cycle
-  t: (k: string) => string
   /** Show up to N features per card (default: all). */
   maxFeatures?: number
   /** Strings that differ between pages. */
-  labels?: { cta?: string; ctaFree?: string; billedYearly?: (total: string) => string }
+  labels?: { cta?: string; ctaFree?: string }
+  /** Pricing-page notes: "Free forever", trial / yearly billing line, "No credit card required". */
+  notes?: boolean
   className?: string
 }
 
 /** PlanCards — real plans as cards, with loading, empty and error states. */
-export function PlanCards({ plans, loading, error, onRetry, cycle = 'monthly', t, maxFeatures, labels, className }: PlanCardsProps) {
+export function PlanCards({ plans, loading, error, onRetry, cycle = 'monthly', maxFeatures, labels, notes, className }: PlanCardsProps) {
+  const { t } = useT(messages)
   if (loading) {
     return (
       <div className={cn('grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]', className)} aria-busy="true">
+        <span className="sr-only" role="status">{t('loading_plans')}</span>
         {[0, 1, 2].map(i => (
           <div key={i} className="flex flex-col gap-4 rounded-[26px] border border-line bg-surface p-8">
             <Skeleton className="h-5 w-24" />
@@ -132,6 +158,9 @@ export function PlanCards({ plans, loading, error, onRetry, cycle = 'monthly', t
         const price = useYearly ? yearly : monthly
         const features = Array.isArray(p.features) ? p.features : []
         const shown = maxFeatures ? features.slice(0, maxFeatures) : features
+        const cta = p.cta_text || (free ? labels?.ctaFree || t('plan_start_free') : labels?.cta || t('plan_start_trial'))
+        const ctaHref = p.cta_href || (/sales/i.test(String(p.cta_text || '')) ? '/support#contact' : '/auth/register')
+        const badge = p.badge || (featured ? t('mk_most_popular') : '')
         return (
           <article
             key={p.id}
@@ -142,19 +171,24 @@ export function PlanCards({ plans, loading, error, onRetry, cycle = 'monthly', t
                 : 'border border-line bg-surface text-ink shadow-card hover:shadow-card-hover',
             )}
           >
-            {featured && (
+            {badge && (
               <span className="absolute -top-3 start-7 rounded-full bg-brand-gradient px-3 py-1 text-xs font-semibold text-[#04282C] shadow-glow">
-                {t('mk_most_popular')}
+                {badge}
               </span>
             )}
             <h3 className={cn('text-xl font-semibold', featured ? 'text-deep-ink' : 'text-ink')}>{p.name}</h3>
             <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
-              <span className="tabular text-[42px] font-bold leading-none" dir="ltr">{free ? t('mk_free') : formatPrice(price)}</span>
-              {!free && <span className={cn('text-sm', featured ? 'text-deep-muted' : 'text-muted')}>{useYearly ? t('mk_per_year') : t('mk_per_month')}</span>}
+              <span className="tabular text-[42px] font-bold leading-none" dir="ltr">{formatPrice(free ? 0 : price)}</span>
+              <span className={cn('text-sm', featured ? 'text-deep-muted' : 'text-muted')}>{free ? t('mk_free') : useYearly ? t('mk_per_year') : t('mk_per_month')}</span>
             </div>
             {useYearly && !free && (
               <p className={cn('-mt-3 text-[13px]', featured ? 'text-deep-muted' : 'text-muted')}>
                 <span dir="ltr">≈ {formatPrice(yearly / 12)}</span> {t('mk_per_month')}
+              </p>
+            )}
+            {notes && (
+              <p className={cn('-mt-2 text-[13px] font-medium', featured ? 'text-brand-green' : 'text-brand-ink')}>
+                {free ? t('free_forever') : useYearly ? t('billed_yearly', { total: formatPrice(yearly) }) : t('trial')}
               </p>
             )}
             {p.description && <p dir="auto" className={cn('text-[15px] leading-[1.8]', featured ? 'text-deep-muted' : 'text-body')}>{p.description}</p>}
@@ -168,16 +202,17 @@ export function PlanCards({ plans, loading, error, onRetry, cycle = 'monthly', t
                 ))}
               </ul>
             )}
-            <div className="mt-auto pt-1">
+            <div className="mt-auto flex flex-col gap-2 pt-1">
               <Button
-                href="/auth/register"
+                href={ctaHref}
                 variant={featured ? 'primary' : 'secondary'}
                 size="lg"
                 fullWidth
                 className="rounded-[14px]"
               >
-                {free ? labels?.ctaFree || t('pub_start_free') : labels?.cta || t('plan_start_trial')}
+                {cta}
               </Button>
+              {notes && !free && <p className={cn('text-center text-xs', featured ? 'text-deep-muted' : 'text-muted')}>{t('no_card')}</p>}
             </div>
           </article>
         )
@@ -208,7 +243,7 @@ type CompareRow = { label: string; cells: (boolean | string)[] }
  * max_* limits (-1 = unlimited), allow_* flags, then the plans' feature lists.
  * Only columns present in the API response produce rows.
  */
-export function buildComparison(plans: PublicPlan[], t: (k: string) => string): { limits: CompareRow[]; features: CompareRow[] } {
+export function buildComparison(plans: PublicPlan[], t: (k: string) => string, fmt: (n: number) => string = n => n.toLocaleString('en-US')): { limits: CompareRow[]; features: CompareRow[] } {
   const present = (col: string) => plans.some(p => p[col] !== undefined && p[col] !== null)
   const limits: CompareRow[] = LIMIT_COLUMNS.filter(present).map(col => ({
     label: t(`mk_limit_${col}`),
@@ -218,7 +253,7 @@ export function buildComparison(plans: PublicPlan[], t: (k: string) => string): 
       const n = num(v)
       if (n < 0) return t('mk_limit_unlimited')
       if (n === 0) return '—'
-      return n.toLocaleString('en-US')
+      return fmt(n)
     }),
   }))
 
@@ -241,8 +276,10 @@ export function buildComparison(plans: PublicPlan[], t: (k: string) => string): 
 }
 
 /** PlanComparison — feature matrix built from the real plan data. */
-export function PlanComparison({ plans, t, caption }: { plans: PublicPlan[]; t: (k: string) => string; caption: string }) {
-  const { limits, features } = buildComparison(plans, t)
+export function PlanComparison({ plans, caption }: { plans: PublicPlan[]; caption: string }) {
+  const { t: tk, fmtNumber } = useT(messages)
+  const t = (k: string) => tk(k as keyof typeof messages.en)
+  const { limits, features } = buildComparison(plans, t, n => fmtNumber(n))
   if (!plans.length || (!limits.length && !features.length)) return null
 
   const cell = (v: boolean | string) =>
@@ -267,7 +304,7 @@ export function PlanComparison({ plans, t, caption }: { plans: PublicPlan[]; t: 
   )
 
   return (
-    <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
+    <div className="relative overflow-hidden rounded-card border border-line bg-surface shadow-card">
       <Table minWidth={Math.max(560, 200 + plans.length * 140)} caption={caption}>
         <THead>
           <TR>
