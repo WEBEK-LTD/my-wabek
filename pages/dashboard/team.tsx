@@ -4,42 +4,75 @@ import DashboardLayout from '@/components/layout/DashboardLayout'
 import { useQuery, useMutation, useQueryClient } from 'react-query'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { PlusIcon, TrashIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
+import {
+  UserPlusIcon, UsersIcon, ChartBarIcon, SparklesIcon, EllipsisHorizontalIcon, TrashIcon,
+  PauseCircleIcon, PlayCircleIcon, EyeIcon, ChatBubbleLeftRightIcon, ShieldCheckIcon, StarIcon,
+  CheckIcon, XMarkIcon, LinkIcon, BookOpenIcon,
+} from '@heroicons/react/24/outline'
+import {
+  Avatar, Badge, Button, Card, CardHeader, ConfirmDialog, Dropdown, EmptyState, Field, Input, Modal,
+  PageHeader, Select, Skeleton, Table, TBody, TD, TH, THead, TR, Tabs, cn,
+} from '@/components/ui'
 import { useAuthStore } from '@/lib/store'
-import clsx from 'clsx'
-import { formatDistanceToNow } from 'date-fns'
+import { CopyField, ErrorState, Notice, apiError } from '@/components/settings/Shared'
+import { PerformancePanel, ReviewsPanel, NoteModal } from '@/components/settings/TeamPanels'
+import { fmtDate } from '@/components/settings/format'
 
-const ROLE_COLORS = {
-  admin: 'badge-red',
-  agent: 'badge-green',
-  viewer: 'badge-gray',
+const ROLE_META = {
+  admin:  { label: 'مدير', tone: 'violet', icon: ShieldCheckIcon },
+  agent:  { label: 'وكيل', tone: 'brand', icon: ChatBubbleLeftRightIcon },
+  viewer: { label: 'مشاهد', tone: 'neutral', icon: EyeIcon },
 }
+const STATUS_META = {
+  active:    { label: 'نشط', tone: 'success' },
+  pending:   { label: 'بانتظار القبول', tone: 'warning' },
+  suspended: { label: 'موقوف', tone: 'danger' },
+}
+const ROLE_OPTIONS = [
+  { value: 'agent', label: 'وكيل' },
+  { value: 'admin', label: 'مدير' },
+  { value: 'viewer', label: 'مشاهد' },
+]
 
-const STATUS_COLORS = {
-  active:    'badge-green',
-  pending:   'badge-yellow',
-  suspended: 'badge-red',
-}
+// What each role can do — shown in the invite dialog and the roles card.
+const ROLE_CAPS = [
+  { role: 'owner', label: 'المالك', icon: StarIcon, tone: 'bg-brand-gradient text-[#04282C]', can: ['كل الصلاحيات', 'الفوترة والباقة', 'إدارة الفريق ومفاتيح API'], cannot: [] },
+  { role: 'admin', label: 'مدير', icon: ShieldCheckIcon, tone: 'bg-violet-bg text-violet', can: ['كل الصلاحيات', 'المحادثات والحملات وجهات الاتصال', 'الإعدادات والتكاملات'], cannot: [] },
+  { role: 'agent', label: 'وكيل', icon: ChatBubbleLeftRightIcon, tone: 'bg-chip text-chip-ink', can: ['صندوق المحادثات والرد على العملاء', 'جهات الاتصال', 'الردود السريعة'], cannot: ['الإعدادات والفوترة'] },
+  { role: 'viewer', label: 'مشاهد', icon: EyeIcon, tone: 'bg-surface-3 text-muted', can: ['عرض فقط لكل الأقسام المتاحة'], cannot: ['الإرسال أو التعديل'] },
+]
+
+const RANGES = [
+  { id: '1d', label: 'اليوم' },
+  { id: '7d', label: '7 أيام' },
+  { id: '30d', label: '30 يومًا' },
+]
+const RANGE_LABEL = { '1d': 'اليوم', '7d': 'آخر 7 أيام', '30d': 'آخر 30 يومًا' }
 
 export default function TeamPage() {
   const qc = useQueryClient()
-  const { user, token, fetchMe } = useAuthStore()
+  const { user } = useAuthStore()
   const isOwner = !user?.sub_account_of  // owner has no parent account
   const [tab, setTab]           = useState<'members' | 'performance' | 'reviews'>('members')
   const [range, setRange]       = useState<'1d' | '7d' | '30d'>('7d')
   const [showInvite, setShowInvite] = useState(false)
   const [form, setForm] = useState({ name: '', email: '', role: 'agent' })
   const [inviteUrl, setInviteUrl] = useState('')
+  const [roleChange, setRoleChange] = useState<{ member: any; role: string } | null>(null)
+  const [toSuspend, setToSuspend] = useState<any>(null)
+  const [toRemove, setToRemove] = useState<any>(null)
 
   // Close invite form when switching away from members tab
   useEffect(() => { if (tab !== 'members') closeInvite() }, [tab])
 
-  const { data, isLoading, error: teamError } = useQuery(
+  const { data, isLoading, error: teamError, refetch } = useQuery(
     'team',
     () => axios.get('/api/team').then(r => r.data),
-    { onError: (e: any) => toast.error(e?.response?.data?.error || 'Failed to load team') }
+    { onError: (e: any) => toast.error(e?.response?.data?.error || 'تعذّر تحميل الفريق') }
   )
   const members = data?.members || []
+  const activeCount = members.filter(m => m.status === 'active').length
+  const pendingCount = members.filter(m => m.status === 'pending').length
 
   const { data: reviewsData, isLoading: reviewsLoading, refetch: refetchReviews } = useQuery(
     ['ai-reviews', isOwner ? 'owner' : 'member'],
@@ -56,9 +89,9 @@ export default function TeamPage() {
       onSuccess: () => {
         qc.invalidateQueries(['ai-reviews', 'owner'])
         setCommentModal(null)
-        toast.success('Comment saved')
+        toast.success('تم حفظ الملاحظة')
       },
-      onError: (e: any) => toast.error(e?.response?.data?.error || 'Failed'),
+      onError: (e: any) => toast.error(e?.response?.data?.error || 'تعذّر الحفظ'),
     }
   )
 
@@ -74,779 +107,300 @@ export default function TeamPage() {
         qc.invalidateQueries('team')
         setInviteUrl(r.data.inviteUrl)
         setForm({ name: '', email: '', role: 'agent' })
-        toast.success('Invite created! Share the link.')
+        toast.success('أُنشئت الدعوة — شارك الرابط')
       },
-      onError: (e) => toast.error(e?.response?.data?.error || 'Failed'),
+      onError: (e) => toast.error(e?.response?.data?.error || 'تعذّر إنشاء الدعوة'),
     }
   )
 
   const updateMut = useMutation(
     ({ id, ...body }) => axios.put(`/api/team/${id}`, body),
     {
-      onSuccess: () => { qc.invalidateQueries('team'); qc.invalidateQueries('team-performance'); toast.success('Updated') },
-      onError: (e: any) => toast.error(e?.response?.data?.error || 'Update failed'),
+      onSuccess: () => { qc.invalidateQueries('team'); qc.invalidateQueries('team-performance'); toast.success('تم التحديث'); setRoleChange(null); setToSuspend(null) },
+      onError: (e: any) => toast.error(e?.response?.data?.error || 'تعذّر التحديث'),
     }
   )
 
   const deleteMut = useMutation(
     (id) => axios.delete(`/api/team/${id}`),
     {
-      onSuccess: () => { qc.invalidateQueries('team'); qc.invalidateQueries('team-performance'); toast.success('Member removed') },
-      onError: (e: any) => toast.error(e?.response?.data?.error || 'Remove failed'),
+      onSuccess: () => { qc.invalidateQueries('team'); qc.invalidateQueries('team-performance'); toast.success('تمت إزالة العضو'); setToRemove(null) },
+      onError: (e: any) => toast.error(e?.response?.data?.error || 'تعذّرت الإزالة'),
     }
   )
-
-  const copy = (text: string) => { navigator.clipboard.writeText(text); toast.success('Copied!') }
 
   const openInvite = () => { setShowInvite(true); setInviteUrl(''); setForm({ name: '', email: '', role: 'agent' }) }
   const closeInvite = () => { setShowInvite(false); setInviteUrl('') }
 
+  const instancesList = data?.instances || []
+
   return (
     <DashboardLayout title="Team">
-      {/* Tab switcher */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex gap-1 p-1 bg-[#F8FAFC] rounded-xl border border-slate-200">
-          <button onClick={() => setTab('members')}
-            className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2',
-              tab === 'members' ? 'bg-white text-slate-900 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-900'
-            )}>
-            {/* Google Material: group icon */}
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
-            </svg>
-            Members
-          </button>
-          <button onClick={() => setTab('performance')}
-            className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2',
-              tab === 'performance' ? 'bg-white text-slate-900 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-900'
-            )}>
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/>
-            </svg>
-            Performance
-          </button>
-          <button onClick={() => setTab('reviews')}
-            className={clsx('px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2',
-              tab === 'reviews' ? 'bg-white text-slate-900 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-900'
-            )}>
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm2-7h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z"/>
-            </svg>
-            AI Reviews
-          </button>
-        </div>
-        {tab === 'members' && isOwner && (
-          <button onClick={openInvite} className="btn-primary">
-            <PlusIcon className="w-4 h-4" /> Invite Member
-          </button>
-        )}
-        {tab === 'performance' && (
-          <div className="flex gap-1 p-1 bg-[#F8FAFC] rounded-xl border border-slate-200">
-            {(['1d', '7d', '30d'] as const).map(r => (
-              <button key={r} onClick={() => setRange(r)}
-                className={clsx('px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
-                  range === r ? 'bg-white text-slate-900 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-900'
-                )}>
-                {r === '1d' ? 'Today' : r === '7d' ? '7 Days' : '30 Days'}
-              </button>
-            ))}
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="الإعدادات"
+          title="الفريق"
+          description="ادعُ زملاءك، وحدد دور كل عضو وصناديق الوارد التي يصل إليها، وتابع أداءهم."
+          actions={
+            <>
+              <Button variant="secondary" icon={BookOpenIcon} href="/docs/guides/team-roles">الأدوار والصلاحيات</Button>
+              {isOwner && <Button icon={UserPlusIcon} onClick={openInvite}>دعوة عضو</Button>}
+            </>
+          }
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Tabs idPrefix="team" aria-label="أقسام الفريق" value={tab} onChange={v => setTab(v as typeof tab)} tabs={[
+              { id: 'members', label: 'الأعضاء', icon: UsersIcon, count: members.length || undefined },
+              { id: 'performance', label: 'الأداء', icon: ChartBarIcon },
+              { id: 'reviews', label: 'مراجعات الذكاء الاصطناعي', icon: SparklesIcon },
+            ]} />
+            {tab === 'performance' && (
+              <Tabs variant="segmented" size="sm" idPrefix="team-range" aria-label="الفترة" value={range} onChange={v => setRange(v as typeof range)} tabs={RANGES} />
+            )}
           </div>
-        )}
-      </div>
+        </PageHeader>
 
-      {tab === 'members' ? (<>
-      {/* Invite form */}
-      {showInvite && (
-        <div className="card mb-6">
-          <h3 className="font-display font-semibold text-slate-900 mb-4">Invite Team Member</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="label">Full Name</label>
-              <input value={form.name} onChange={e => setForm(d => ({...d, name: e.target.value}))} placeholder="John Doe" className="input" />
-            </div>
-            <div>
-              <label className="label">Email</label>
-              <input type="email" value={form.email} onChange={e => setForm(d => ({...d, email: e.target.value}))} placeholder="john@example.com" className="input" />
-            </div>
-            <div>
-              <label className="label">Role</label>
-              <select value={form.role} onChange={e => setForm(d => ({...d, role: e.target.value}))} className="input">
-                <option value="agent">Agent — Can send messages</option>
-                <option value="admin">Admin — Full access</option>
-                <option value="viewer">Viewer — Read only</option>
-              </select>
-            </div>
-          </div>
-          <div className="flex gap-3 mt-4">
-            <button onClick={() => inviteMut.mutate(form)} disabled={inviteMut.isLoading || !form.name || !form.email} className="btn-primary">
-              {inviteMut.isLoading ? <><ArrowPathIcon className="w-4 h-4 animate-spin" /> Creating...</> : 'Create Invite Link'}
-            </button>
-            <button onClick={closeInvite} className="btn-secondary">Cancel</button>
-          </div>
+        {tab === 'members' && (
+          <div className="space-y-5">
+            {!isOwner && (
+              <Notice tone="info">أنت تشاهد الفريق كعضو. تواصل مع مالك الحساب لإجراء أي تغيير.</Notice>
+            )}
 
-          {/* Invite URL */}
-          {inviteUrl && (
-            <div className="mt-4 p-3 bg-blue-50/20 border border-blue-200/50 rounded-xl">
-              <p className="text-sm text-slate-700 mb-2">Share this link with your team member:</p>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 text-xs text-blue-600 bg-[#F8FAFC] px-3 py-2 rounded-lg truncate">{inviteUrl}</code>
-                <button onClick={() => copy(inviteUrl)} className="btn-secondary text-xs py-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg> Copy
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Members list */}
-      {!isOwner && (
-        <div className="mb-4 px-4 py-2.5 bg-[#F8FAFC] border border-slate-200 rounded-xl">
-          <p className="text-xs text-slate-400">You are viewing the team as a member. Contact your account owner to make changes.</p>
-        </div>
-      )}
-      {isLoading ? (
-        <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="skeleton h-16 rounded-xl" />)}</div>
-      ) : teamError ? (
-        <div className="card text-center py-8">
-          <p className="text-red-400 text-sm mb-2">Failed to load team members</p>
-          <p className="text-xs text-slate-400">{(teamError as any)?.response?.data?.error || 'Unknown error'}</p>
-        </div>
-      ) : members.length === 0 ? (
-        <div className="card text-center py-16">
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 text-slate-600 mx-auto mb-3" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-          <h3 className="font-display font-semibold text-slate-900 mb-2">No team members yet</h3>
-          <p className="text-slate-400 text-sm mb-4">Invite your team to collaborate on conversations</p>
-          {isOwner && (
-            <button onClick={openInvite} className="btn-primary mx-auto">
-              <PlusIcon className="w-4 h-4" /> Invite First Member
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="card">
-          <div className="space-y-0">
-            {members.map(member => (
-              <div key={member.id} className="py-3 border-b border-slate-200 last:border-0">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-[#F8FAFC] flex items-center justify-center font-bold text-slate-700 flex-shrink-0">
-                    {(member.name || member.email || "?")[0].toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-900">{member.name || '—'}</p>
-                    <p className="text-xs text-slate-500">{member.email}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={ROLE_COLORS[member.role] || 'badge-gray'}>{member.role}</span>
-                    <span className={STATUS_COLORS[member.status] || 'badge-gray'}>{member.status}</span>
-                    {isOwner && member.status === 'active' && (
-                      <select
-                        value={member.role}
-                        onChange={e => {
-                          const newRole = e.target.value
-                          if (newRole !== member.role) {
-                            if (confirm(`Change role to "${newRole}"?`)) {
-                              updateMut.mutate({ id: member.id, role: newRole })
-                            } else {
-                              // Reset visual state — browser changed it before confirm
-                              e.target.value = member.role
-                            }
-                          }
-                        }}
-                        className="input text-xs py-1 px-2 w-24"
-                      >
-                        <option value="agent">Agent</option>
-                        <option value="admin">Admin</option>
-                        <option value="viewer">Viewer</option>
-                      </select>
-                    )}
-                    {isOwner && member.id && (
-                      <button onClick={() => { if(confirm('Remove this member?')) deleteMut.mutate(member.id) }}
-                        className="p-1.5 text-slate-500 hover:text-red-400" title="Remove member">
-                        <TrashIcon className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {/* Inbox Permissions — owner only */}
-                {isOwner && member.status === 'active' && data?.instances?.length > 0 && (
-                  <div className="mt-2 ml-14">
-                    <p className="text-[11px] text-slate-400 mb-1.5">Inbox Access <span className="text-slate-300">(no selection = all inboxes)</span></p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(data.instances || []).map(inst => {
-                        const allowed = (member.allowed_instances || []).includes(inst.id)
-                        return (
-                          <button
-                            key={inst.id}
-                            onClick={() => updateMut.mutate({
-                              id: member.id,
-                              toggle_instance: inst.id,
-                            })}
-                            className={clsx(
-                              'text-[11px] px-2 py-1 rounded-lg border transition-colors',
-                              allowed
-                                ? 'bg-brand-500 text-white border-brand-500'
-                                : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
-                            )}
-                          >
-                            {allowed ? '✓ ' : ''}{inst.display_name || inst.phone_number}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Role descriptions */}
-      <div className="card mt-6">
-        <h3 className="font-display font-semibold text-slate-900 mb-3">Role Permissions</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {[
-            { role: 'Admin', color: 'badge-red', perms: ['Full access to all features', 'Manage team members', 'View all conversations', 'Configure settings'] },
-            { role: 'Agent', color: 'badge-green', perms: ['View & reply to conversations', 'Send campaigns', 'Manage contacts', 'Cannot change settings'] },
-            { role: 'Viewer', color: 'badge-gray', perms: ['View conversations only', 'View analytics', 'No sending ability', 'Read-only access'] },
-          ].map(r => (
-            <div key={r.role} className="bg-[#F8FAFC] rounded-xl p-3 border border-slate-200">
-              <span className={clsx(r.color, 'mb-2 inline-block')}>{r.role}</span>
-              <ul className="space-y-1">
-                {r.perms.map(p => <li key={p} className="text-xs text-slate-400 flex items-center gap-1.5"><span className="text-brand-500">✓</span>{p}</li>)}
-              </ul>
-            </div>
-          ))}
-        </div>
-      </div>
-      </>) : null}
-
-      {/* ── Performance Tab ──────────────────────────────── */}
-      {tab === 'performance' && (
-        <div className="space-y-4">
-
-          {perfLoading ? (
-            <div className="card space-y-3">
-              {[1,2,3].map(i => <div key={i} className="h-16 skeleton rounded-xl" />)}
-            </div>
-          ) : !perfData ? (
-            <div className="card text-center py-8">
-              <p className="text-slate-400 text-sm">Failed to load performance data.</p>
-              <button onClick={() => refetchPerf()} className="btn-secondary text-sm mt-3">Try again</button>
-            </div>
-          ) : perfData?.mode !== 'team' && perfData?.mode !== 'self' ? (
-            // Unknown mode - show error
-            <div className="card text-center py-8">
-              <p className="text-slate-400 text-sm">Unable to load performance data.</p>
-              <button onClick={() => refetchPerf()} className="btn-secondary text-sm mt-3">Try again</button>
-            </div>
-          ) : perfData?.mode === 'self' ? (
-            // Member viewing own stats
-            <div className="space-y-4">
-              <div className="card border-blue-200/50 bg-blue-50/10">
-                <div className="flex items-center gap-3 mb-4">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                  </svg>
-                  <div>
-                    <h3 className="font-display font-semibold text-slate-900">My Performance</h3>
-                    <p className="text-xs text-slate-400">
-                      {range === '1d' ? 'Today' : range === '7d' ? 'Last 7 days' : 'Last 30 days'}
-                    </p>
-                  </div>
-                  <button onClick={() => refetchPerf()} disabled={perfFetching} className="ml-auto p-1.5 text-slate-400 hover:text-slate-900 disabled:opacity-50">
-                    <ArrowPathIcon className={clsx("w-4 h-4", perfFetching && "animate-spin")} />
-                  </button>
-                </div>
-                <StatCards stats={perfData.stats} />
-              </div>
-            </div>
-          ) : (
-            // Owner viewing team stats
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-400">
-                  {(perfData?.members || []).length === 0
-                    ? 'No active team members yet — showing your own activity only'
-                    : `${(perfData?.members || []).length} active member${(perfData?.members || []).length !== 1 ? 's' : ''} + you`}
-                </p>
-                <button onClick={() => refetchPerf()} disabled={perfFetching} className="p-1.5 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-[#F8FAFC] disabled:opacity-50">
-                  <ArrowPathIcon className={clsx("w-4 h-4", perfFetching && "animate-spin")} />
-                </button>
-              </div>
-
-              {/* Team table */}
-              <div className="card p-0 overflow-hidden">
-                <table className="w-full">
-                  <thead className="border-b border-slate-200 bg-[#F8FAFC]/50">
-                    <tr>
-                      <th className="table-head">Member</th>
-                      <th className="table-head text-center">
-                        <span className="flex items-center justify-center gap-1">
-                          {/* chat bubble icon */}
-                          <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
-                          Conversations
-                        </span>
-                      </th>
-                      <th className="table-head text-center">
-                        <span className="flex items-center justify-center gap-1">
-                          {/* send icon */}
-                          <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-                          Sent
-                        </span>
-                      </th>
-                      <th className="table-head text-center">
-                        <span className="flex items-center justify-center gap-1">
-                          {/* reply icon */}
-                          <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>
-                          Response Rate
-                        </span>
-                      </th>
-                      <th className="table-head text-center">
-                        <span className="flex items-center justify-center gap-1">
-                          {/* timer icon */}
-                          <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M15 1H9v2h6V1zm-4 13h2V8h-2v6zm8.03-6.61l1.42-1.42c-.43-.51-.9-.99-1.41-1.41l-1.42 1.42C16.07 4.74 14.12 4 12 4c-4.97 0-9 4.03-9 9s4.02 9 9 9 9-4.03 9-9c0-2.12-.74-4.07-1.97-5.61zM12 20c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
-                          Avg Response
-                        </span>
-                      </th>
-                      <th className="table-head">Last Active</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const rows = [...(perfData?.members || []), perfData?.owner]
-                        .filter(m => m && m.id)
-                        .filter((m, idx, arr) => arr.findIndex(x => x.id === m.id) === idx)
-                      if (rows.length === 0) return (
-                        <tr><td colSpan={6} className="table-cell text-center text-slate-400 text-sm py-8">No activity data yet for the selected period.</td></tr>
-                      )
-                      return rows.map((m, i) => (
-                      <tr key={m.id || i} className="table-row">
-                        <td className="table-cell">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-[#F8FAFC] border border-slate-200 flex items-center justify-center text-xs font-bold text-slate-700 flex-shrink-0">
-                              {(m.name || m.email || 'U')[0].toUpperCase()}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-slate-900 truncate max-w-28">{m.name || 'Unknown'}</p>
-                              <p className="text-[10px] text-slate-400 truncate max-w-28">{m.email || (m.name === 'You (Owner)' ? 'Account owner' : '')}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="table-cell text-center">
-                          <span className="text-sm font-semibold text-slate-900">{m.conversations_handled ?? 0}</span>
-                        </td>
-                        <td className="table-cell text-center">
-                          <span className="text-sm font-semibold text-slate-900">{m.messages_sent ?? 0}</span>
-                        </td>
-                        <td className="table-cell text-center">
-                          {m.response_rate !== null && m.response_rate !== undefined ? (
-                            <div className="flex flex-col items-center gap-1">
-                              <span className={clsx('text-sm font-semibold', m.response_rate >= 80 ? 'text-brand-500' : m.response_rate >= 50 ? 'text-yellow-400' : 'text-red-400')}>
-                                {m.response_rate}%
-                              </span>
-                              <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                <div className={clsx('h-full rounded-full', m.response_rate >= 80 ? 'bg-brand-500' : m.response_rate >= 50 ? 'bg-yellow-400' : 'bg-red-400')}
-                                  style={{ width: `${Math.min(m.response_rate, 100)}%` }} />
+            {isLoading ? (
+              <Card padding="none"><div className="space-y-3 p-5">{[0, 1, 2].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div></Card>
+            ) : teamError ? (
+              <ErrorState title="تعذّر تحميل أعضاء الفريق" message={(teamError as any)?.response?.data?.error || 'خطأ غير معروف'} onRetry={() => refetch()} />
+            ) : members.length === 0 ? (
+              <EmptyState
+                variant="card"
+                icon={UsersIcon}
+                title="لا يوجد أعضاء في الفريق بعد"
+                description="ادعُ فريقك للتعاون على المحادثات وخدمة العملاء."
+                action={isOwner ? <Button icon={UserPlusIcon} onClick={openInvite}>دعوة أول عضو</Button> : undefined}
+              />
+            ) : (
+              <Card padding="none">
+                <CardHeader title="أعضاء الفريق" subtitle={`${activeCount} نشط${pendingCount ? ` · ${pendingCount} دعوة معلّقة` : ''}`} divider />
+                <Table minWidth={760} caption="أعضاء الفريق">
+                  <THead>
+                    <TR>
+                      <TH>العضو</TH>
+                      <TH>الدور</TH>
+                      <TH>الحالة</TH>
+                      {isOwner && instancesList.length > 0 && <TH>صناديق الوارد</TH>}
+                      <TH>أُضيف</TH>
+                      {isOwner && <TH align="end"><span className="sr-only">إجراءات</span></TH>}
+                    </TR>
+                  </THead>
+                  <TBody>
+                    {members.map(member => {
+                      const role = ROLE_META[member.role] || { label: member.role, tone: 'neutral' }
+                      const status = STATUS_META[member.status] || { label: member.status, tone: 'neutral' }
+                      const allowed = member.allowed_instances || []
+                      return (
+                        <TR key={member.id}>
+                          <TD>
+                            <div className="flex items-center gap-3">
+                              <Avatar name={member.name || member.email || '?'} size="sm" />
+                              <div className="min-w-0">
+                                <p className="max-w-[14rem] truncate font-medium text-ink">{member.name || '—'}</p>
+                                <p className="max-w-[14rem] truncate text-xs text-muted" dir="ltr">{member.email}</p>
                               </div>
                             </div>
-                          ) : <span className="text-slate-300 text-xs">—</span>}
-                        </td>
-                        <td className="table-cell text-center">
-                          {m.avg_response_minutes !== null && m.avg_response_minutes !== undefined ? (
-                            <span className={clsx('text-sm font-semibold', m.avg_response_minutes <= 5 ? 'text-brand-500' : m.avg_response_minutes <= 30 ? 'text-yellow-400' : 'text-red-400')}>
-                              {m.avg_response_minutes < 60
-                                ? `${m.avg_response_minutes}m`
-                                : `${Math.round(m.avg_response_minutes / 60)}h`}
-                            </span>
-                          ) : <span className="text-slate-300 text-xs">—</span>}
-                        </td>
-                        <td className="table-cell text-xs text-slate-400">
-                          {m.last_active ? (
-                            <span title={new Date(m.last_active).toLocaleString()}>
-                              {formatDistanceToNow(new Date(m.last_active), { addSuffix: true })}
-                            </span>
-                          ) : '—'}
-                        </td>
-                      </tr>
-                      ))
-                    })()}
-                  </tbody>
-                </table>
-              </div>
+                          </TD>
+                          <TD>
+                            {isOwner && member.status === 'active' ? (
+                              <Select
+                                size="sm"
+                                aria-label={`دور ${member.name || member.email}`}
+                                value={member.role}
+                                onChange={e => { if (e.target.value !== member.role) setRoleChange({ member, role: e.target.value }) }}
+                                options={ROLE_OPTIONS}
+                                className="w-28"
+                              />
+                            ) : (
+                              <Badge tone={role.tone} icon={role.icon}>{role.label}</Badge>
+                            )}
+                          </TD>
+                          <TD><Badge tone={status.tone} dot>{status.label}</Badge></TD>
+                          {isOwner && instancesList.length > 0 && (
+                            <TD>
+                              {member.status === 'active' ? (
+                                <div className="flex max-w-[18rem] flex-wrap gap-1.5" role="group" aria-label="صناديق الوارد المسموح بها (دون تحديد = الكل)">
+                                  {instancesList.map(inst => {
+                                    const on = allowed.includes(inst.id)
+                                    return (
+                                      <button
+                                        key={inst.id}
+                                        type="button"
+                                        aria-pressed={on}
+                                        onClick={() => updateMut.mutate({ id: member.id, toggle_instance: inst.id })}
+                                        className={cn('inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition',
+                                          on ? 'border-transparent bg-brand-gradient text-[#04282C]' : 'border-line bg-surface text-muted hover:border-line-strong hover:text-ink')}
+                                      >
+                                        {on && <CheckIcon className="h-3 w-3" aria-hidden="true" />}
+                                        {inst.display_name || inst.phone_number}
+                                      </button>
+                                    )
+                                  })}
+                                  {allowed.length === 0 && <span className="self-center text-[11px] text-muted">الكل</span>}
+                                </div>
+                              ) : <span className="text-xs text-muted">—</span>}
+                            </TD>
+                          )}
+                          <TD className="text-sm text-muted">{fmtDate(member.created_at)}</TD>
+                          {isOwner && (
+                            <TD align="end">
+                              {member.id && (
+                                <Dropdown
+                                  label={`خيارات ${member.name || member.email}`}
+                                  triggerClassName="h-9 w-9 justify-center rounded-btn text-muted hover:bg-surface-3 hover:text-ink"
+                                  trigger={<EllipsisHorizontalIcon className="h-5 w-5" />}
+                                  items={[
+                                    ...(member.status === 'active' ? [{ label: 'إيقاف العضو مؤقتًا', icon: PauseCircleIcon, onClick: () => setToSuspend({ member, status: 'suspended' }) }] : []),
+                                    ...(member.status === 'suspended' ? [{ label: 'إعادة تفعيل العضو', icon: PlayCircleIcon, onClick: () => setToSuspend({ member, status: 'active' }) }] : []),
+                                    { label: member.status === 'pending' ? 'إلغاء الدعوة' : 'إزالة من الفريق', icon: TrashIcon, danger: true, divider: member.status !== 'pending', onClick: () => setToRemove(member) },
+                                  ]}
+                                />
+                              )}
+                            </TD>
+                          )}
+                        </TR>
+                      )
+                    })}
+                  </TBody>
+                </Table>
+                {isOwner && instancesList.length > 0 && (
+                  <p className="border-t border-line-soft px-5 py-3 text-xs text-muted">صناديق الوارد: اضغط رقمًا لتقييد وصول العضو إليه. عدم تحديد أي رقم يعني الوصول إلى كل الصناديق.</p>
+                )}
+              </Card>
+            )}
 
-              {/* Legend */}
-              <div className="flex flex-wrap gap-4 text-xs text-slate-400">
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-brand-500" />≥80% response rate or ≤5min</span>
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-yellow-400" />50–79% or 5–30min</span>
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-400" />Below 50% or &gt;30min</span>
+            {/* Roles */}
+            <Card padding="none">
+              <CardHeader title="ماذا يستطيع كل دور؟" divider />
+              <div className="grid gap-px bg-line-soft sm:grid-cols-2 xl:grid-cols-4">
+                {ROLE_CAPS.map(r => (
+                  <div key={r.role} className="bg-surface p-5">
+                    <div className="flex items-center gap-2.5">
+                      <span className={cn('flex h-9 w-9 items-center justify-center rounded-xl', r.tone)}><r.icon className="h-5 w-5" aria-hidden="true" /></span>
+                      <span className="font-semibold text-ink">{r.label}</span>
+                    </div>
+                    <ul className="mt-3 space-y-1.5 text-sm">
+                      {r.can.map(c => <li key={c} className="flex items-start gap-2 text-body"><CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />{c}</li>)}
+                      {r.cannot.map(c => <li key={c} className="flex items-start gap-2 text-muted"><XMarkIcon className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden="true" />{c}</li>)}
+                    </ul>
+                  </div>
+                ))}
               </div>
-            </div>
-          )}
-        </div>
-      )}
-      {/* ── AI Reviews Tab ───────────────────────────────── */}
-      {tab === 'reviews' && (
-        <div className="space-y-4">
-          {/* Info note */}
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-blue-50/30 border border-blue-200/50 rounded-xl text-xs text-slate-500">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-blue-400 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
-            Reviews are automatically updated every 1 hour. Conversations are analyzed after 2 hours of inactivity.
+            </Card>
           </div>
+        )}
 
-          {reviewsLoading ? (
-            <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-32 skeleton rounded-xl" />)}</div>
-          ) : isOwner ? (
-            // ── Owner View ──────────────────────────────────
-            <div className="space-y-4">
-              {/* Member Summary Cards */}
-              {(reviewsData?.member_summary || []).length > 0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {(reviewsData?.member_summary || []).map((m: any) => (
-                    <div key={m.member_user_id} className="card">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-9 h-9 rounded-full bg-[#F8FAFC] border border-slate-200 flex items-center justify-center font-bold text-slate-700 text-sm flex-shrink-0">
-                          {(m.member_name || '?')[0].toUpperCase()}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium text-slate-900 text-sm truncate">{m.member_name}</p>
-                          <p className="text-xs text-slate-400">{m.review_count} reviews</p>
-                        </div>
-                        <div className={clsx('text-xl font-bold',
-                          m.avg_score >= 8 ? 'text-brand-500' : m.avg_score >= 6 ? 'text-yellow-400' : 'text-red-400'
-                        )}>
-                          {m.avg_score ?? '—'}
-                        </div>
-                      </div>
-                      {m.top_issues?.slice(0,2).map((issue: any) => (
-                        <p key={issue.text} className="text-[11px] text-red-400 flex items-center gap-1">
-                          <span>↓</span> {issue.text}
-                        </p>
-                      ))}
-                      {m.top_strengths?.slice(0,2).map((s: any) => (
-                        <p key={s.text} className="text-[11px] text-brand-500 flex items-center gap-1">
-                          <span>↑</span> {s.text}
-                        </p>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              )}
+        {tab === 'performance' && (
+          <PerformancePanel perfData={perfData} perfLoading={perfLoading} perfFetching={perfFetching} refetchPerf={refetchPerf} rangeLabel={RANGE_LABEL[range]} />
+        )}
 
-              {/* Reviews List */}
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-400">{reviewsData?.total || 0} completed reviews</p>
-                <button onClick={() => refetchReviews()} className="p-1.5 text-slate-400 hover:text-slate-900 rounded-lg hover:bg-[#F8FAFC]">
-                  <ArrowPathIcon className="w-4 h-4" />
-                </button>
+        {tab === 'reviews' && (
+          <ReviewsPanel
+            isOwner={isOwner}
+            reviewsData={reviewsData}
+            reviewsLoading={reviewsLoading}
+            refetchReviews={refetchReviews}
+            onEditNote={item => { setCommentModal({ itemId: item.id, current: item.manual_comment || '' }); setCommentText(item.manual_comment || '') }}
+          />
+        )}
+      </div>
+
+      {/* Invite */}
+      <Modal
+        open={showInvite}
+        onClose={closeInvite}
+        size="lg"
+        icon={UserPlusIcon}
+        title={inviteUrl ? 'الدعوة جاهزة' : 'دعوة عضو إلى الفريق'}
+        description={inviteUrl ? 'تُرسل الدعوة إلى بريده الإلكتروني، ويمكنك أيضًا مشاركة الرابط مباشرة. صلاحية الرابط 7 أيام.' : 'سيصل إلى العضو رابط لإنشاء حسابه والانضمام إلى فريقك.'}
+        footer={inviteUrl
+          ? <><Button variant="secondary" onClick={() => setInviteUrl('')}>دعوة شخص آخر</Button><Button onClick={closeInvite}>تم</Button></>
+          : <><Button variant="secondary" onClick={closeInvite}>إلغاء</Button><Button type="submit" form="invite-form" loading={inviteMut.isLoading} disabled={!form.name || !form.email}>إنشاء رابط الدعوة</Button></>}
+      >
+        {inviteUrl ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-ink"><LinkIcon className="h-4 w-4 text-brand-ink" aria-hidden="true" />رابط الدعوة</div>
+            <CopyField value={inviteUrl} className="py-2.5" />
+          </div>
+        ) : (
+          <form id="invite-form" className="space-y-5" onSubmit={e => { e.preventDefault(); inviteMut.mutate(form) }}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="الاسم الكامل" required>
+                <Input value={form.name} onChange={e => setForm(d => ({ ...d, name: e.target.value }))} placeholder="سارة محمود" />
+              </Field>
+              <Field label="البريد الإلكتروني" required>
+                <Input type="email" value={form.email} onChange={e => setForm(d => ({ ...d, email: e.target.value }))} placeholder="sara@example.com" dir="ltr" />
+              </Field>
+            </div>
+            <fieldset>
+              <legend className="mb-2 text-sm font-medium text-ink">الدور</legend>
+              <div className="grid gap-2 sm:grid-cols-3" role="radiogroup">
+                {ROLE_CAPS.filter(r => r.role !== 'owner').map(r => {
+                  const selected = form.role === r.role
+                  return (
+                    <button key={r.role} type="button" role="radio" aria-checked={selected} onClick={() => setForm(d => ({ ...d, role: r.role }))}
+                      className={cn('rounded-card border p-3 text-start transition', selected ? 'border-brand-teal bg-chip/40 shadow-ring' : 'border-line hover:border-line-strong')}>
+                      <span className="flex items-center gap-2">
+                        <span className={cn('flex h-8 w-8 items-center justify-center rounded-lg', r.tone)}><r.icon className="h-4 w-4" aria-hidden="true" /></span>
+                        <span className="text-sm font-semibold text-ink">{r.label}</span>
+                      </span>
+                      <span className="mt-2 block text-xs leading-relaxed text-muted">{r.can.join('، ')}</span>
+                    </button>
+                  )
+                })}
               </div>
+            </fieldset>
+          </form>
+        )}
+      </Modal>
 
-              {(reviewsData?.reviews || []).length === 0 ? (
-                <div className="card text-center py-12">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10 text-slate-300 mx-auto mb-3" viewBox="0 0 24 24" fill="currentColor"><path d="M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm2-7h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z"/></svg>
-                  <p className="text-slate-400 text-sm">No reviews yet. Reviews appear after conversations become inactive for 2 hours.</p>
-                </div>
-              ) : (reviewsData?.reviews || []).map((review: any) => (
-                <div key={review.id} className="card space-y-4">
-                  {/* Review header */}
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-semibold text-slate-900">
-                        {review.contacts?.name || review.contacts?.phone || 'Unknown Contact'}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        {review.message_count} messages · Review #{review.review_version} ·{' '}
-                        {review.reviewed_at ? new Date(review.reviewed_at).toLocaleDateString() : ''}
-                      </p>
-                    </div>
-                    {review.overall_score && (
-                      <div className={clsx('text-2xl font-bold',
-                        review.overall_score >= 8 ? 'text-brand-500' : review.overall_score >= 6 ? 'text-yellow-400' : 'text-red-400'
-                      )}>
-                        {Number(review.overall_score).toFixed(1)}
-                      </div>
-                    )}
-                  </div>
+      <ConfirmDialog
+        open={!!roleChange}
+        onClose={() => setRoleChange(null)}
+        onConfirm={() => { if (roleChange) updateMut.mutate({ id: roleChange.member.id, role: roleChange.role }) }}
+        loading={updateMut.isLoading}
+        title="تغيير الدور؟"
+        description={roleChange ? `سيصبح ${roleChange.member.name || roleChange.member.email} «${ROLE_META[roleChange.role]?.label}». تُطبَّق الصلاحيات الجديدة فورًا.` : ''}
+        confirmLabel="تغيير الدور"
+      />
+      <ConfirmDialog
+        destructive={toSuspend?.status === 'suspended'}
+        open={!!toSuspend}
+        onClose={() => setToSuspend(null)}
+        onConfirm={() => { if (toSuspend) updateMut.mutate({ id: toSuspend.member.id, status: toSuspend.status }) }}
+        loading={updateMut.isLoading}
+        title={toSuspend?.status === 'suspended' ? 'إيقاف العضو مؤقتًا؟' : 'إعادة تفعيل العضو؟'}
+        description={toSuspend?.status === 'suspended'
+          ? 'سيُسجَّل خروجه فورًا ولن يتمكن من الدخول حتى تعيد تفعيله.'
+          : 'سيتمكن العضو من تسجيل الدخول مجددًا بدوره الحالي.'}
+        confirmLabel={toSuspend?.status === 'suspended' ? 'إيقاف' : 'إعادة التفعيل'}
+      />
+      <ConfirmDialog
+        destructive
+        open={!!toRemove}
+        onClose={() => setToRemove(null)}
+        onConfirm={() => { if (toRemove) deleteMut.mutate(toRemove.id) }}
+        loading={deleteMut.isLoading}
+        title={toRemove?.status === 'pending' ? 'إلغاء الدعوة؟' : 'إزالة العضو من الفريق؟'}
+        description={`سيفقد ${toRemove?.name || toRemove?.email || 'العضو'} الوصول إلى الحساب فورًا.`}
+        confirmLabel="إزالة"
+      />
 
-                  {review.overall_summary && (
-                    <p className="text-sm text-slate-500 bg-[#F8FAFC] rounded-lg px-3 py-2">{review.overall_summary}</p>
-                  )}
-
-                  {/* Per-member items */}
-                  <div className="space-y-3">
-                    {(review.ai_review_items || []).map((item: any) => (
-                      <div key={item.id} className="border border-slate-200 rounded-xl p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-full bg-[#F8FAFC] border border-slate-200 flex items-center justify-center text-xs font-bold text-slate-700">
-                              {(item.member_name || '?')[0].toUpperCase()}
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium text-slate-900">{item.member_name}</p>
-                              <p className="text-[10px] text-slate-400">{item.messages_count} messages</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className={clsx('text-lg font-bold',
-                              item.score_overall >= 8 ? 'text-brand-500' : item.score_overall >= 6 ? 'text-yellow-400' : 'text-red-400'
-                            )}>
-                              {item.score_overall ? `${Number(item.score_overall).toFixed(1)}/10` : '—'}
-                            </span>
-                            <button onClick={() => { setCommentModal({ itemId: item.id, current: item.manual_comment || '' }); setCommentText(item.manual_comment || '') }}
-                              className="btn-secondary text-xs py-1 px-2">
-                              {item.manual_comment ? 'Edit note' : '+ Add note'}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Score breakdown */}
-                        <div className="grid grid-cols-3 gap-1.5">
-                          {[
-                            ['Accuracy', item.score_accuracy],
-                            ['Professional', item.score_professionalism],
-                            ['Clarity', item.score_clarity],
-                            ['Empathy', item.score_empathy],
-                            ['Helpfulness', item.score_helpfulness],
-                            ['Grammar', item.score_grammar],
-                          ].map(([label, score]) => (
-                            <div key={label as string} className="bg-[#F8FAFC] rounded-lg px-2 py-1.5 text-center">
-                              <p className="text-[10px] text-slate-400">{label}</p>
-                              <p className={clsx('text-xs font-bold',
-                                (score as number) >= 8 ? 'text-brand-500' : (score as number) >= 6 ? 'text-yellow-400' : 'text-red-400'
-                              )}>{score ? Number(score).toFixed(1) : '—'}</p>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Strengths & Issues */}
-                        {item.strengths?.length > 0 && (
-                          <div>
-                            <p className="text-xs font-medium text-brand-500 mb-1">✓ Strengths</p>
-                            {item.strengths.map((s: string) => <p key={s} className="text-xs text-slate-500 ml-3">• {s}</p>)}
-                          </div>
-                        )}
-                        {item.issues?.length > 0 && (
-                          <div>
-                            <p className="text-xs font-medium text-red-400 mb-1">✗ Issues</p>
-                            {item.issues.map((s: string) => <p key={s} className="text-xs text-slate-500 ml-3">• {s}</p>)}
-                          </div>
-                        )}
-                        {item.suggested_reply && (
-                          <div className="bg-blue-50/30 border border-blue-200/50 rounded-lg px-3 py-2">
-                            <p className="text-xs font-medium text-blue-500 mb-1">💡 Suggested Better Reply</p>
-                            <p className="text-xs text-slate-600">{item.suggested_reply}</p>
-                          </div>
-                        )}
-                        {item.manual_comment && (
-                          <div className="bg-yellow-50/30 border border-yellow-200/50 rounded-lg px-3 py-2">
-                            <p className="text-xs font-medium text-yellow-600 mb-1">📝 Manager Note</p>
-                            <p className="text-xs text-slate-600">{item.manual_comment}</p>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            // ── Member View ─────────────────────────────────
-            <div className="space-y-4">
-              {/* Stats */}
-              {reviewsData?.stats && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="card text-center">
-                    <p className={clsx('text-3xl font-bold mb-1',
-                      (reviewsData.stats.avg_score || 0) >= 8 ? 'text-brand-500' : (reviewsData.stats.avg_score || 0) >= 6 ? 'text-yellow-400' : 'text-red-400'
-                    )}>
-                      {reviewsData.stats.avg_score ?? '—'}
-                    </p>
-                    <p className="text-xs text-slate-400">Average Score</p>
-                  </div>
-                  <div className="card text-center">
-                    <p className="text-3xl font-bold text-slate-900 mb-1">{reviewsData.stats.review_count}</p>
-                    <p className="text-xs text-slate-400">Total Reviews</p>
-                  </div>
-                  {reviewsData.stats.top_strengths?.slice(0,3).map((s: any) => (
-                    <div key={s.text} className="px-3 py-2 bg-brand-50/30 border border-brand-200/30 rounded-xl">
-                      <p className="text-xs text-brand-500">✓ {s.text}</p>
-                    </div>
-                  ))}
-                  {reviewsData.stats.top_issues?.slice(0,3).map((s: any) => (
-                    <div key={s.text} className="px-3 py-2 bg-red-50/30 border border-red-200/30 rounded-xl">
-                      <p className="text-xs text-red-400">↓ {s.text}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Review items */}
-              {(reviewsData?.items || []).length === 0 ? (
-                <div className="card text-center py-12">
-                  <p className="text-slate-400 text-sm">No reviews yet. Keep up the good work!</p>
-                </div>
-              ) : (reviewsData?.items || []).map((item: any) => (
-                <div key={item.id} className="card space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-slate-900 text-sm">
-                        {item.ai_reviews?.contacts?.name || item.ai_reviews?.contacts?.phone || 'Customer'}
-                      </p>
-                      <p className="text-[10px] text-slate-400">
-                        {item.ai_reviews?.reviewed_at ? new Date(item.ai_reviews.reviewed_at).toLocaleDateString() : ''} · {item.messages_count} messages
-                      </p>
-                    </div>
-                    <span className={clsx('text-xl font-bold',
-                      item.score_overall >= 8 ? 'text-brand-500' : item.score_overall >= 6 ? 'text-yellow-400' : 'text-red-400'
-                    )}>
-                      {item.score_overall ? `${Number(item.score_overall).toFixed(1)}/10` : '—'}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {[
-                      ['Accuracy', item.score_accuracy],
-                      ['Professional', item.score_professionalism],
-                      ['Clarity', item.score_clarity],
-                      ['Empathy', item.score_empathy],
-                      ['Helpfulness', item.score_helpfulness],
-                      ['Grammar', item.score_grammar],
-                    ].map(([label, score]) => (
-                      <div key={label as string} className="bg-[#F8FAFC] rounded-lg px-2 py-1.5 text-center">
-                        <p className="text-[10px] text-slate-400">{label}</p>
-                        <p className={clsx('text-xs font-bold',
-                          (score as number) >= 8 ? 'text-brand-500' : (score as number) >= 6 ? 'text-yellow-400' : 'text-red-400'
-                        )}>{score ? Number(score).toFixed(1) : '—'}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {item.strengths?.length > 0 && (
-                    <div>
-                      <p className="text-xs font-medium text-brand-500 mb-1">✓ Strengths</p>
-                      {item.strengths.map((s: string) => <p key={s} className="text-xs text-slate-500 ml-3">• {s}</p>)}
-                    </div>
-                  )}
-                  {item.issues?.length > 0 && (
-                    <div>
-                      <p className="text-xs font-medium text-red-400 mb-1">Areas to Improve</p>
-                      {item.issues.map((s: string) => <p key={s} className="text-xs text-slate-500 ml-3">• {s}</p>)}
-                    </div>
-                  )}
-                  {item.suggested_reply && (
-                    <div className="bg-blue-50/30 border border-blue-200/50 rounded-lg px-3 py-2">
-                      <p className="text-xs font-medium text-blue-500 mb-1">💡 Better Reply Suggestion</p>
-                      <p className="text-xs text-slate-600">{item.suggested_reply}</p>
-                    </div>
-                  )}
-                  {item.coaching_notes && (
-                    <div className="bg-purple-50/30 border border-purple-200/30 rounded-lg px-3 py-2">
-                      <p className="text-xs font-medium text-purple-500 mb-1">🎯 Coaching</p>
-                      <p className="text-xs text-slate-600">{item.coaching_notes}</p>
-                    </div>
-                  )}
-                  {item.manual_comment && (
-                    <div className="bg-yellow-50/30 border border-yellow-200/50 rounded-lg px-3 py-2">
-                      <p className="text-xs font-medium text-yellow-600 mb-1">📝 Manager Note</p>
-                      <p className="text-xs text-slate-600">{item.manual_comment}</p>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Manual Comment Modal */}
-          {commentModal && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
-                <h3 className="font-display font-semibold text-slate-900 mb-3">Add Manager Note</h3>
-                <textarea
-                  value={commentText}
-                  onChange={e => setCommentText(e.target.value)}
-                  rows={4}
-                  className="input resize-none w-full mb-4"
-                  placeholder="Add coaching feedback, praise, or improvement notes..."
-                />
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => commentMut.mutate({ item_id: commentModal.itemId, manual_comment: commentText })}
-                    disabled={commentMut.isLoading}
-                    className="btn-primary flex-1"
-                  >
-                    {commentMut.isLoading ? 'Saving...' : 'Save Note'}
-                  </button>
-                  <button onClick={() => setCommentModal(null)} className="btn-secondary">Cancel</button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      <NoteModal
+        open={!!commentModal}
+        onClose={() => setCommentModal(null)}
+        value={commentText}
+        onChange={setCommentText}
+        saving={commentMut.isLoading}
+        onSave={() => commentModal && commentMut.mutate({ item_id: commentModal.itemId, manual_comment: commentText })}
+      />
     </DashboardLayout>
-
-  )
-}
-
-// ── StatCards: member's own performance view ──────────────
-function StatCards({ stats }: { stats: any }) {
-  if (!stats) return null
-  const cards = [
-    {
-      label: 'Conversations Handled',
-      value: stats.conversations_handled ?? 0,
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
-        </svg>
-      ),
-      color: 'text-blue-600 bg-blue-50',
-    },
-    {
-      label: 'Messages Sent',
-      value: stats.messages_sent ?? 0,
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-        </svg>
-      ),
-      color: 'text-brand-500 bg-brand-50',
-    },
-    {
-      label: 'Response Rate',
-      value: stats.response_rate !== null && stats.response_rate !== undefined ? `${stats.response_rate}%` : '—',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/>
-        </svg>
-      ),
-      color: 'text-purple-600 bg-purple-50',
-    },
-    {
-      label: 'Avg Response Time',
-      value: stats.avg_response_minutes !== null && stats.avg_response_minutes !== undefined
-        ? stats.avg_response_minutes < 60 ? `${stats.avg_response_minutes}m` : `${Math.round(stats.avg_response_minutes / 60)}h`
-        : '—',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M15 1H9v2h6V1zm-4 13h2V8h-2v6zm8.03-6.61l1.42-1.42c-.43-.51-.9-.99-1.41-1.41l-1.42 1.42C16.07 4.74 14.12 4 12 4c-4.97 0-9 4.03-9 9s4.02 9 9 9 9-4.03 9-9c0-2.12-.74-4.07-1.97-5.61zM12 20c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
-        </svg>
-      ),
-      color: 'text-yellow-600 bg-yellow-50',
-    },
-  ]
-  return (
-    <div className="grid grid-cols-2 gap-3">
-      {cards.map(c => (
-        <div key={c.label} className="bg-white border border-slate-200 rounded-xl p-4">
-          <div className={clsx('w-9 h-9 rounded-lg flex items-center justify-center mb-3', c.color)}>
-            {c.icon}
-          </div>
-          <p className="text-2xl font-bold text-slate-900">{c.value}</p>
-          <p className="text-xs text-slate-500 mt-0.5">{c.label}</p>
-        </div>
-      ))}
-    </div>
   )
 }

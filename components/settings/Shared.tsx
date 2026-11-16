@@ -239,6 +239,30 @@ export function PlanGate({ feature, children }: { feature: string; children: Rea
   return <>{children}</>
 }
 
+/** Icon tile + title + subtitle for use inside a padded Card. */
+export function SectionTitle({ icon: Icon, title, subtitle, action, className }: {
+  icon?: React.ElementType
+  title: React.ReactNode
+  subtitle?: React.ReactNode
+  action?: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn('mb-4 flex items-center gap-3', className)}>
+      {Icon && (
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-chip text-brand-ink">
+          <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <h2 className="text-[17px] font-semibold leading-snug text-ink">{title}</h2>
+        {subtitle && <p className="mt-0.5 text-[13px] text-muted">{subtitle}</p>}
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
+    </div>
+  )
+}
+
 /** Axios error → message string. */
 export function apiError(e: unknown, fallback = 'حدث خطأ، حاول مرة أخرى'): string {
   const err = e as { response?: { data?: { error?: string; message?: string } }; message?: string }
