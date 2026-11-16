@@ -2,15 +2,16 @@ import Head from 'next/head'
 import { ArrowPathIcon, Squares2X2Icon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui'
 import { ErrorScreen } from '@/components/marketing/ErrorScreen'
-import { usePublicLang } from '@/components/marketing/usePublicLang'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/public/marketing'
 
 export default function Custom500() {
-  const { lang, dir, t } = usePublicLang()
+  const { t, lang, dir } = useT(messages)
   return (
     <>
       <Head>
         <link rel="icon" href="/brand/favicon-32.png" />
-        <title>{`500 – ${t('mk_500_title')} | WABEK`}</title>
+        <title>{t('title_500', { name: 'WABEK' })}</title>
       </Head>
       <ErrorScreen
         code="500"

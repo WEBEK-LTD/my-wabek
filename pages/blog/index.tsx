@@ -6,17 +6,19 @@ import { useWhiteLabel } from '@/hooks/useWhiteLabel'
 import { EmptyState } from '@/components/ui'
 import { cn } from '@/components/ui/utils'
 import { MarketingPage, PageHero, Section } from '@/components/marketing/MarketingPage'
-import { CategoryPill, PostCard, PostCover, PostMeta, postView } from '@/components/marketing/blog'
-import { usePublicLang } from '@/components/marketing/usePublicLang'
+import { CategoryPill, PostCard, PostCover, PostMeta, blogT, postView } from '@/components/marketing/blog'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/public/blog'
 import { posts } from '@/lib/blog-posts'
 
 export default function BlogIndex() {
   const { brandName } = useWhiteLabel()
   const name = brandName || 'WABEK'
-  const { lang, setLang, dir, t } = usePublicLang()
+  const { t, lang, dir } = useT(messages)
+  const tk = useMemo(() => blogT(lang), [lang])
   const [cat, setCat] = useState<string>('all')
 
-  const views = useMemo(() => posts.map((p, i) => postView(p, i, t)), [t])
+  const views = useMemo(() => posts.map((p, i) => postView(p, i, tk)), [tk])
   const categories = useMemo(() => Array.from(new Set(views.map(v => v.keys.cat))), [views])
   const featured = views[0]
   const filtered = cat === 'all' ? views.slice(1) : views.filter(v => v.keys.cat === cat)
@@ -32,7 +34,7 @@ export default function BlogIndex() {
         active="/blog"
         lang={lang}
         dir={dir}
-        onLangChange={setLang}
+       
         hero={<PageHero eyebrow={`${name} · ${t('blog_title')}`} title={t('mk_blog_h1')} subtitle={t('blog_subtitle')} className="pb-28 sm:pb-32" />}
       >
         {!featured ? (
@@ -56,7 +58,7 @@ export default function BlogIndex() {
                   <h2 className="text-2xl font-bold leading-snug text-ink group-hover:text-link sm:text-[28px]">{featured.title}</h2>
                   <p className="text-[15px] leading-[1.85] text-body">{featured.excerpt}</p>
                   <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                    <PostMeta post={featured.post} lang={lang} t={t} />
+                    <PostMeta post={featured.post} />
                     <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-link">
                       {t('blog_read')}
                       <ArrowLeftIcon className="h-4 w-4 transition-transform group-hover:-translate-x-0.5 ltr:rotate-180 ltr:group-hover:translate-x-0.5" aria-hidden="true" />
@@ -80,7 +82,7 @@ export default function BlogIndex() {
                       cat === c ? 'bg-[#04282C] text-[#EAF7F5] dark:bg-[#EAF7F5] dark:text-[#04282C]' : 'border border-line bg-surface text-muted hover:border-line-strong hover:text-ink',
                     )}
                   >
-                    {c === 'all' ? t('blog_all') : t(c)}
+                    {c === 'all' ? t('blog_all') : tk(c)}
                   </button>
                 ))}
               </div>
@@ -89,7 +91,7 @@ export default function BlogIndex() {
               ) : (
                 <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                   {filtered.map(v => (
-                    <li key={v.post.slug}><PostCard view={v} lang={lang} t={t} /></li>
+                    <li key={v.post.slug}><PostCard view={v} /></li>
                   ))}
                 </ul>
               )}

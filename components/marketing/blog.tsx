@@ -3,6 +3,14 @@ import Link from 'next/link'
 import { ClockIcon } from '@heroicons/react/24/outline'
 import type { BlogPost } from '@/lib/blog-posts'
 import { cn } from '@/components/ui/utils'
+import { localeFor, translate, useT } from '@/lib/i18n-local'
+import messages from '@/locales/public/blog'
+
+type BlogKey = keyof typeof messages.en
+/** Translator for the blog dictionary that accepts the dynamic post keys. */
+export function blogT(lang: string) {
+  return (k: string) => (k in messages.en ? translate(messages, lang, k as BlogKey) : k)
+}
 
 /** Translation keys per post, by position in lib/blog-posts.ts. */
 export const POST_KEYS = [
@@ -48,19 +56,24 @@ export function postView(post: BlogPost, index: number, t: (k: string) => string
 export function formatPostDate(raw: string, lang: string) {
   const d = new Date(raw)
   if (Number.isNaN(d.getTime())) return raw
-  return d.toLocaleDateString(lang === 'ar' ? 'ar-EG' : lang, { year: 'numeric', month: 'long', day: 'numeric' })
+  try {
+    return new Intl.DateTimeFormat(localeFor(lang), { year: 'numeric', month: 'long', day: 'numeric' }).format(d)
+  } catch {
+    return raw
+  }
 }
 
 export function CategoryPill({ cat, label, className }: { cat: string; label: string; className?: string }) {
   return <span className={cn('inline-flex w-fit rounded-full px-2.5 py-0.5 text-xs font-semibold', CAT_TONE[cat] || 'bg-chip text-chip-ink', className)}>{label}</span>
 }
 
-export function PostMeta({ post, lang, t, className }: { post: BlogPost; lang: string; t: (k: string) => string; className?: string }) {
+export function PostMeta({ post, className }: { post: BlogPost; className?: string }) {
+  const { t, lang, fmtNumber } = useT(messages)
   return (
     <span className={cn('flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted', className)}>
       <time dateTime={new Date(post.date).toString() !== 'Invalid Date' ? new Date(post.date).toISOString().slice(0, 10) : undefined}>{formatPostDate(post.date, lang)}</time>
       <span aria-hidden="true">·</span>
-      <span className="inline-flex items-center gap-1"><ClockIcon className="h-3.5 w-3.5" aria-hidden="true" />{post.readTime} {t('blog_min_read')}</span>
+      <span className="inline-flex items-center gap-1"><ClockIcon className="h-3.5 w-3.5" aria-hidden="true" />{fmtNumber(post.readTime)} {t('blog_min_read')}</span>
     </span>
   )
 }
@@ -80,7 +93,7 @@ export function PostCover({ post, alt, className }: { post: BlogPost; alt: strin
   )
 }
 
-export function PostCard({ view, lang, t, headingLevel: H = 'h3' }: { view: PostView; lang: string; t: (k: string) => string; headingLevel?: 'h2' | 'h3' }) {
+export function PostCard({ view, headingLevel: H = 'h3' }: { view: PostView; headingLevel?: 'h2' | 'h3' }) {
   return (
     <Link
       href={`/blog/${view.post.slug}`}
@@ -91,7 +104,7 @@ export function PostCard({ view, lang, t, headingLevel: H = 'h3' }: { view: Post
         <CategoryPill cat={view.keys.cat} label={view.category} />
         <H className="text-base font-semibold leading-snug text-ink group-hover:text-link">{view.title}</H>
         <p className="line-clamp-2 text-sm leading-relaxed text-body">{view.excerpt}</p>
-        <PostMeta post={view.post} lang={lang} t={t} className="mt-auto pt-1" />
+        <PostMeta post={view.post} className="mt-auto pt-1" />
       </div>
     </Link>
   )

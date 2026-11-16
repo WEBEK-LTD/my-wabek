@@ -4,12 +4,13 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { v4 as uuidv4 } from 'uuid'
 import { Button, Spinner } from '@/components/ui'
 import { ErrorScreen } from '@/components/marketing/ErrorScreen'
-import { usePublicLang } from '@/components/marketing/usePublicLang'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/public/marketing'
 import { emitWebhookEvent } from '@/lib/outgoing-webhooks'
 
 // Visual fallback only: getServerSideProps below always answers with a redirect.
 export default function RedirectPage() {
-  const { lang, dir, t } = usePublicLang()
+  const { t, lang, dir } = useT(messages)
   return (
     <>
       <Head>

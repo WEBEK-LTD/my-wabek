@@ -1,7 +1,10 @@
 import React from 'react'
+import Link from 'next/link'
 import PublicNav from '@/components/PublicNav'
 import PublicFooter from '@/components/PublicFooter'
 import { cn } from '@/components/ui/utils'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/public/marketing'
 
 export interface MarketingPageProps {
   /** Path highlighted in the nav (e.g. "/pricing"). */
@@ -29,13 +32,14 @@ export interface MarketingPageProps {
  *   </MarketingPage>
  */
 export function MarketingPage({ active, lang, dir, onLangChange, hero, rings, children, className }: MarketingPageProps) {
+  const { t } = useT(messages)
   return (
     <div dir={dir} lang={lang} className={cn('flex min-h-screen flex-col bg-canvas text-ink', className)}>
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-50 focus:rounded-btn focus:bg-surface focus:px-4 focus:py-2 focus:text-ink focus:shadow-dropdown"
       >
-        {dir === 'rtl' ? 'انتقل إلى المحتوى' : 'Skip to content'}
+        {t('skip_to_content')}
       </a>
       {hero ? (
         <div className="relative overflow-x-clip bg-deep-landing text-deep-ink print:hidden">
@@ -56,10 +60,41 @@ export function MarketingPage({ active, lang, dir, onLangChange, hero, rings, ch
       <main id="main" className="flex-1">
         {children}
       </main>
+      <CompanyStrip />
       <div className="print:hidden">
         <PublicFooter lang={lang} onLangChange={onLangChange || null} />
       </div>
     </div>
+  )
+}
+
+/**
+ * CompanyStrip — the company line and legal links that closed every page of
+ * the original public site (old PublicFooter copy), shown above the footer.
+ */
+export function CompanyStrip() {
+  const { t } = useT(messages)
+  const links: [string, string][] = [
+    [t('privacy'), '/legal/privacy'],
+    [t('terms'), '/legal/terms'],
+    [t('refund'), '/legal/refund'],
+    [t('license'), '/legal/license'],
+    [t('system_status'), '/status'],
+  ]
+  return (
+    <section aria-label={t('footer_legal_nav')} className="border-t border-line-soft print:hidden">
+      <div className="mx-auto flex max-w-[1280px] flex-col gap-4 px-4 py-6 text-[13px] text-muted sm:px-8 lg:flex-row lg:items-center lg:justify-between">
+        <p className="max-w-2xl leading-relaxed">{t('footer_desc')}</p>
+        <div className="flex flex-col gap-2 lg:items-end">
+          <nav aria-label={t('footer_legal_nav')} className="flex flex-wrap gap-x-5 gap-y-1.5">
+            {links.map(([label, href]) => (
+              <Link key={href} href={href} className="text-muted transition-colors hover:text-ink">{label}</Link>
+            ))}
+          </nav>
+          <span>{t('footer_built_by')}</span>
+        </div>
+      </div>
+    </section>
   )
 }
 

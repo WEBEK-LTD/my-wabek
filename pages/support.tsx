@@ -6,20 +6,21 @@ import { useWhiteLabel } from '@/hooks/useWhiteLabel'
 import { Button, Field, Input, Textarea } from '@/components/ui'
 import { MarketingPage, PageHero, Section } from '@/components/marketing/MarketingPage'
 import { FaqList, IconTile } from '@/components/marketing/Blocks'
-import { usePublicLang } from '@/components/marketing/usePublicLang'
+import { useT } from '@/lib/i18n-local'
+import messages from '@/locales/public/support'
 
 const CHANNELS = [
-  { icon: BookOpenIcon, tone: 'brand' as const, tk: 'support_docs_title', dk: 'support_docs_desc', cta: 'support_docs_cta', href: '/docs' },
-  { icon: ChatBubbleLeftRightIcon, tone: 'success' as const, tk: 'support_chat_title', dk: 'support_chat_desc', cta: 'support_chat_cta', href: '#contact' },
-  { icon: EnvelopeIcon, tone: 'violet' as const, tk: 'support_email_title', dk: 'support_email_desc', cta: 'support_email_cta', href: '#contact' },
-]
+  { icon: BookOpenIcon, tone: 'brand', tk: 'support_docs_title', dk: 'support_docs_desc', cta: 'support_docs_cta', href: '/docs' },
+  { icon: ChatBubbleLeftRightIcon, tone: 'success', tk: 'support_chat_title', dk: 'support_chat_desc', cta: 'support_chat_cta', href: '#contact' },
+  { icon: EnvelopeIcon, tone: 'violet', tk: 'support_email_title', dk: 'support_email_desc', cta: 'support_email_cta', href: '#contact' },
+] as const
 
-const FAQS = [1, 2, 3, 4, 5, 6]
+const FAQS = [1, 2, 3, 4, 5, 6] as const
 
 export default function SupportPage() {
   const { brandName } = useWhiteLabel()
   const name = brandName || 'WABEK'
-  const { lang, setLang, dir, t } = usePublicLang()
+  const { t, lang, dir } = useT(messages)
   const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' })
   const [formLoading, setFormLoading] = useState(false)
   const [formDone, setFormDone] = useState(false)
@@ -30,13 +31,13 @@ export default function SupportPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.name || !form.email || !form.subject || !form.message) { setFormError(t('mk_required')); return }
+    if (!form.name || !form.email || !form.subject || !form.message) { setFormError(t('required')); return }
     setFormLoading(true); setFormError('')
     try {
       await axios.post('/api/status/contact', form)
       setFormDone(true)
     } catch (err: any) {
-      setFormError(err?.response?.data?.error || t('mk_send_failed'))
+      setFormError(err?.response?.data?.error || t('send_failed'))
     }
     setFormLoading(false)
   }
@@ -51,7 +52,6 @@ export default function SupportPage() {
         active="/support"
         lang={lang}
         dir={dir}
-        onLangChange={setLang}
         hero={<PageHero eyebrow={t('support')} title={t('support_title')} subtitle={t('support_subtitle')} className="pb-28 sm:pb-32" />}
       >
         {/* Channels */}
@@ -80,8 +80,8 @@ export default function SupportPage() {
                 <span className="flex h-16 w-16 items-center justify-center rounded-full bg-success-bg text-success">
                   <CheckCircleIcon className="h-9 w-9" aria-hidden="true" />
                 </span>
-                <p className="text-lg font-semibold text-ink">{t('mk_support_sent_title')}</p>
-                <p className="text-sm text-body">{t('mk_support_sent_body')}</p>
+                <p className="text-lg font-semibold text-ink">{t('sent_title')}</p>
+                <p className="text-sm text-body">{t('sent_body')}</p>
               </div>
             ) : (
               <form onSubmit={submit} noValidate className="flex flex-col gap-4">
@@ -101,7 +101,7 @@ export default function SupportPage() {
                 </Field>
                 {formError && <p role="alert" className="rounded-btn bg-danger-bg px-3.5 py-2.5 text-sm text-danger">{formError}</p>}
                 <Button type="submit" size="lg" loading={formLoading} icon={PaperAirplaneIcon} className="rtl:[&_svg]:-scale-x-100">
-                  {formLoading ? t('mk_sending') : t('support_send')}
+                  {formLoading ? t('sending') : t('support_send')}
                 </Button>
               </form>
             )}
