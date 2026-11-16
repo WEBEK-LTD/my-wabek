@@ -128,6 +128,7 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          set -o pipefail
           xcodebuild -workspace WABEK.xcworkspace -scheme WABEK -configuration Release \
             -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/WABEK.xcarchive" \
             -allowProvisioningUpdates \
