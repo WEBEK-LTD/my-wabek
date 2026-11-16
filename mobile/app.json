@@ -60,7 +60,8 @@
       [
         "expo-notifications",
         {
-          "color": "#12B5BE"
+          "color": "#12B5BE",
+          "mode": "production"
         }
       ]
     ],
