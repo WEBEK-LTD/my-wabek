@@ -14,7 +14,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const db = supabaseAdmin()
   // 2FA settings always apply to the logged-in person's own login.
   const selfId = user.actualUserId || user.userId
-  const { otp_mode, current_password } = req.body || {}
+  const body = req.body || {}
+  const otp_mode = body.otp_mode ?? body.otpMode
+  const current_password = body.current_password ?? body.currentPassword
 
   if (!(MODES as readonly string[]).includes(otp_mode)) {
     return res.status(400).json({ error: 'Invalid OTP mode' })
@@ -32,7 +34,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Current password is required to weaken two-factor authentication', requiresPassword: true })
     }
     if (!(await comparePassword(current_password, dbUser.password_hash))) {
-      return res.status(401).json({ error: 'Current password is incorrect', requiresPassword: true })
+      // 400, not 401: the dashboard treats every 401 as an expired session.
+      return res.status(400).json({ error: 'Current password is incorrect', code: 'wrong_password', requiresPassword: true })
     }
   }
 
