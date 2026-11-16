@@ -3,14 +3,19 @@ import { requireAdmin } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { sendEmail } from '@/lib/email'
 import { smartSend, smartSendWAWeb, resolveProvider } from '@/lib/wa-smart-send'
+import { escapeHtml } from '@/lib/security'
+import { logAction, getClientIp } from '@/lib/middleware'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).end()
   const admin = await requireAdmin(req, res)
   if (!admin) return
 
-  const { ticket_id, content } = req.body
-  if (!ticket_id || !content) return res.status(400).json({ error: 'ticket_id and content required' })
+  const { ticket_id, content } = req.body || {}
+  if (typeof ticket_id !== 'string' || !ticket_id || typeof content !== 'string' || !content.trim()) {
+    return res.status(400).json({ error: 'ticket_id and content required' })
+  }
+  if (content.length > 10000) return res.status(400).json({ error: 'Reply is too long' })
 
   const db = supabaseAdmin()
 
@@ -29,10 +34,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const ticketUser = ticket.users as any
   const ticketNum = ticket.ticket_number
 
-  // Save admin message
-  await db.from('support_messages').insert({
+  // Save admin message (keep its id so we can attach the WA message id later)
+  const { data: savedMsg, error: msgErr } = await db.from('support_messages').insert({
     ticket_id, sender_type: 'admin', sender_id: admin.userId, content,
-  })
+  }).select('id').single()
+  if (msgErr) {
+    console.error('[support reply] saving message failed:', msgErr.message)
+    return res.status(500).json({ error: 'Failed to save reply' })
+  }
 
   await db.from('support_tickets').update({
     status: 'pending', updated_at: new Date().toISOString(),
@@ -43,16 +52,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // ── 1. Email ──────────────────────────────────────────────
   if (ticketUser?.email) {
     try {
+      const num = escapeHtml(ticketNum)
+      const subj = escapeHtml(ticket.subject)
       await sendEmail({
         to: ticketUser.email,
-        subject: `We replied to your ticket #${ticketNum} — ${ticket.subject}`,
+        subject: `We replied to your ticket #${ticketNum} — ${String(ticket.subject || '').replace(/[\r\n]+/g, ' ')}`,
         html: `<div style="font-family:sans-serif;max-width:560px;margin:0 auto">
-          <h2>We replied to your ticket #${ticketNum} 💬</h2>
-          <p>Hi ${ticketUser.name || 'there'},</p>
+          <h2>We replied to your ticket #${num} 💬</h2>
+          <p>Hi ${escapeHtml(ticketUser.name || 'there')},</p>
           <div style="background:#f0fdf4;border-left:4px solid #25D366;padding:16px;margin:16px 0;border-radius:0 8px 8px 0">
-            <p style="margin:0;white-space:pre-wrap">${content}</p>
+            <p style="margin:0;white-space:pre-wrap">${escapeHtml(content)}</p>
           </div>
-          <p><strong>Ticket:</strong> #${ticketNum} — ${ticket.subject}</p>
+          <p><strong>Ticket:</strong> #${num} — ${subj}</p>
         </div>`,
       })
       results.email = 'sent'
@@ -136,17 +147,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (waResult.messageId) {
           await db.from('support_messages')
             .update({ wa_message_id: waResult.messageId })
-            .eq('ticket_id', ticket_id)
-            .eq('sender_type', 'admin')
-            .order('created_at', { ascending: false })
-            .limit(1)
+            .eq('id', savedMsg.id)
           results.whatsapp = `sent via ${waResult.method}`
         } else {
-          results.whatsapp = `failed: ${waResult.error || 'unknown'}`
+          console.error('[support reply] WA send failed:', waResult.error)
+          results.whatsapp = 'failed'
         }
       } catch (e: any) {
         console.error(`[support reply] WA error:`, e?.message)
-        results.whatsapp = `failed: ${e?.message}`
+        results.whatsapp = 'failed'
       }
     } else {
       results.whatsapp = 'skipped: no WhatsApp instance'
@@ -155,5 +164,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     results.whatsapp = 'skipped: no phone number'
   }
 
+  await logAction({ userId: admin.userId, action: 'admin_support_reply', resource: 'support_ticket', resourceId: ticket_id, details: { status: 'pending' }, ipAddress: getClientIp(req) })
   return res.status(200).json({ success: true, results })
 }

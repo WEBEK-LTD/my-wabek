@@ -1,6 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { requireAdmin } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { signState } from '@/lib/security'
+import { logAction, getClientIp } from '@/lib/middleware'
 
 const GSC_KEY = 'gsc_oauth'
 const SCOPES = 'https://www.googleapis.com/auth/webmasters.readonly'
@@ -36,8 +38,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (action === 'connect') {
       if (!clientId) return res.status(400).json({ error: 'GOOGLE_CLIENT_ID not set in environment variables' })
-      const adminAny = admin as any
-      const state = Buffer.from(JSON.stringify({ ts: Date.now(), admin: adminAny.id || adminAny.sub || 'admin' })).toString('base64')
+      // Signed, expiring state bound to this admin; verified in gsc-callback.
+      const state = signState({ purpose: 'gsc', uid: admin.userId }, 600)
       const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth')
       authUrl.searchParams.set('client_id', clientId)
       authUrl.searchParams.set('redirect_uri', redirectUri)
@@ -51,6 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (action === 'disconnect') {
       await db.from('system_settings').delete().eq('key', GSC_KEY)
+      await logAction({ userId: admin.userId, action: 'admin_gsc_disconnect', resource: 'system_settings', ipAddress: getClientIp(req) })
       return res.status(200).json({ success: true })
     }
 
@@ -71,7 +74,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }),
       })
       const tokens = await tokenRes.json()
-      if (!tokens.access_token) return res.status(400).json({ error: 'Refresh failed', detail: tokens })
+      if (!tokens.access_token) {
+        console.error('[gsc-oauth] refresh failed:', tokens?.error)
+        return res.status(400).json({ error: 'Refresh failed' })
+      }
       const updated = {
         ...oauth,
         access_token: tokens.access_token,

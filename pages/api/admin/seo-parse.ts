@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { requireAdmin } from '@/lib/auth'
+import { safeFetch } from '@/lib/security'
 
 interface ParseResult {
   path: string
@@ -59,20 +60,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!admin) return
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { url } = req.body
-  if (!url) return res.status(400).json({ error: 'url required' })
+  const { url } = req.body || {}
+  if (typeof url !== 'string' || !url) return res.status(400).json({ error: 'url required' })
 
   try {
-    const response = await fetch(url, {
+    // Public http(s) hosts only; every redirect hop is re-validated; 10s / 3MB caps.
+    const response = await safeFetch(url, {
       headers: { 'User-Agent': 'WABEK-SEO-Parser/1.0' },
-      signal: AbortSignal.timeout(10000),
+      timeoutMs: 10000,
+      maxBytes: 3 * 1024 * 1024,
     })
 
-    if (!response.ok) {
+    if (response.status < 200 || response.status >= 300) {
       return res.status(200).json({ error: `HTTP ${response.status}`, path: url })
     }
 
-    const html = await response.text()
+    const html = response.body.toString('utf8')
     const path = new URL(url).pathname
 
     // Title
@@ -136,6 +139,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json(result)
   } catch (err: any) {
-    return res.status(200).json({ error: err.message, path: url })
+    console.error('[seo-parse] fetch failed:', err?.message)
+    return res.status(200).json({ error: 'Failed to fetch page (URL must be a public http(s) address)', path: url })
   }
 }
