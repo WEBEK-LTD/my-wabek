@@ -1,10 +1,12 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
-import { requireAuth } from '@/lib/auth'
+import { requireAuth, requireOwnerOrRole } from '@/lib/auth'
 import { BillingError, BillingCycle, createCheckoutSession, createPortalSession, getStripe } from '@/lib/stripe'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireAuth(req, res)
+  // GET is readable by team members; buying / managing billing (POST) is
+  // owner-only.
+  const user = req.method === 'POST' ? await requireOwnerOrRole(req, res) : await requireAuth(req, res)
   if (!user) return
   const db = supabaseAdmin()
 
