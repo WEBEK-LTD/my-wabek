@@ -191,7 +191,7 @@ function SubAccountsContent() {
         </form>
       </Modal>
 
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         destructive
         open={!!toSuspend}
         onClose={() => setToSuspend(null)}

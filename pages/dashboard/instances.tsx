@@ -351,7 +351,7 @@ export default function InstancesPage() {
         refreshing={refreshQRMut.isLoading}
       />
 
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         destructive
         open={!!toDelete}
         onClose={() => setToDelete(null)}

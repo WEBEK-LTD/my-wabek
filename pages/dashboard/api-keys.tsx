@@ -236,7 +236,7 @@ function ApiKeysContent() {
         </div>
       </Modal>
 
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         destructive
         open={!!toRevoke}
         onClose={() => setToRevoke(null)}

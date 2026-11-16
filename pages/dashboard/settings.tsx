@@ -427,7 +427,7 @@ export default function SettingsPage() {
         </TabPanel>
       </div>
 
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         destructive
         open={!!toRemove}
         onClose={() => setToRemove(null)}
@@ -438,7 +438,7 @@ export default function SettingsPage() {
         confirmLabel={t('remove')}
       />
 
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         destructive
         open={logoutAllOpen}
         onClose={() => setLogoutAllOpen(false)}

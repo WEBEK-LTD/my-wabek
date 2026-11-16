@@ -89,6 +89,7 @@ export default defineMessages({
     disconnectTitle: 'Disconnect this store?',
     disconnectDesc: 'WhatsApp notifications for this store’s orders will stop until you reinstall the app.',
     disconnectConfirm: 'Disconnect store',
+    cancel: 'Cancel',
   },
   ar: {
     ev_order_placed: 'تأكيد الطلب',
@@ -177,6 +178,7 @@ export default defineMessages({
     disconnectTitle: 'فصل هذا المتجر؟',
     disconnectDesc: 'ستتوقف إشعارات واتساب لطلبات هذا المتجر حتى تعيد تثبيت التطبيق.',
     disconnectConfirm: 'فصل المتجر',
+    cancel: 'إلغاء',
   },
   fr: {
     ev_order_placed: 'Confirmation de commande',
@@ -265,6 +267,7 @@ export default defineMessages({
     disconnectTitle: 'Déconnecter cette boutique ?',
     disconnectDesc: 'Les notifications WhatsApp des commandes de cette boutique s’arrêteront jusqu’à la réinstallation de l’application.',
     disconnectConfirm: 'Déconnecter la boutique',
+    cancel: 'Annuler',
   },
   tr: {
     ev_order_placed: 'Sipariş onayı',
@@ -353,5 +356,6 @@ export default defineMessages({
     disconnectTitle: 'Bu mağazanın bağlantısı kesilsin mi?',
     disconnectDesc: 'Uygulamayı yeniden kurana kadar bu mağazanın siparişleri için WhatsApp bildirimleri duracak.',
     disconnectConfirm: 'Mağaza bağlantısını kes',
+    cancel: 'İptal',
   },
 })

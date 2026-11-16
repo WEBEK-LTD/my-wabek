@@ -666,10 +666,10 @@ function ResellerContent() {
         </div>
       </Modal>
 
-      <ConfirmDialog destructive open={!!toDeleteInvite} onClose={() => setToDeleteInvite(null)}
+      <ConfirmDialog cancelLabel={t('cancel')} destructive open={!!toDeleteInvite} onClose={() => setToDeleteInvite(null)}
         onConfirm={() => { if (toDeleteInvite) deleteInviteMut.mutate(toDeleteInvite.id) }} loading={deleteInviteMut.isLoading}
         title={t('deleteInviteTitle')} description={t('deleteInviteDesc')} confirmLabel={t('delete')} />
-      <ConfirmDialog destructive open={confirmDisconnect} onClose={() => setConfirmDisconnect(false)} onConfirm={disconnectStripe} loading={disconnecting}
+      <ConfirmDialog cancelLabel={t('cancel')} destructive open={confirmDisconnect} onClose={() => setConfirmDisconnect(false)} onConfirm={disconnectStripe} loading={disconnecting}
         title={t('disconnectTitle')} description={t('disconnectDesc')} confirmLabel={t('disconnect')} />
     </DashboardLayout>
   )

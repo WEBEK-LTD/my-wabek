@@ -361,7 +361,7 @@ export default function TeamPage() {
         )}
       </Modal>
 
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         open={!!roleChange}
         onClose={() => setRoleChange(null)}
         onConfirm={() => { if (roleChange) updateMut.mutate({ id: roleChange.member.id, role: roleChange.role }) }}
@@ -370,7 +370,7 @@ export default function TeamPage() {
         description={roleChange ? t('changeRoleDesc', { name: roleChange.member.name || roleChange.member.email, role: ROLE_META[roleChange.role] ? t(ROLE_META[roleChange.role].label) : roleChange.role }) : ''}
         confirmLabel={t('changeRoleConfirm')}
       />
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         destructive={toSuspend?.status === 'suspended'}
         open={!!toSuspend}
         onClose={() => setToSuspend(null)}
@@ -382,7 +382,7 @@ export default function TeamPage() {
           : t('reactivateDesc')}
         confirmLabel={toSuspend?.status === 'suspended' ? t('suspendConfirm') : t('reactivateConfirm')}
       />
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         destructive
         open={!!toRemove}
         onClose={() => setToRemove(null)}

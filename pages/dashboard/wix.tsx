@@ -330,7 +330,7 @@ export default function WixPage() {
         </TabPanel>
       </div>
 
-      <ConfirmDialog
+      <ConfirmDialog cancelLabel={t('cancel')}
         destructive
         open={!!toDisconnect}
         onClose={() => setToDisconnect(null)}
