@@ -106,7 +106,7 @@ export default function WHMCSPage() {
           }
         >
           <ul className="flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-deep-muted">
-            <li className="flex items-center gap-1.5"><ShieldCheckIcon className="h-4 w-4 text-brand-green" aria-hidden="true" />{t('heroPoint1')}</li>
+            <li className="flex items-center gap-1.5"><ShieldCheckIcon className="h-4 w-4 text-brand-green" aria-hidden="true" />{rich(t('heroPoint1'), { header: <code dir="ltr" className="font-mono">X-API-Key</code> })}</li>
             <li className="flex items-center gap-1.5"><ClockIcon className="h-4 w-4 text-brand-green" aria-hidden="true" />{t('heroPoint2')}</li>
             <li className="flex items-center gap-1.5"><BellAlertIcon className="h-4 w-4 text-brand-green" aria-hidden="true" />{t('heroPoint3')}</li>
           </ul>
@@ -194,7 +194,10 @@ export default function WHMCSPage() {
             </div>
             <Card>
               <h3 className="font-semibold text-ink">{t('mergeFields')}</h3>
-              <p className="mt-1 text-sm text-muted">{t('mergeFieldsDesc')}</p>
+              <p className="mt-1 text-sm text-muted">{rich(t('mergeFieldsDesc'), {
+                client_name: <code dir="ltr" className="font-mono">{'{client_name}'}</code>,
+                invoice_id: <code dir="ltr" className="font-mono">{'{invoice_id}'}</code>,
+              })}</p>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {MERGE_FIELDS.map(f => <code key={f} dir="ltr" className="rounded-md bg-chip px-2 py-0.5 font-mono text-xs text-chip-ink">{`{${f}}`}</code>)}
               </div>

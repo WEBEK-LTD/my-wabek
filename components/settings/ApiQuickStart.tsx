@@ -3,7 +3,7 @@ import { CodeBracketIcon } from '@heroicons/react/24/outline'
 import { Badge, Card, CardHeader, Tabs } from '@/components/ui'
 import { useT } from '@/lib/i18n-local'
 import messages from '@/locales/dashboard/api-keys'
-import { CodeBlock, CopyButton } from './Shared'
+import { CodeBlock, CopyButton, rich } from './Shared'
 
 const LANGS = [
   { id: 'curl', label: 'cURL' },
@@ -66,7 +66,7 @@ export function ApiQuickStart({ baseUrl, apiKey }: { baseUrl: string; apiKey: st
   const code = samples(baseUrl, apiKey)
   return (
     <Card padding="none">
-      <CardHeader icon={CodeBracketIcon} title={t('qsTitle')} subtitle={t('qsSubtitle')} divider />
+      <CardHeader icon={CodeBracketIcon} title={t('qsTitle')} subtitle={rich(t('qsSubtitle'), { header: <code dir="ltr" className="font-mono">X-API-Key</code> })} divider />
       <div className="space-y-4 p-5 sm:p-[22px]">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Tabs variant="segmented" size="sm" idPrefix="qs" aria-label={t('qsLangLabel')} value={lang} onChange={setLang} tabs={LANGS} />

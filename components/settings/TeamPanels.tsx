@@ -86,7 +86,7 @@ export function PerformancePanel({ perfData, perfLoading, perfFetching, refetchP
                 <TR key={m.id || i}>
                   <TD>
                     <div className="flex items-center gap-2.5">
-                      <Avatar name={m.name || m.email || '?'} size="sm" />
+                      <Avatar name={m.name === 'You (Owner)' ? t('youOwner') : (m.name || m.email || '?')} size="sm" />
                       <div className="min-w-0">
                         <p className="max-w-[12rem] truncate font-medium text-ink">{m.name === 'You (Owner)' ? t('youOwner') : (m.name || t('unknown'))}</p>
                         <p className="max-w-[12rem] truncate text-xs text-muted">{m.email ? <span dir="ltr">{m.email}</span> : (m.name === 'You (Owner)' ? t('accountOwner') : '')}</p>

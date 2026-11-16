@@ -239,7 +239,7 @@ export default function TeamPage() {
                                           on ? 'border-transparent bg-brand-gradient text-[#04282C]' : 'border-line bg-surface text-muted hover:border-line-strong hover:text-ink')}
                                       >
                                         {on && <CheckIcon className="h-3 w-3" aria-hidden="true" />}
-                                        {inst.display_name || inst.phone_number}
+                                        {inst.display_name || (inst.phone_number === 'pending' ? t('pendingNumber') : <span dir="ltr">{inst.phone_number}</span>)}
                                       </button>
                                     )
                                   })}
