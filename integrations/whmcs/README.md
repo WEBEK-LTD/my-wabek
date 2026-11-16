@@ -116,7 +116,7 @@ A WHMCS addon module that sends WhatsApp notifications to your clients and alert
 - `assets/client.css` is scoped to `.wabek-ca` / `.wabek-co` and loaded only on `index.php?m=wabek` and the checkout step.
 - The checkout checkbox is printed through `ShoppingCartCheckoutOutput`, so it works with standard_cart, premium/pure/supreme comparison, universal/cloud slider, boxes, Lagom, Lagom One Step and Nexus. Enable it under **Settings → Privacy & consent**.
 - Texts: English and Arabic in full; French, German, Spanish and Turkish for the client area.
-- Upgrading from 4.0.0: `templates/preferences.tpl` and `templates/verify.tpl` are no longer used and can be deleted.
+- WHMCS loads `templates/preferences.tpl` / `templates/verify.tpl` as before; they are thin shims that include the theme's variant from an absolute path (Bootstrap 4 set when unknown). Uploading 4.1.0 over 4.0.0 replaces them.
 
 ### Tables
 

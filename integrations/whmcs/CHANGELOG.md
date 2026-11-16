@@ -11,7 +11,7 @@
 
 ### Changed
 - The client pages no longer carry their own branded header and inline `<style>`; the small stylesheet `assets/client.css` is scoped to `.wabek-ca` / `.wabek-co`, loaded only on `index.php?m=wabek` (and the checkout step when the checkbox is on) and uses Lagom / Bootstrap colour variables.
-- `templates/preferences.tpl` and `templates/verify.tpl` moved to the per-theme folders. When upgrading, the two old files can be deleted.
+- `templates/preferences.tpl` and `templates/verify.tpl` (still the `templatefile` WHMCS loads) are now thin shims that include the variant set from the absolute path in `$wabekTplDir`, falling back to `templates/bs4/`.
 - The WhatsApp-code-after-login redirect never touches the theme's login, logout or password-reset pages.
 
 ## 4.0.0 — 2026-11-16

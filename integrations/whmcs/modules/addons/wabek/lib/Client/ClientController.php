@@ -20,7 +20,9 @@ if (!defined('WHMCS')) {
  * with the WHMCS CSRF token, followed by a redirect (PRG).
  *
  * The page is rendered with the template set that matches the active theme
- * (templates/bs3, templates/bs4 or templates/lagom2; see Theme).
+ * (templates/bs3, templates/bs4 or templates/lagom2; see Theme): WHMCS loads
+ * the plain templates/preferences.tpl / verify.tpl, which include the variant
+ * from the absolute path in $wabekTplDir.
  */
 final class ClientController
 {
@@ -92,12 +94,24 @@ final class ClientController
         return [
             'pagetitle'    => $title,
             'breadcrumb'   => $breadcrumb,
-            // Relative to templates/: bs3/…, bs4/… or lagom2/….
-            'templatefile' => $theme['variant'] . '/' . ($action === 'verify' ? 'verify' : 'preferences'),
+            // templates/preferences.tpl and templates/verify.tpl are shims that include
+            // the theme's variant from $wabekTplDir (templates/bs3, bs4 or lagom2).
+            'templatefile' => $action === 'verify' ? 'verify' : 'preferences',
             'requirelogin' => true,
             'forcessl'     => false,
-            'vars'         => ['wabek' => $view, 'wl' => Lang::all()],
+            'vars'         => ['wabek' => $view, 'wl' => Lang::all(), 'wabekTplDir' => self::variantDir($theme['variant'])],
         ];
+    }
+
+    /** Absolute path of the template set for a variant (allow-listed; bs4 when unknown or missing). */
+    public static function variantDir(string $variant): string
+    {
+        $variant = in_array($variant, Theme::VARIANTS, true) ? $variant : 'bs4';
+        $dir = WABEK_MODULE_DIR . '/templates/' . $variant;
+        if (!is_file($dir . '/preferences.tpl')) {
+            $dir = WABEK_MODULE_DIR . '/templates/bs4';
+        }
+        return str_replace('\\', '/', $dir);
     }
 
     private function post(int $clientId, string $action): void

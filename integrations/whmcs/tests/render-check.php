@@ -30,6 +30,7 @@ $MOD = realpath(__DIR__ . '/../modules/addons/wabek');
 require $MOD . '/bootstrap.php';
 
 use WABEK\Checkout;
+use WABEK\Client\ClientController;
 use WABEK\Lang;
 use WABEK\Theme;
 
@@ -134,6 +135,20 @@ foreach (['ClientAreaSecondaryNavbar', 'ClientAreaPrimarySidebar', 'ClientAreaHe
 }
 check(strpos($hooks, "Theme::brandIcon('whatsapp')") !== false, 'menu items use the theme-aware icon class');
 
+foreach ($PAGES as $p) {
+    $shim = (string) @file_get_contents("$MOD/templates/$p.tpl");
+    check(strpos($shim, '{include file="`$wabekTplDir`/' . $p . '.tpl"}') !== false, "templates/$p.tpl includes the variant from \$wabekTplDir");
+    check(strpos($shim, '{include file="./bs4/' . $p . '.tpl"}') !== false, "templates/$p.tpl falls back to bs4");
+    $text = preg_replace(['/\{\*.*?\*\}/s', '/\{[^}]*\}/'], ' ', $shim);
+    check(!preg_match('/\p{L}/u', $text), "templates/$p.tpl: shim has no text of its own");
+}
+foreach ($VARIANTS as $v) {
+    check(ClientController::variantDir($v) === str_replace('\\', '/', $MOD) . '/templates/' . $v, "variantDir($v) is the absolute path of templates/$v");
+}
+foreach (['', '../six', 'bs4/../../x', 'six'] as $bad) {
+    check(ClientController::variantDir($bad) === str_replace('\\', '/', $MOD) . '/templates/bs4', "variantDir('$bad') falls back to bs4");
+}
+
 // ── 2. Theme detection ─────────────────────────────────────────────────
 
 $root = sys_get_temp_dir() . '/wabek-theme-detect-' . getmypid();
@@ -217,7 +232,7 @@ final class MiniSmarty
     public function fetch(string $file): string
     {
         $src = preg_replace('/\{\*.*?\*\}/s', '', (string) file_get_contents($file));
-        $parts = preg_split('/(\{literal\}.*?\{\/literal\}|\{(?:\/?if|elseif|else)\b[^}]*\}|\{\$[^}]+\})/s', $src, -1, PREG_SPLIT_DELIM_CAPTURE);
+        $parts = preg_split('/(\{literal\}.*?\{\/literal\}|\{(?:\/?if|elseif|else|include)\b[^}]*\}|\{\$[^}]+\})/s', $src, -1, PREG_SPLIT_DELIM_CAPTURE);
         $php = '';
         foreach ($parts as $i => $part) {
             if ($i % 2 === 0) {
@@ -228,6 +243,12 @@ final class MiniSmarty
                 $php .= 'if (' . $this->cond($m[1]) . ') {';
             } elseif (preg_match('/^\{elseif\s+(.+)\}$/s', $part, $m)) {
                 $php .= '} elseif (' . $this->cond($m[1]) . ') {';
+            } elseif (preg_match('/^\{include\s+file="([^"]+)"\}$/', $part, $m)) {
+                $expr = var_export('', true);
+                foreach (preg_split('/`\$([a-z0-9_.]+)`/i', $m[1], -1, PREG_SPLIT_DELIM_CAPTURE) as $j => $seg) {
+                    $expr .= ' . ' . ($j % 2 ? '(string) $get(' . var_export($seg, true) . ')' : var_export($seg, true));
+                }
+                $php .= 'echo $include(' . $expr . ');';
             } elseif ($part === '{else}') {
                 $php .= '} else {';
             } elseif ($part === '{/if}') {
@@ -246,6 +267,13 @@ final class MiniSmarty
                 $v = is_array($v) && array_key_exists($seg, $v) ? $v[$seg] : null;
             }
             return $v;
+        };
+        $self = $this;
+        $include = function (string $path) use ($self, $file) {
+            if (strpos($path, './') === 0) {
+                $path = dirname($file) . substr($path, 1);
+            }
+            return $self->fetch($path);
         };
         ob_start();
         eval($php);
@@ -279,6 +307,8 @@ function render(string $file, array $vars): string
         $s->setCompileDir("$OUT/compile");
         $s->setCaching(Smarty::CACHING_OFF);
         $s->setErrorReporting(E_ALL & ~E_NOTICE & ~E_WARNING & ~E_DEPRECATED);
+        $s->enableSecurity('Smarty_Security');
+        $s->security_policy->secure_dir = [dirname($file)];
     }
     foreach ($vars as $k => $v) {
         $s->assign($k, $v);
@@ -410,11 +440,13 @@ foreach (['ltr' => 'english', 'rtl' => 'arabic'] as $dir => $lang) {
             $probe['flash_type'] = 'error';
             $probe['flash_text'] = $evil;
             $probe['phone_masked'] = $evil;
-            $probeHtml = render("$MOD/templates/{$cfg['variant']}/{$def['page']}.tpl", ['wabek' => $probe, 'wl' => $wl]);
+            $tplDir = ClientController::variantDir($cfg['variant']);
+            $probeHtml = render("$MOD/templates/{$def['page']}.tpl", ['wabek' => $probe, 'wl' => $wl, 'wabekTplDir' => $tplDir]);
+            check(strpos($probeHtml, 'wabek-v-' . $cfg['variant']) !== false, "shim {$def['page']}.tpl includes the {$cfg['variant']} variant");
             check(strpos($probeHtml, '<script>') === false, "{$cfg['variant']}/{$def['page']}: hostile values are escaped");
             check(strpos($probeHtml, '<form') === false || strpos($probeHtml, 'value="tok&quot;en"') !== false,"{$cfg['variant']}/{$def['page']}: token escaped in attribute");
 
-            $content = render("$MOD/templates/{$cfg['variant']}/{$def['page']}.tpl", ['wabek' => $view, 'wl' => $wl]);
+            $content = render("$MOD/templates/{$def['page']}.tpl", ['wabek' => $view, 'wl' => $wl, 'wabekTplDir' => $tplDir]);
             $title = $def['page'] === 'verify' ? $wl['client_verify_title'] : $wl['client_prefs_title'];
             $name = "$shell-$state-$dir.html";
             file_put_contents("$OUT/$name", shell($shell, $cfg, $dir, $lang === 'arabic' ? 'ar' : 'en', $title, $content, $wl, !$view['login_gate']));
@@ -424,6 +456,11 @@ foreach (['ltr' => 'english', 'rtl' => 'arabic'] as $dir => $lang) {
         file_put_contents("$OUT/$name", shell($shell, $cfg, $dir, $lang === 'arabic' ? 'ar' : 'en', 'Checkout', checkoutContent($shell, $cfg['variant'], $dir === 'rtl', $wl), $wl, false));
         $manifest[] = ['file' => $name, 'shell' => $shell, 'variant' => $cfg['variant'], 'dir' => $dir, 'state' => 'checkout', 'kind' => 'checkout'];
     }
+}
+Lang::init([], 'english');
+foreach ($PAGES as $p) {
+    $html = render("$MOD/templates/$p.tpl", ['wabek' => ['dir' => 'ltr', 'has_phone' => true, 'token' => 't', 'url_self' => 'x', 'url_verify' => 'y'], 'wl' => Lang::all()]);
+    check(strpos($html, 'wabek-v-bs4') !== false, "templates/$p.tpl without \$wabekTplDir renders the bs4 set");
 }
 file_put_contents("$OUT/manifest.json", json_encode(['engine' => $engine, 'pages' => $manifest], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
