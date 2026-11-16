@@ -122,6 +122,19 @@ final class AdminController
                 $n = Bulk::cancel(Security::postInt('bulk_id', 1));
                 $this->flash[] = ['success', Lang::t('ok_bulk_cancelled', ['{n}' => (string) $n])];
                 break;
+            case 'client_toggle':
+                // Posted from the WhatsApp box of the client summary page.
+                $clientId = Security::postInt('client', 1);
+                if (!ClientSummary::toggle($clientId, Security::post('consent', 4) === 'in', $this->adminId)) {
+                    $this->flash[] = ['error', Lang::t('err_client_not_found')];
+                    break;
+                }
+                if (Security::post('return', 10) === 'summary' && !headers_sent()) {
+                    header('Location: clientssummary.php?userid=' . $clientId, true, 303);
+                    exit;
+                }
+                $this->flash[] = ['success', Lang::t('ok_saved')];
+                break;
             case 'set_consent':
                 $clientId = $this->resolveClient(Security::post('client', 190));
                 if ($clientId <= 0) {

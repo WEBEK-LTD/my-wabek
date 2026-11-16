@@ -12,6 +12,8 @@ if (!defined('WHMCS')) {
 
 require_once __DIR__ . '/bootstrap.php';
 
+use WABEK\Admin\ClientProfile;
+use WABEK\Admin\ClientSummary;
 use WABEK\Checkout;
 use WABEK\Config;
 use WABEK\Consent;
@@ -396,23 +398,50 @@ add_hook('ClientAreaFooterOutput', 1, function ($vars) {
     });
 });
 
+// ── Admin: client summary, action links, profile tab ─────────────────
+
+// WhatsApp box at the top of clientssummary.php (WHMCS 8 passes $vars['userid']). Never returns '' for a
+// real client: every part is guarded inside ClientSummary, and anything else falls back to a minimal box.
 add_hook('AdminAreaClientSummaryPage', 1, function ($vars) {
-    return (string) wabek_safe('AdminAreaClientSummaryPage', function () use ($vars) {
-        $clientId = (int) ($vars['userid'] ?? 0);
-        if ($clientId <= 0) {
-            return '';
+    $clientId = is_array($vars) ? (int) ($vars['userid'] ?? $vars['clientId'] ?? 0) : 0;
+    if ($clientId <= 0 && isset($_GET['userid']) && is_scalar($_GET['userid'])) {
+        $clientId = (int) $_GET['userid'];
+    }
+    if ($clientId <= 0) {
+        return '';
+    }
+    try {
+        return ClientSummary::render($clientId);
+    } catch (\Throwable $e) {
+        if (function_exists('logActivity')) {
+            logActivity('WABEK: client summary box failed: ' . substr($e->getMessage(), 0, 250) . ' - User ID: ' . $clientId);
         }
-        Lang::initForSession(true);
-        $phone = Phone::forClient($clientId);
-        $state = Consent::state($clientId);
-        $consent = $state['opted_out'] ? Lang::t('status_opted_out')
-            : ($state['opted_in'] ? Lang::t('status_opted_in') : Lang::t('consent_default'));
-        return '<div class="alert alert-info" style="border-inline-start:4px solid #12B5BE">'
-            . '<strong>WABEK WhatsApp:</strong> '
-            . Security::e($phone !== null ? $phone : Lang::t('err_phone')) . ' · ' . Security::e($consent)
-            . ($state['verified_phone'] !== '' && $state['verified_phone'] === $phone ? ' · ' . Security::e(Lang::t('client_verified_badge')) : '')
-            . ' · <a href="addonmodules.php?module=wabek&page=send&client=' . $clientId . '">' . Security::e(Lang::t('btn_send')) . '</a>'
-            . ' · <a href="addonmodules.php?module=wabek&page=log&client=' . $clientId . '">' . Security::e(Lang::t('tab_log')) . '</a>'
-            . '</div>';
+        return '<div class="alert alert-warning wabek-cs">WABEK WhatsApp — '
+            . '<a href="addonmodules.php?module=wabek&amp;page=send&amp;client=' . $clientId . '">Send / إرسال</a> · '
+            . '<a href="addonmodules.php?module=wabek&amp;page=log&amp;client=' . $clientId . '">Log / السجل</a></div>';
+    }
+});
+
+add_hook('AdminAreaClientSummaryActionLinks', 1, function ($vars) {
+    $links = wabek_safe('AdminAreaClientSummaryActionLinks', function () use ($vars) {
+        return ClientSummary::actionLinks(is_array($vars) ? (int) ($vars['userid'] ?? 0) : 0);
+    });
+    return is_array($links) ? $links : [];
+});
+
+add_hook('AdminClientProfileTabFields', 1, function ($vars) {
+    $fields = wabek_safe('AdminClientProfileTabFields', function () use ($vars) {
+        $id = is_array($vars) ? (int) ($vars['userid'] ?? $vars['id'] ?? 0) : 0;
+        if ($id <= 0 && isset($_GET['userid']) && is_scalar($_GET['userid'])) {
+            $id = (int) $_GET['userid'];
+        }
+        return ClientProfile::fields($id);
+    });
+    return is_array($fields) ? $fields : [];
+});
+
+add_hook('AdminClientProfileTabFieldsSave', 1, function ($vars) {
+    wabek_safe('AdminClientProfileTabFieldsSave', function () use ($vars) {
+        ClientProfile::save(is_array($vars) ? $vars : []);
     });
 });
