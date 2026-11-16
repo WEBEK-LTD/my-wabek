@@ -106,6 +106,7 @@
 | `WHATSAPP_WEBHOOK_VERIFY_TOKEN` غائب | GET 403 فقط؛ POST يعمل | اضبطه قبل إعادة تسجيل الـ webhook |
 | وصول API حسب الباقة | log-only | `API_ACCESS_MODE=enforce` |
 | حد الرسائل الشهري | log-only | `MESSAGE_LIMIT_MODE=enforce` |
+| توقيع webhook ميتا (X-Hub-Signature-256) غير مطابق | log-only (يُعالَج الحدث ويُسجَّل `signature mismatch` مع phone_number_id) | `META_SIGNATURE_MODE=enforce` بعد التأكد من عدم ظهور التحذير وإضافة أسرار تطبيقات العملاء في `META_APP_SECRETS` |
 | حد الباقة `0` | غير محدود (القراءة القديمة) | `PLAN_LIMIT_ZERO=none` (بعد تحويل كل «غير محدود» إلى `-1`) |
 | opt-out / blocked | **يُحجب دائماً** (متطلب قانوني) | — |
 | 027 غير مطبّقة | `token_version` = 0 (لا إلغاء جلسات)، OTP بدون عدّاد محاولات، rate limit في الذاكرة، Stripe بدون جدول dedupe | شغّل 027 |
@@ -117,7 +118,7 @@
 كل fallback يطبع تحذيراً واحداً لكل عملية: ابحث في سجلات Netlify عن `[db-compat]` و `⚠️ SECURITY` و `not blocking`.
 
 **التحويل إلى enforce** (بعد أسبوع من مراقبة السجلات): Netlify → Site configuration → Environment variables →
-أضف `API_ACCESS_MODE=enforce`، `MESSAGE_LIMIT_MODE=enforce`، `PLAN_LIMIT_ZERO=none` (كلٌّ على حدة) ثم **Trigger deploy**.
+أضف `API_ACCESS_MODE=enforce`، `MESSAGE_LIMIT_MODE=enforce`، `PLAN_LIMIT_ZERO=none`، `META_SIGNATURE_MODE=enforce` (كلٌّ على حدة) ثم **Trigger deploy**.
 للتراجع: احذف المتغير وأعد النشر.
 
 ### ٢.٦ فحص الجاهزية `scripts/check-deploy.mjs`

@@ -303,8 +303,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const sig = verifyMetaSignature(raw, req.headers['x-hub-signature-256'])
   if (sig === 'invalid') {
-    console.error('[WEBHOOK] rejected: invalid X-Hub-Signature-256')
-    return res.status(401).json({ error: 'Invalid signature' })
+    // Rollout safety: until META_SIGNATURE_MODE=enforce, a mismatch is logged
+    // but the event is still processed, so inbound messages are never lost
+    // (e.g. a tenant whose own Meta app secret isn't in META_APP_SECRETS yet).
+    // Watch the logs for this line, add any missing app secret, then enforce.
+    if (process.env.META_SIGNATURE_MODE === 'enforce') {
+      console.error('[WEBHOOK] rejected: invalid X-Hub-Signature-256')
+      return res.status(401).json({ error: 'Invalid signature' })
+    }
+    let pnid = ''
+    try { pnid = String(JSON.parse(raw.toString('utf8'))?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id || '') } catch {}
+    console.error(`[WEBHOOK] ⚠️ signature mismatch (log-only; set META_SIGNATURE_MODE=enforce to reject) phone_number_id=${pnid || 'unknown'}`)
   }
   if (sig === 'unconfigured') {
     console.error('[WEBHOOK] ⚠️ SECURITY: META_APP_SECRET / META_APP_SECRETS not set — accepting UNSIGNED webhook. Set META_APP_SECRET now.')
