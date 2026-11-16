@@ -42,5 +42,6 @@ if (hits.length) {
   console.log(hits.join('\n'))
   console.error(`\n✗ ${hits.length} line(s) with hard-coded Arabic. Move them to a dictionary under locales/ (see lib/i18n-local.ts).`)
   process.exitCode = 1
+} else {
+  console.log('✓ No hard-coded Arabic in', ROOTS.join(', '))
 }
-console.log('✓ No hard-coded Arabic in', ROOTS.join(', '))
