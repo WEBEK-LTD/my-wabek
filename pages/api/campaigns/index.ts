@@ -14,6 +14,7 @@ const createSchema = z.object({
   media_url: z.string().url().optional(),
   contact_filter: z.object({
     tags: z.array(z.string().max(100)).max(50).optional(),
+    tag_operator: z.enum(['any', 'all']).optional(),
     all: z.boolean().optional(),
     segment_id: z.string().uuid().optional(),
   }).default({ all: true }),
