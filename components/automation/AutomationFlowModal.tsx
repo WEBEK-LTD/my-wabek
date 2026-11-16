@@ -155,8 +155,13 @@ export function AutomationFlowModal({ open, initial, instances, saving, onClose,
                   </div>
                   <div className="mt-3 ps-[4.25rem]">
                     {n.type === 'send_message' && (
-                      <Textarea rows={3} maxLength={4096} aria-label={`نص الرسالة ${i + 1}`} value={n.data.text || ''}
-                        placeholder={'مرحبًا! شكرًا لتواصلك معنا.\n\nكيف يمكننا مساعدتك؟'} onChange={e => setNode(i, { text: e.target.value })} />
+                      <>
+                        <Textarea rows={3} maxLength={4096} aria-label={`نص الرسالة ${i + 1}`} value={n.data.text || ''}
+                          placeholder={'مرحبًا {name}! شكرًا لتواصلك معنا.\n\nكيف يمكننا مساعدتك؟'} onChange={e => setNode(i, { text: e.target.value })} />
+                        <p className="mt-1.5 text-xs text-muted">
+                          المتغيرات: <code dir="ltr" className="font-mono">{'{name}'}</code> <code dir="ltr" className="font-mono">{'{phone}'}</code> وأي حقل مخصّص لجهة الاتصال مثل <code dir="ltr" className="font-mono">{'{city}'}</code>، ويمكن كتابتها أيضًا بصيغة <code dir="ltr" className="font-mono">{'{{name}}'}</code>.
+                        </p>
+                      </>
                     )}
                     {n.type === 'delay' && (
                       <div className="flex items-center gap-2">

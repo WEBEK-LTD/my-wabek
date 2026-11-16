@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { smartSend, smartSendWAWeb } from '@/lib/wa-smart-send'
 import { supabaseAdmin } from './supabase'
+import { personalize } from './campaign-templates'
 import { v4 as uuidv4 } from 'uuid'
 
 // ── Shared validation for automation flows (POST + PUT) ──────────────────────
@@ -71,9 +72,16 @@ export async function executeAutomationFlow(params: {
 
   if (!flows?.length) return
 
-  const { data: contactRow } = await db.from('contacts').select('id, tags')
+  const { data: contactRow } = await db.from('contacts').select('id, tags, name, variables')
     .eq('user_id', userId).eq('phone', from).maybeSingle()
   const contactId: string | null = contactRow?.id || null
+  // Message placeholders: {name} {phone} / {{name}} {{phone}} and contact.variables keys.
+  const vars = {
+    name: (contactRow?.name as string | null) || null,
+    phone: from,
+    variables: (contactRow?.variables && typeof contactRow.variables === 'object' ? contactRow.variables : null) as Record<string, unknown> | null,
+  }
+  const fill = (t: string) => personalize(t, vars).trim()
 
   if (await automationRateLimited(db, userId, instanceId, contactId)) {
     console.warn(`[automation] rate limit hit user=${userId} contact=${contactId} — skipping`)
@@ -99,11 +107,13 @@ export async function executeAutomationFlow(params: {
     for (const node of nodes) {
       if (node.type === 'send_message' && node.data?.text) {
         if (repliesThisRun >= AUTOMATION_MAX_REPLIES) break
+        const text = fill(node.data.text)
+        if (!text) continue
         try {
           if (isWAWeb) {
             // Guarded send (plan limit / opt-out); persists the outbound row.
             const r = await smartSendWAWeb({
-              userId, instanceId, to: from, text: node.data.text, contactId,
+              userId, instanceId, to: from, text, contactId,
               source: 'automation', extraMeta: { flow_id: flow.id },
             })
             if (r.blocked) break
@@ -112,7 +122,7 @@ export async function executeAutomationFlow(params: {
             // meta.source='automation') — do not insert a second row.
             await smartSend({
               userId, instanceId, phoneNumberId: instance.phone_number_id, accessToken: instance.access_token,
-              to: from, text: node.data.text, contactId, source: 'automation', flowId: flow.id,
+              to: from, text, contactId, source: 'automation', flowId: flow.id,
             })
           }
           repliesThisRun++
