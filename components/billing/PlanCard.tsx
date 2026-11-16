@@ -4,6 +4,7 @@ import { Badge, Button, cn } from '@/components/ui'
 import { fmtLimit } from '@/components/settings/format'
 import { useT } from '@/lib/i18n-local'
 import messages from '@/locales/dashboard/billing'
+import { localizePlanText } from '@/lib/plan-text'
 
 type T = (key: keyof typeof messages.en, vars?: Record<string, string | number>) => string
 
@@ -46,7 +47,7 @@ export function planFeatures(plan: Plan, t: T, lang: string): string[] {
     plan.allow_white_label ? t('featWhiteLabel') : null,
     plan.allow_sub_accounts && (plan.max_sub_accounts ?? 0) > 0 ? t('featSubAccounts', { n: plan.max_sub_accounts as number }) : null,
     plan.allow_reseller ? t('featReseller') : null,
-    ...(plan.features || []),
+    ...(plan.features || []).map(f => localizePlanText(String(f), lang)),
   ].filter(Boolean) as string[]
 }
 
@@ -89,8 +90,8 @@ export function PlanCard({ plan, cycle, isCurrent, isPopular, hasSub, onChoose, 
             : <span className="inline-flex items-center gap-1 rounded-full bg-brand-gradient px-3 py-1 text-xs font-semibold text-[#04282C] shadow-glow"><SparklesIcon className="h-3.5 w-3.5" aria-hidden="true" />{t('popular')}</span>}
         </span>
       )}
-      <h3 className="text-lg font-bold text-ink">{plan.name}</h3>
-      {plan.description && <p className="mt-1 text-sm text-muted">{plan.description}</p>}
+      <h3 className="text-lg font-bold text-ink">{localizePlanText(plan.name, lang)}</h3>
+      {plan.description && <p className="mt-1 text-sm text-muted">{localizePlanText(plan.description, lang)}</p>}
 
       <div className="mt-5 flex items-end gap-1.5">
         {price === 0 ? (

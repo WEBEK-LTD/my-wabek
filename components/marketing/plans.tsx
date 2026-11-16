@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import axios from 'axios'
 import { CheckIcon, CreditCardIcon, ExclamationTriangleIcon, MinusIcon } from '@heroicons/react/24/outline'
@@ -6,6 +6,7 @@ import { Button, EmptyState, Skeleton, Table, THead, TBody, TR, TH, TD } from '@
 import { cn } from '@/components/ui/utils'
 import { useT } from '@/lib/i18n-local'
 import messages from '@/locales/public/plans'
+import { localizePlan } from '@/lib/plan-text'
 
 /**
  * A row of the public `plans` table as returned by GET /api/plans.
@@ -48,7 +49,7 @@ export function fallbackPlans(t: PlanT): PublicPlan[] {
 
 /** Loads the plans from /api/plans, falling back to the original catalogue when none are published. */
 export function usePublicPlans() {
-  const { t } = useT(messages)
+  const { t, lang } = useT(messages)
   const [apiPlans, setApiPlans] = useState<PublicPlan[] | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -62,7 +63,10 @@ export function usePublicPlans() {
 
   useEffect(() => { load() }, [load])
   const isFallback = !loading && (!apiPlans || apiPlans.length === 0)
-  const plans = isFallback ? fallbackPlans(t) : apiPlans || []
+  const plans = useMemo(
+    () => (isFallback ? fallbackPlans(t) : (apiPlans || []).map(p => localizePlan(p, lang))),
+    [isFallback, apiPlans, t, lang],
+  )
   return { plans, loading, error: false, isFallback, reload: load }
 }
 
