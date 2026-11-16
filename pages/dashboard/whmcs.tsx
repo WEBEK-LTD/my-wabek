@@ -1,326 +1,214 @@
-// @ts-nocheck
 import { useState } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
-import { useAuthStore } from '@/lib/store'
-import { useQuery } from 'react-query'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { ClipboardIcon, CheckCircleIcon, BuildingOfficeIcon, BellIcon, CodeBracketIcon, PuzzlePieceIcon } from '@heroicons/react/24/outline'
-import clsx from 'clsx'
+import {
+  ArrowDownTrayIcon, BuildingOfficeIcon, KeyIcon, PaperAirplaneIcon, BookOpenIcon, ShieldCheckIcon,
+  CheckIcon, Cog6ToothIcon, BellAlertIcon, ClockIcon,
+} from '@heroicons/react/24/outline'
+import { Badge, Button, Card, CardHeader, Field, Input, PageHeader, Select, TabPanel, Tabs } from '@/components/ui'
+import { HeroPanel, Notice, StepList, apiError } from '@/components/settings/Shared'
 
-const THEMES = ['Hostingard', 'Lagom2', 'Nexus', 'Six', 'Twenty-One']
+const DOWNLOAD_URL = '/downloads/wabek-whmcs-addon.zip'
 
-const EVENTS = [
-  { key: 'invoice_created',    label: 'Invoice Created',       icon: '🧾' },
-  { key: 'invoice_paid',       label: 'Invoice Paid',          icon: '✅' },
-  { key: 'invoice_overdue',    label: 'Invoice Overdue',       icon: '⚠️' },
-  { key: 'invoice_reminder',   label: 'Payment Reminder',      icon: '⏰' },
-  { key: 'ticket_open',        label: 'Ticket Opened',         icon: '🎫' },
-  { key: 'ticket_reply',       label: 'Ticket Reply',          icon: '💬' },
-  { key: 'ticket_close',       label: 'Ticket Closed',         icon: '🔒' },
-  { key: 'service_active',     label: 'Service Activated',     icon: '🚀' },
-  { key: 'service_suspended',  label: 'Service Suspended',     icon: '🔴' },
-  { key: 'service_terminated', label: 'Service Terminated',    icon: '🗑️' },
-  { key: 'service_unsuspend',  label: 'Service Restored',      icon: '💚' },
-  { key: 'domain_registered',  label: 'Domain Registered',     icon: '🌐' },
-  { key: 'domain_renewal',     label: 'Domain Renewed',        icon: '🔁' },
-  { key: 'order_placed',       label: 'Order Confirmed',       icon: '🛒' },
+// Events shipped by the WABEK WHMCS addon v4 (modules/addons/wabek/lib/Events.php).
+const EVENT_GROUPS: { title: string; items: { key: string; label: string; on: boolean }[] }[] = [
+  { title: 'الفوترة', items: [
+    { key: 'invoice_created', label: 'إصدار فاتورة', on: true },
+    { key: 'invoice_reminder', label: 'تذكير WHMCS بالدفع', on: false },
+    { key: 'invoice_due_soon', label: 'تذكير قبل الاستحقاق', on: true },
+    { key: 'invoice_due_today', label: 'تذكير يوم الاستحقاق', on: true },
+    { key: 'invoice_overdue', label: 'فاتورة متأخرة', on: true },
+    { key: 'invoice_paid', label: 'استلام الدفعة', on: true },
+    { key: 'invoice_cancelled', label: 'إلغاء الفاتورة', on: false },
+  ] },
+  { title: 'الطلبات والخدمات', items: [
+    { key: 'order_accepted', label: 'قبول الطلب', on: true },
+    { key: 'service_activated', label: 'تفعيل الخدمة', on: true },
+    { key: 'service_suspended', label: 'تعليق الخدمة', on: true },
+    { key: 'service_unsuspended', label: 'إلغاء تعليق الخدمة', on: true },
+    { key: 'service_terminated', label: 'إنهاء الخدمة', on: true },
+    { key: 'domain_renewal', label: 'تذكير تجديد النطاق', on: true },
+  ] },
+  { title: 'الدعم والحساب', items: [
+    { key: 'client_welcome', label: 'الترحيب بعميل جديد', on: true },
+    { key: 'ticket_opened', label: 'فتح تذكرة', on: true },
+    { key: 'ticket_reply', label: 'رد الفريق على تذكرة', on: true },
+    { key: 'ticket_status', label: 'تغيير حالة التذكرة', on: false },
+    { key: 'password_changed', label: 'تغيير كلمة المرور', on: false },
+  ] },
+  { title: 'تنبيهات الإدارة', items: [
+    { key: 'admin_new_order', label: 'طلب جديد', on: true },
+    { key: 'admin_new_ticket', label: 'تذكرة جديدة', on: true },
+    { key: 'admin_payment', label: 'دفعة جديدة', on: true },
+  ] },
+]
+const EVENT_COUNT = EVENT_GROUPS.reduce((n, g) => n + g.items.length, 0)
+
+const MERGE_FIELDS = ['client_name', 'first_name', 'company', 'invoice_id', 'invoice_total', 'due_date', 'invoice_url', 'service_name', 'domain', 'ticket_id', 'ticket_subject', 'ticket_url', 'order_number', 'system_name']
+
+// Event keys accepted by /api/whmcs/test.
+const TEST_EVENTS = [
+  { value: 'invoice_created', label: 'إصدار فاتورة' },
+  { value: 'invoice_paid', label: 'استلام الدفعة' },
+  { value: 'invoice_overdue', label: 'فاتورة متأخرة' },
+  { value: 'payment_reminder', label: 'تذكير بالدفع' },
+  { value: 'ticket_open', label: 'فتح تذكرة' },
+  { value: 'ticket_reply', label: 'رد على تذكرة' },
+  { value: 'service_active', label: 'تفعيل الخدمة' },
+  { value: 'service_suspended', label: 'تعليق الخدمة' },
 ]
 
-function CopyBlock({ code, label = '' }) {
-  const [c, setC] = useState(false)
-  return (
-    <div className="relative bg-white border border-slate-200 rounded-xl overflow-hidden">
-      {label && <div className="px-4 py-2 bg-[#F8FAFC]/50 border-b border-slate-200 text-xs text-slate-400 font-medium">{label}</div>}
-      <pre className="px-4 py-3 text-xs text-slate-800 font-mono whitespace-pre-wrap overflow-x-auto leading-relaxed">{code}</pre>
-      <button onClick={() => { navigator.clipboard.writeText(code); setC(true); setTimeout(() => setC(false), 2000) }}
-        className="absolute top-2 right-2 p-1.5 bg-[#F8FAFC]/80 rounded-lg text-slate-400 hover:text-slate-900 transition-colors">
-        {c ? <CheckCircleIcon className="w-3.5 h-3.5 text-blue-600" /> : <ClipboardIcon className="w-3.5 h-3.5" />}
-      </button>
-    </div>
-  )
-}
-
 export default function WHMCSPage() {
-  const { user } = useAuthStore()
   const [tab, setTab] = useState('setup')
   const [testPhone, setTestPhone] = useState('')
   const [testEvent, setTestEvent] = useState('invoice_created')
   const [testing, setTesting] = useState(false)
-  const [selectedTheme, setSelectedTheme] = useState('Hostingard')
-
-  const { data: apiKeysData } = useQuery('api-keys-list', () => axios.get('/api/settings/api-keys').then(r => r.data), { retry: false })
-  const apiKey = apiKeysData?.keys?.[0]?.key || 'YOUR_API_KEY'
-  const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://waabek.com'
 
   const sendTest = async () => {
-    if (!testPhone) { toast.error('Enter a phone number'); return }
+    if (!testPhone) { toast.error('أدخل رقم الهاتف'); return }
     setTesting(true)
     try {
       await axios.post('/api/whmcs/test', { phone: testPhone, event: testEvent })
-      toast.success('Test message sent! ✅')
+      toast.success('أُرسلت الرسالة التجريبية')
     } catch (e) {
-      toast.error(e?.response?.data?.error || 'Failed — check WhatsApp instance')
+      toast.error(apiError(e, 'تعذّر الإرسال — تحقق من اتصال رقم واتساب'))
     } finally { setTesting(false) }
   }
 
-  const themeName = selectedTheme.toLowerCase().replace(' ', '-')
-  const footerPath = `/templates/${themeName}/footer.tpl`
-  const widgetCode = `{* WABEK WhatsApp Chat Widget *}
-{php}
-if (file_exists(ROOTDIR . '/modules/addons/wabek/wabek-theme-helper.php')) {
-    require_once ROOTDIR . '/modules/addons/wabek/wabek-theme-helper.php';
-    wabek_inject_chat_widget();
-}
-{/php}`
-
   return (
     <DashboardLayout title="WHMCS Integration">
-      <div className="max-w-4xl space-y-5">
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="التكاملات"
+          title="WHMCS"
+          description="أرسل إشعارات الفواتير والخدمات والتذاكر لعملائك عبر واتساب مباشرة من WHMCS."
+          actions={<Button variant="secondary" icon={BookOpenIcon} href="/docs/integrations/whmcs">دليل WHMCS</Button>}
+        />
 
-        {/* Header */}
-        <div className="card border-blue-200/40 bg-blue-50/10">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-              <BuildingOfficeIcon className="w-5 h-5 text-blue-600" />
+        <HeroPanel
+          icon={BuildingOfficeIcon}
+          eyebrow="الإصدار 4 · WHMCS 8.x · PHP 7.4 – 8.3"
+          title="وحدة WABEK لـ WHMCS"
+          description={`${EVENT_COUNT} حدثًا جاهزًا بنصوص عربية وإنجليزية قابلة للتعديل، مع قائمة انتظار وإعادة محاولة وسجل إرسال وصفحة موافقة للعملاء.`}
+          actions={
+            <>
+              <Button variant="on-deep" icon={ArrowDownTrayIcon} href={DOWNLOAD_URL} external download>تنزيل الوحدة</Button>
+              <Button variant="on-deep-ghost" icon={KeyIcon} href="/dashboard/api-keys">مفاتيح API</Button>
+            </>
+          }
+        >
+          <ul className="flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-deep-muted">
+            <li className="flex items-center gap-1.5"><ShieldCheckIcon className="h-4 w-4 text-brand-green" aria-hidden="true" />المفتاح مشفّر ويُرسل في الترويسة X-API-Key</li>
+            <li className="flex items-center gap-1.5"><ClockIcon className="h-4 w-4 text-brand-green" aria-hidden="true" />تعالج مهام WHMCS المجدولة قائمة الانتظار</li>
+            <li className="flex items-center gap-1.5"><BellAlertIcon className="h-4 w-4 text-brand-green" aria-hidden="true" />تنبيهات لفريق الإدارة</li>
+          </ul>
+        </HeroPanel>
+
+        <Tabs idPrefix="whmcs" aria-label="أقسام WHMCS" value={tab} onChange={setTab} tabs={[
+          { id: 'setup', label: 'التثبيت', icon: Cog6ToothIcon },
+          { id: 'events', label: 'الأحداث', icon: BellAlertIcon, count: EVENT_COUNT },
+          { id: 'test', label: 'رسالة تجريبية', icon: PaperAirplaneIcon },
+        ]} />
+
+        <TabPanel idPrefix="whmcs" id="setup" active={tab}>
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <Card>
+              <h2 className="mb-5 text-[17px] font-semibold text-ink">خطوات التثبيت</h2>
+              <StepList steps={[
+                {
+                  title: 'نزّل الوحدة وارفعها',
+                  body: <>فك ضغط <code dir="ltr" className="font-mono text-ink">wabek-whmcs-addon.zip</code> وارفع مجلد <code dir="ltr" className="font-mono text-ink">modules</code> إلى المجلد الجذري لـ WHMCS، ليصبح المسار <code dir="ltr" className="font-mono text-ink">modules/addons/wabek/wabek.php</code>.</>,
+                },
+                {
+                  title: 'فعّل الوحدة',
+                  body: <>من لوحة الإدارة افتح <strong className="text-ink">System Settings ← Addon Modules</strong>، وفعّل <strong className="text-ink">WABEK WhatsApp</strong>، ثم اضغط <strong className="text-ink">Configure</strong> وحدد مجموعات المشرفين المسموح لها بالوصول.</>,
+                },
+                {
+                  title: 'الصق مفتاح API',
+                  body: <>أنشئ مفتاحًا باسم مثل <code dir="ltr" className="font-mono text-ink">WHMCS Production</code> من صفحة <a className="text-link hover:text-link-hover" href="/dashboard/api-keys">مفاتيح API</a>، ثم افتح <strong className="text-ink">Addons ← WABEK WhatsApp</strong> والصقه في تبويب <strong className="text-ink">الإعدادات</strong>. تحفظه الوحدة مشفّرًا وترسله في الترويسة فقط.</>,
+                },
+                {
+                  title: 'اختبر الاتصال',
+                  body: <>اضغط <strong className="text-ink">اختبار الاتصال</strong> في إعدادات الوحدة وتأكد من ظهور رسالة نجاح، ثم أرسل رسالة تجريبية.</>,
+                },
+                {
+                  title: 'فعّل الأحداث وعدّل النصوص',
+                  body: 'من تبويب «الإشعارات» داخل الوحدة اختر الأحداث المطلوبة وعدّل نص كل حدث، ويمكنك تحديد اسم قالب معتمد لاستخدامه خارج نافذة الـ 24 ساعة.',
+                },
+              ]} />
+            </Card>
+
+            <div className="space-y-4">
+              <Card variant="muted">
+                <h3 className="mb-3 font-semibold text-ink">المتطلبات</h3>
+                <ul className="space-y-2 text-sm text-body">
+                  {['WHMCS 8.x', 'PHP 7.4 – 8.3 مع curl وjson وmbstring', 'مهام WHMCS المجدولة كل 5 دقائق', 'رقم واتساب متصل في WABEK', 'مفتاح API (يتطلب باقة تتضمن الوصول إلى API)'].map(r => (
+                    <li key={r} className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />{r}</li>
+                  ))}
+                </ul>
+              </Card>
+              <Notice tone="warning" title="تستخدم إصدارًا قديمًا؟">
+                الروابط القديمة التي تضع المفتاح داخل الرابط لم تعد مدعومة. احذف الملف <code dir="ltr" className="break-all font-mono">includes/hooks/wabek_notifications.php</code> إن وُجد، ثم ثبّت الوحدة الجديدة؛ تُنقل إعداداتك تلقائيًا.
+              </Notice>
+              <Notice tone="info" title="نافذة الـ 24 ساعة">
+                على أرقام Cloud API لا يُسلَّم النص الحر لعميل لم يراسلك خلال 24 ساعة؛ حدّد قالبًا معتمدًا لكل حدث. <a className="font-medium underline" href="/docs/getting-started/messaging-window">اعرف المزيد</a>
+              </Notice>
             </div>
-            <div className="flex-1">
-              <h3 className="font-display font-semibold text-slate-900">WHMCS WhatsApp Notifications</h3>
-              <p className="text-sm text-slate-400">14 events · 5 themes compatible · WhatsApp chat widget</p>
-            </div>
-            <a href="https://billing.webek.org/download/category/4/Wordpress-Plugins-.html"
-              target="_blank" className="btn-primary text-sm">
-              ⬇️ Download Module
-            </a>
           </div>
-        </div>
+        </TabPanel>
 
-        {/* Tabs */}
-        <div className="flex gap-1 border-b border-slate-200">
-          {[
-            { id: 'setup', label: '⚙️ Setup' },
-            { id: 'themes', label: '🎨 Theme Integration' },
-            { id: 'events', label: '📋 Events (14)' },
-            { id: 'templates', label: '💬 Templates' },
-            { id: 'test', label: '🧪 Test' },
-          ].map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={clsx('px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',
-                tab === t.id ? 'border-brand-500 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700')}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* ── Setup Tab ──────────────────────────────── */}
-        {tab === 'setup' && (
-          <div className="space-y-4">
-            <div className="card">
-              <h3 className="font-display font-semibold text-slate-900 mb-4">Step 1 — Upload & Activate</h3>
-              <div className="space-y-3 text-sm">
-                {[
-                  'Download the WABEK WHMCS module from the link above',
-                  'Extract the ZIP — you\'ll get a `modules/` folder',
-                  'Upload `modules/addons/wabek/` to your WHMCS root',
-                  'Go to WHMCS Admin → Setup → Addon Modules',
-                  'Find WABEK WhatsApp Notifications → Click Activate',
-                  'Set access to Administrators',
-                ].map((step, i) => (
-                  <div key={i} className="flex gap-3">
-                    <div className="w-6 h-6 rounded-full bg-blue-50 border border-blue-200/50 flex items-center justify-center text-blue-600 text-xs font-bold flex-shrink-0">{i + 1}</div>
-                    <p className="text-slate-700 pt-0.5 text-sm">{step}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="card">
-              <h3 className="font-display font-semibold text-slate-900 mb-4">Step 2 — Configure</h3>
-              <p className="text-sm text-slate-400 mb-3">Go to <strong className="text-slate-900">Addons → WABEK WhatsApp</strong> and set:</p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead><tr className="border-b border-slate-200">
-                    <th className="table-head text-left">Field</th>
-                    <th className="table-head text-left">Value</th>
-                  </tr></thead>
-                  <tbody>
-                    {[
-                      ['API Key', apiKey, true],
-                      ['Instance ID', 'Leave empty for default', false],
-                      ['API URL', `${appUrl}/api/v1/send`, true],
-                      ['Phone Field', 'phonenumber', false],
-                      ['Country Code', '20 (Egypt) / 966 (Saudi) / 44 (UK)', false],
-                    ].map(([field, val, copy]) => (
-                      <tr key={field} className="table-row">
-                        <td className="table-cell font-medium text-slate-900">{field}</td>
-                        <td className="table-cell">
-                          <div className="flex items-center gap-2">
-                            <code className="text-blue-600 text-xs bg-slate-100 px-2 py-0.5 rounded">{val}</code>
-                            {copy && <button onClick={() => { navigator.clipboard.writeText(val); toast.success('Copied!') }} className="text-slate-600 hover:text-slate-400"><ClipboardIcon className="w-3.5 h-3.5" /></button>}
-                          </div>
-                        </td>
-                      </tr>
+        <TabPanel idPrefix="whmcs" id="events" active={tab}>
+          <div className="space-y-5">
+            <div className="grid gap-4 md:grid-cols-2">
+              {EVENT_GROUPS.map(g => (
+                <Card key={g.title} padding="none">
+                  <CardHeader title={g.title} subtitle={`${g.items.length} أحداث`} divider />
+                  <ul className="divide-y divide-line-soft">
+                    {g.items.map(e => (
+                      <li key={e.key} className="flex items-center gap-3 px-5 py-3">
+                        <span className={e.on ? 'h-2 w-2 shrink-0 rounded-full bg-success' : 'h-2 w-2 shrink-0 rounded-full bg-line-strong'} aria-hidden="true" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium text-ink">{e.label}</span>
+                          <span className="block truncate text-xs text-muted"><code dir="ltr" className="font-mono">{e.key}</code></span>
+                        </span>
+                        <Badge tone={e.on ? 'success' : 'neutral'} size="sm">{e.on ? 'مفعّل افتراضيًا' : 'اختياري'}</Badge>
+                      </li>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="card">
-              <h3 className="font-display font-semibold text-slate-900 mb-3">Step 3 — Enable Events</h3>
-              <p className="text-sm text-slate-400">In the addon settings, toggle ON/OFF each notification type. All 14 events are enabled by default.</p>
-            </div>
-          </div>
-        )}
-
-        {/* ── Theme Integration Tab ───────────────────── */}
-        {tab === 'themes' && (
-          <div className="space-y-4">
-            <div className="card">
-              <h3 className="font-display font-semibold text-slate-900 mb-4">Select Your Theme</h3>
-              <div className="flex flex-wrap gap-2 mb-6">
-                {THEMES.map(t => (
-                  <button key={t} onClick={() => setSelectedTheme(t)}
-                    className={clsx('px-4 py-2 rounded-xl text-sm font-medium transition-colors',
-                      selectedTheme === t ? 'bg-blue-600 text-white' : 'bg-[#F8FAFC] text-slate-700 hover:text-white')}>
-                    {t}
-                  </button>
-                ))}
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-900 mb-2">
-                    Add WhatsApp Chat Widget to <span className="text-blue-600">{selectedTheme}</span>
-                  </p>
-                  <p className="text-xs text-slate-500 mb-3">
-                    Open <code className="bg-slate-100 px-1.5 py-0.5 rounded text-blue-600">{footerPath}</code> and paste this before <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">{`</body>`}</code>:
-                  </p>
-                  <CopyBlock code={widgetCode} label={`${footerPath}`} />
-                </div>
-
-                <div className="p-4 bg-[#F8FAFC] border border-slate-200/50 rounded-xl">
-                  <p className="text-sm font-medium text-slate-900 mb-2">Chat Widget Settings (in Addon Config)</p>
-                  <div className="grid grid-cols-2 gap-3 text-xs text-slate-400">
-                    {[
-                      ['Enable Chat Widget', 'Yes'],
-                      ['Chat Phone Number', 'Your WhatsApp number'],
-                      ['Widget Message', 'Hello! I need help...'],
-                      ['Widget Color', '#25D366'],
-                      ['Position', 'Right or Left'],
-                    ].map(([k, v]) => (
-                      <div key={k} className="flex justify-between">
-                        <span className="text-slate-500">{k}</span>
-                        <span className="text-slate-700">{v}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="p-3 bg-yellow-900/10 border border-yellow-800/30 rounded-xl text-xs text-slate-400">
-                  <p className="text-yellow-400 font-medium mb-1">💡 Theme-specific notes:</p>
-                  {selectedTheme === 'Hostingard' && <p>Hostingard uses Bootstrap 4. The widget renders correctly over the sticky header.</p>}
-                  {selectedTheme === 'Lagom2' && <p>Lagom2 has a floating action button zone — place the widget code after the existing FAB if any.</p>}
-                  {selectedTheme === 'Nexus' && <p>Nexus uses a dark sidebar layout. Use <code>position: left</code> if sidebar is on right.</p>}
-                  {selectedTheme === 'Six' && <p>Six is WHMCS's default theme. Compatible with all standard WHMCS 8.x installations.</p>}
-                  {selectedTheme === 'Twenty-One' && <p>Twenty-One has a modern card layout. The widget blends well with <code>#25D366</code> color.</p>}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Events Tab ─────────────────────────────── */}
-        {tab === 'events' && (
-          <div className="card">
-            <h3 className="font-display font-semibold text-slate-900 mb-4">All 14 Supported Events</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {EVENTS.map(e => (
-                <div key={e.key} className="flex items-center gap-3 p-3 bg-[#F8FAFC] rounded-xl border border-slate-200/50">
-                  <span className="text-xl">{e.icon}</span>
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">{e.label}</p>
-                    <p className="text-xs text-slate-500 font-mono text-slate-800">{e.key}</p>
-                  </div>
-                  <CheckCircleIcon className="w-4 h-4 text-blue-600 ml-auto flex-shrink-0" />
-                </div>
+                  </ul>
+                </Card>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* ── Templates Tab ──────────────────────────── */}
-        {tab === 'templates' && (
-          <div className="space-y-4">
-            {[
-              {
-                label: '🧾 Invoice Created',
-                msg: `🧾 *New Invoice #{{invoice_id}}*\n\nHi {{client_name}},\n\nA new invoice has been created.\n\n💰 Amount: {{amount}} {{currency}}\n📅 Due: {{due_date}}\n\nPay here: {{invoice_url}}`,
-              },
-              {
-                label: '✅ Invoice Paid',
-                msg: `✅ *Payment Confirmed*\n\nHi {{client_name}},\n\nPayment received for Invoice #{{invoice_id}}.\n\n💰 Amount: {{amount}} {{currency}}\n📅 Date: {{date}}\n\nThank you! 🙏`,
-              },
-              {
-                label: '⚠️ Invoice Overdue',
-                msg: `⚠️ *Invoice Overdue — #{{invoice_id}}*\n\nHi {{client_name}},\n\nYour invoice is overdue. Please pay to avoid suspension.\n\n💰 Amount: {{amount}}\n📅 Was Due: {{due_date}}\n\n{{invoice_url}}`,
-              },
-              {
-                label: '🎫 Ticket Opened',
-                msg: `🎫 *Support Ticket #{{ticket_id}}*\n\nHi {{client_name}},\n\nYour ticket has been received.\n\n📝 {{subject}}\n🕐 Priority: {{priority}}\n\nWe'll respond shortly.\n{{ticket_url}}`,
-              },
-              {
-                label: '🚀 Service Activated',
-                msg: `🚀 *Service Activated*\n\nHi {{client_name}},\n\nYour service is live!\n\n📦 {{product}}\n🌐 {{domain}}\n👤 Username: {{username}}\n\nLogin: {{client_area}}`,
-              },
-              {
-                label: '🔴 Service Suspended',
-                msg: `🔴 *Service Suspended*\n\nHi {{client_name}},\n\nYour service has been suspended due to non-payment.\n\n📦 {{product}}\n🌐 {{domain}}\n\nSettle invoices: {{client_area}}`,
-              },
-              {
-                label: '🌐 Domain Registered',
-                msg: `🌐 *Domain Registered*\n\nHi {{client_name}},\n\nYour domain is live!\n\n🔗 {{domain}}\n📅 Expires: {{expiry}}\n\nManage: {{client_area}}`,
-              },
-            ].map(t => (
-              <div key={t.label}>
-                <p className="text-sm font-medium text-slate-900 mb-2">{t.label}</p>
-                <CopyBlock code={t.msg} />
+            <Card>
+              <h3 className="font-semibold text-ink">حقول الدمج</h3>
+              <p className="mt-1 text-sm text-muted">تُستبدل تلقائيًا في نص كل إشعار داخل الوحدة، مثل: «مرحبًا {'{client_name}'}، صدرت الفاتورة {'{invoice_id}'}».</p>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {MERGE_FIELDS.map(f => <code key={f} dir="ltr" className="rounded-md bg-chip px-2 py-0.5 font-mono text-xs text-chip-ink">{`{${f}}`}</code>)}
               </div>
-            ))}
-
-            <div className="p-3 bg-[#F8FAFC] border border-slate-200 rounded-xl">
-              <p className="text-xs font-medium text-slate-900 mb-2">📌 Available Variables</p>
-              <div className="flex flex-wrap gap-2">
-                {['{{client_name}}', '{{invoice_id}}', '{{amount}}', '{{currency}}', '{{due_date}}', '{{invoice_url}}', '{{ticket_id}}', '{{subject}}', '{{domain}}', '{{product}}', '{{username}}', '{{client_area}}', '{{date}}', '{{expiry}}', '{{priority}}'].map(v => (
-                  <code key={v} className="text-xs bg-slate-100 text-blue-600 px-2 py-0.5 rounded">{v}</code>
-                ))}
-              </div>
-            </div>
+            </Card>
           </div>
-        )}
+        </TabPanel>
 
-        {/* ── Test Tab ───────────────────────────────── */}
-        {tab === 'test' && (
-          <div className="card max-w-md space-y-4">
-            <h3 className="font-display font-semibold text-slate-900">Send Test Message</h3>
-            <div>
-              <label className="label">Phone Number (with country code)</label>
-              <input value={testPhone} onChange={e => setTestPhone(e.target.value)}
-                placeholder="+201234567890" className="input" />
-            </div>
-            <div>
-              <label className="label">Event to test</label>
-              <select value={testEvent} onChange={e => setTestEvent(e.target.value)} className="input">
-                {EVENTS.map(e => <option key={e.key} value={e.key}>{e.icon} {e.label}</option>)}
-              </select>
-            </div>
-            <button onClick={sendTest} disabled={testing} className="btn-primary w-full justify-center">
-              <BellIcon className="w-4 h-4" />
-              {testing ? 'Sending...' : 'Send Test Message'}
-            </button>
+        <TabPanel idPrefix="whmcs" id="test" active={tab}>
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,480px)_1fr]">
+            <Card>
+              <h2 className="text-[17px] font-semibold text-ink">إرسال رسالة تجريبية</h2>
+              <p className="mt-1 text-sm text-muted">تُرسل من أول رقم متصل في حسابك لتتأكد من أن الإرسال يعمل.</p>
+              <form className="mt-5 space-y-4" onSubmit={e => { e.preventDefault(); sendTest() }}>
+                <Field label="رقم الهاتف مع رمز الدولة" required>
+                  <Input value={testPhone} onChange={e => setTestPhone(e.target.value)} placeholder="+201234567890" dir="ltr" inputMode="tel" />
+                </Field>
+                <Field label="الحدث">
+                  <Select value={testEvent} onChange={e => setTestEvent(e.target.value)} options={TEST_EVENTS} />
+                </Field>
+                <Button type="submit" icon={PaperAirplaneIcon} loading={testing} fullWidth>إرسال الرسالة التجريبية</Button>
+              </form>
+            </Card>
+            <Notice tone="info" title="اختبار الاتصال من داخل WHMCS">
+              هذا الاختبار يتحقق من رقمك في WABEK فقط. للتحقق من الوحدة نفسها استخدم زر «اختبار الاتصال» في إعداداتها داخل WHMCS.
+            </Notice>
           </div>
-        )}
-
+        </TabPanel>
       </div>
     </DashboardLayout>
   )

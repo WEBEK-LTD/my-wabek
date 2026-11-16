@@ -1,9 +1,17 @@
-// @ts-nocheck
 import { useState, useEffect, useRef } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import Head from 'next/head'
+import {
+  PlusIcon, LifebuoyIcon, ChatBubbleLeftRightIcon, SparklesIcon, PaperAirplaneIcon, ArrowRightIcon,
+  ClockIcon, CheckIcon, XMarkIcon, UserIcon, TicketIcon, BookOpenIcon,
+} from '@heroicons/react/24/outline'
+import {
+  Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Skeleton, Textarea, cn,
+} from '@/components/ui'
+import type { Tone } from '@/components/ui'
+import { ErrorState } from '@/components/settings/Shared'
+import { fmtDate, fmtTime } from '@/components/settings/format'
 
 type Ticket = {
   id: string; ticket_number: number; subject: string
@@ -14,19 +22,24 @@ type Message = {
   content: string; created_at: string; wa_message_id?: string; wa_status?: string
 }
 
-const WA_STATUS_ICON: Record<string, any> = {
-  pending:   <span style={{fontSize:10,color:'#6b7280'}}>🕐</span>,
-  sent:      <span style={{fontSize:10,color:'#6b7280'}}>✓</span>,
-  delivered: <span style={{fontSize:10,color:'#6b7280'}}>✓✓</span>,
-  read:      <span style={{fontSize:10,color:'#3b82f6'}}>✓✓</span>,
-  failed:    <span style={{fontSize:10,color:'#ef4444'}}>✕</span>,
+const STATUS_CFG: Record<string, { label: string; tone: Tone }> = {
+  open:     { label: 'مفتوحة', tone: 'brand' },
+  pending:  { label: 'بانتظار الرد', tone: 'warning' },
+  resolved: { label: 'تم الحل', tone: 'success' },
+  closed:   { label: 'مغلقة', tone: 'neutral' },
 }
 
-const STATUS_CFG = {
-  open:     { label: 'Open',     bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
-  pending:  { label: 'Pending',  bg: '#fffbeb', color: '#92400e', border: '#fde68a' },
-  resolved: { label: 'Resolved', bg: '#f0fdf4', color: '#166534', border: '#bbf7d0' },
-  closed:   { label: 'Closed',   bg: '#f9fafb', color: '#E2E8F0', border: '#e5e7eb' },
+function WaStatus({ status }: { status?: string }) {
+  if (!status) return null
+  const label = { pending: 'قيد الإرسال', sent: 'أُرسلت', delivered: 'وصلت', read: 'قُرئت', failed: 'فشل الإرسال' }[status] || status
+  if (status === 'failed') return <XMarkIcon className="h-3.5 w-3.5 text-danger" aria-label={label} />
+  if (status === 'pending') return <ClockIcon className="h-3.5 w-3.5" aria-label={label} />
+  return (
+    <span className={cn('inline-flex', status === 'read' ? 'text-brand-ink' : '')} aria-label={label} title={label}>
+      <CheckIcon className="h-3.5 w-3.5" aria-hidden="true" />
+      {status !== 'sent' && <CheckIcon className="-ms-2 h-3.5 w-3.5" aria-hidden="true" />}
+    </span>
+  )
 }
 
 function isBusinessHours() {
@@ -37,8 +50,11 @@ function isBusinessHours() {
 
 export default function SupportPage() {
   const [tickets, setTickets] = useState<Ticket[]>([])
+  const [ticketsLoading, setTicketsLoading] = useState(true)
+  const [ticketsError, setTicketsError] = useState(false)
   const [activeTicket, setActiveTicket] = useState<Ticket|null>(null)
   const [messages, setMessages] = useState<Message[]>([])
+  const [messagesLoading, setMessagesLoading] = useState(false)
   const [newMsg, setNewMsg] = useState('')
   const [sending, setSending] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
@@ -48,11 +64,12 @@ export default function SupportPage() {
   const [waPhone, setWaPhone] = useState('')
   const [creating, setCreating] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const online = isBusinessHours()
+  const [online, setOnline] = useState(true)
+  useEffect(() => { setOnline(isBusinessHours()) }, [])
 
   useEffect(() => { loadTickets() }, [])
   useEffect(() => {
-    if (activeTicket) loadMessages(activeTicket.id)
+    if (activeTicket) { setMessages([]); setMessagesLoading(true); loadMessages(activeTicket.id).finally(() => setMessagesLoading(false)) }
   }, [activeTicket])
 
   // Poll for WA status updates every 5s when ticket is open
@@ -64,14 +81,16 @@ export default function SupportPage() {
     return () => clearInterval(interval)
   }, [activeTicket?.id])
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [messages])
 
   async function loadTickets() {
     try {
       const r = await axios.get('/api/support/tickets')
       setTickets(r.data.tickets || [])
-    } catch {}
+      setTicketsError(false)
+    } catch { setTicketsError(true) }
+    setTicketsLoading(false)
   }
 
   async function loadMessages(ticketId: string) {
@@ -82,15 +101,15 @@ export default function SupportPage() {
   }
 
   async function createTicket() {
-    if (!newSubject.trim() || !newBody.trim()) { toast.error('Subject and message required'); return }
+    if (!newSubject.trim() || !newBody.trim()) { toast.error('الموضوع والرسالة مطلوبان'); return }
     setCreating(true)
     try {
       const r = await axios.post('/api/support/tickets', { subject: newSubject, message: newBody, whatsapp_phone: waPhone })
-      toast.success(`Ticket #${r.data.ticketNumber} opened! Check your email.`)
+      toast.success(`فُتحت التذكرة رقم ${r.data.ticketNumber}. تحقق من بريدك.`)
       setShowNew(false); setNewSubject(''); setNewBody(''); setWaPhone('')
       await loadTickets()
       setActiveTicket(r.data.ticket)
-    } catch (e: any) { toast.error(e?.response?.data?.error || 'Failed') }
+    } catch (e: any) { toast.error(e?.response?.data?.error || 'تعذّر فتح التذكرة') }
     setCreating(false)
   }
 
@@ -102,7 +121,7 @@ export default function SupportPage() {
       setMessages(m => [...m, r.data.message])
       setNewMsg('')
       setTickets(ts => ts.map(t => t.id === activeTicket.id ? { ...t, status: 'open', updated_at: new Date().toISOString() } : t))
-    } catch (e: any) { toast.error(e?.response?.data?.error || 'Failed') }
+    } catch (e: any) { toast.error(e?.response?.data?.error || 'تعذّر الإرسال') }
     setSending(false)
   }
 
@@ -115,199 +134,191 @@ export default function SupportPage() {
     try {
       const r = await axios.post('/api/support/ai-reply', { ticket_id: activeTicket.id, message: sentMsg })
       setMessages(m => [...m, { id: Date.now().toString() + '1', ticket_id: activeTicket.id, sender_type: 'ai', content: r.data.reply, created_at: new Date().toISOString() }])
-    } catch (e: any) { toast.error('WABEK AI unavailable') }
+    } catch (e: any) { toast.error('مساعد WABEK غير متاح حاليًا') }
     setAiLoading(false)
   }
 
+  const activeStatus = activeTicket ? STATUS_CFG[activeTicket.status] : null
+  const canReply = activeTicket && activeTicket.status !== 'resolved' && activeTicket.status !== 'closed'
+
   return (
-    <>
-      <Head><title>Support — WABEK</title></Head>
-      <DashboardLayout>
-        <div className="flex h-[calc(100vh-56px)] overflow-hidden">
+    <DashboardLayout title="Support">
+      <div className="flex flex-col gap-5">
+        <PageHeader
+          eyebrow="الإعدادات"
+          title="الدعم الفني"
+          description="افتح تذكرة وتابع الرد هنا أو عبر واتساب."
+          actions={
+            <>
+              <Button variant="secondary" icon={BookOpenIcon} href="/docs/faq/troubleshooting">حل المشكلات الشائعة</Button>
+              <Button icon={PlusIcon} onClick={() => setShowNew(true)}>تذكرة جديدة</Button>
+            </>
+          }
+        />
 
-          {/* Left — ticket list */}
-          <div className="w-72 border-r border-slate-200 flex flex-col flex-shrink-0">
-            <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+        <div className="grid h-[calc(100vh-15rem)] min-h-[560px] overflow-hidden rounded-panel border border-line bg-surface shadow-card lg:grid-cols-[320px_minmax(0,1fr)]">
+          {/* Ticket list */}
+          <aside className={cn('flex min-h-0 flex-col border-line lg:border-e', activeTicket && 'hidden lg:flex')} aria-label="التذاكر">
+            <div className="flex items-center justify-between gap-2 border-b border-line-soft px-4 py-3.5">
               <div>
-                <h1 className="font-bold text-slate-900 text-sm">Support Center</h1>
-                <p className="text-xs text-slate-500 mt-0.5">{tickets.length} tickets</p>
+                <h2 className="text-sm font-semibold text-ink">تذاكري</h2>
+                <p className="text-xs text-muted">{tickets.length} تذكرة</p>
               </div>
-              <button onClick={() => setShowNew(true)}
-                className="w-7 h-7 rounded-lg bg-brand-500 hover:bg-brand-600 text-white flex items-center justify-center text-lg font-bold transition-colors">+</button>
+              <Button size="icon-sm" icon={PlusIcon} aria-label="تذكرة جديدة" onClick={() => setShowNew(true)} />
             </div>
-
-            {/* Business hours banner */}
-            <div className={`mx-3 mt-3 rounded-lg px-3 py-2 flex items-center gap-2 text-xs ${online ? 'bg-green-500/10 border border-green-500/20' : 'bg-yellow-500/10 border border-yellow-500/20'}`}>
-              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${online ? 'bg-green-400' : 'bg-yellow-400'}`}
-                style={online ? {boxShadow:'0 0 0 3px rgba(74,222,128,.2)'} : {}}/>
-              <span className={online ? 'text-green-400' : 'text-yellow-400'}>
-                {online ? 'Team online · 9AM–6PM' : 'Team offline · WABEK AI available'}
-              </span>
+            <div className={cn('mx-3 mt-3 flex items-center gap-2 rounded-xl px-3 py-2 text-xs', online ? 'bg-success-bg text-success' : 'bg-warning-bg text-warning')}>
+              <span className={cn('h-2 w-2 shrink-0 rounded-full', online ? 'animate-pulse bg-success' : 'bg-warning')} aria-hidden="true" />
+              {online ? 'الفريق متاح الآن · 9 ص – 6 م' : 'الفريق غير متاح · مساعد WABEK متاح'}
             </div>
-
-            <div className="flex-1 overflow-y-auto py-2">
-              {tickets.length === 0 ? (
-                <div className="text-center py-12 px-4">
-                  <div className="text-4xl mb-3">🎫</div>
-                  <p className="text-slate-400 text-sm">No tickets yet</p>
-                  <button onClick={() => setShowNew(true)} className="text-blue-600 text-xs hover:underline mt-1">Open first ticket</button>
-                </div>
-              ) : tickets.map(t => (
-                <button key={t.id} onClick={() => setActiveTicket(t)}
-                  className={`w-full text-left px-4 py-3 border-b border-slate-200 hover:bg-white transition-colors ${activeTicket?.id === t.id ? 'bg-white border-l-2 border-l-brand-500' : ''}`}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-slate-900 text-xs font-semibold truncate">#{t.ticket_number} · {t.subject}</p>
-                      <p className="text-slate-500 text-xs mt-0.5">{new Date(t.updated_at).toLocaleDateString()}</p>
-                    </div>
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0" style={{
-                      background: STATUS_CFG[t.status]?.bg, color: STATUS_CFG[t.status]?.color,
-                      border: `1px solid ${STATUS_CFG[t.status]?.border}`
-                    }}>{STATUS_CFG[t.status]?.label}</span>
-                  </div>
-                </button>
-              ))}
+            <div className="min-h-0 flex-1 overflow-y-auto py-2">
+              {ticketsLoading ? (
+                <div className="space-y-2 px-3">{[0, 1, 2, 3].map(i => <Skeleton key={i} className="h-14 w-full rounded-xl" />)}</div>
+              ) : ticketsError ? (
+                <ErrorState className="m-3 py-6" title="تعذّر تحميل التذاكر" onRetry={() => { setTicketsLoading(true); loadTickets() }} />
+              ) : tickets.length === 0 ? (
+                <EmptyState size="sm" icon={TicketIcon} title="لا توجد تذاكر بعد" action={<Button size="sm" variant="secondary" onClick={() => setShowNew(true)}>فتح أول تذكرة</Button>} />
+              ) : (
+                <ul className="space-y-1 px-2">
+                  {tickets.map(t => {
+                    const st = STATUS_CFG[t.status] || { label: t.status, tone: 'neutral' as Tone }
+                    const selected = activeTicket?.id === t.id
+                    return (
+                      <li key={t.id}>
+                        <button type="button" onClick={() => setActiveTicket(t)} aria-current={selected || undefined}
+                          className={cn('w-full rounded-xl px-3 py-3 text-start transition', selected ? 'bg-chip/60 ring-1 ring-brand-teal/30' : 'hover:bg-surface-2')}>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="min-w-0 truncate text-sm font-medium text-ink"><span className="text-muted tabular">#{t.ticket_number}</span> · {t.subject}</p>
+                            <Badge tone={st.tone} size="sm" className="shrink-0">{st.label}</Badge>
+                          </div>
+                          <p className="mt-1 text-xs text-muted">آخر تحديث {fmtDate(t.updated_at)}</p>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
             </div>
-          </div>
+          </aside>
 
-          {/* Right — chat */}
+          {/* Thread */}
           {activeTicket ? (
-            <div className="flex-1 flex flex-col min-w-0">
-              {/* Chat header */}
-              <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between">
-                <div>
-                  <h2 className="text-slate-900 font-semibold text-sm">#{activeTicket.ticket_number} · {activeTicket.subject}</h2>
-                  <p className="text-slate-500 text-xs mt-0.5">Opened {new Date(activeTicket.created_at).toLocaleDateString()}</p>
+            <section className="flex min-h-0 min-w-0 flex-col" aria-label="محادثة التذكرة">
+              <header className="flex items-center gap-3 border-b border-line-soft px-4 py-3.5 sm:px-5">
+                <Button size="icon-sm" variant="ghost" icon={ArrowRightIcon} aria-label="العودة إلى التذاكر" className="lg:hidden ltr:rotate-180" onClick={() => setActiveTicket(null)} />
+                <div className="min-w-0 flex-1">
+                  <h2 className="truncate text-sm font-semibold text-ink"><span className="text-muted tabular">#{activeTicket.ticket_number}</span> · {activeTicket.subject}</h2>
+                  <p className="text-xs text-muted">فُتحت في {fmtDate(activeTicket.created_at)}</p>
                 </div>
-                <span className="text-xs font-semibold px-2 py-1 rounded-full" style={{
-                  background: STATUS_CFG[activeTicket.status]?.bg, color: STATUS_CFG[activeTicket.status]?.color,
-                  border: `1px solid ${STATUS_CFG[activeTicket.status]?.border}`
-                }}>{STATUS_CFG[activeTicket.status]?.label}</span>
-              </div>
+                {activeStatus && <Badge tone={activeStatus.tone} dot>{activeStatus.label}</Badge>}
+              </header>
 
-              {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                {messages.map(msg => (
-                  <div key={msg.id} className={`flex ${msg.sender_type === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    {msg.sender_type !== 'user' && (
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold mr-2 flex-shrink-0 ${msg.sender_type === 'ai' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                        {msg.sender_type === 'ai' ? '🤖' : '👤'}
-                      </div>
-                    )}
-                    <div className="max-w-[70%]">
-                      {msg.sender_type !== 'user' && (
-                        <p className="text-xs text-slate-500 mb-1 ml-1">
-                          {msg.sender_type === 'ai' ? 'WABEK AI' : 'Support Team'}
-                        </p>
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-surface-2/50 p-4 sm:p-5" aria-live="polite">
+                {messagesLoading && messages.length === 0 ? (
+                  <div className="space-y-3">{[0, 1, 2].map(i => <Skeleton key={i} className={cn('h-14 rounded-2xl', i % 2 ? 'ms-auto w-1/2' : 'w-2/3')} />)}</div>
+                ) : messages.map(msg => {
+                  const mine = msg.sender_type === 'user'
+                  return (
+                    <div key={msg.id} className={cn('flex gap-2', mine ? 'justify-end' : 'justify-start')}>
+                      {!mine && (
+                        <span className={cn('mt-5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full', msg.sender_type === 'ai' ? 'bg-violet-bg text-violet' : 'bg-chip text-brand-ink')}>
+                          {msg.sender_type === 'ai' ? <SparklesIcon className="h-4 w-4" aria-hidden="true" /> : <UserIcon className="h-4 w-4" aria-hidden="true" />}
+                        </span>
                       )}
-                      <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-                        msg.sender_type === 'user'
-                          ? 'bg-blue-600 text-white rounded-tr-sm'
-                          : msg.sender_type === 'ai'
-                          ? 'bg-purple-50 border border-purple-200 text-slate-800 rounded-tl-sm'
-                          : 'bg-white border border-slate-200 text-slate-700 rounded-tl-sm'
-                      }`}>{msg.content}</div>
-                      <p className={`text-xs text-slate-600 mt-1 flex items-center gap-1 ${msg.sender_type === 'user' ? 'justify-end' : 'justify-start ml-1'}`}>
-                        {new Date(msg.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}
-                        {msg.sender_type === 'user' && msg.wa_status && WA_STATUS_ICON[msg.wa_status]}
-                      </p>
+                      <div className={cn('max-w-[78%]', mine && 'items-end')}>
+                        {!mine && <p className="mb-1 ms-1 text-xs text-muted">{msg.sender_type === 'ai' ? 'مساعد WABEK' : 'فريق الدعم'}</p>}
+                        <div dir="auto" className={cn('whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed',
+                          mine ? 'rounded-se-md bg-brand-gradient text-[#04282C]'
+                            : msg.sender_type === 'ai' ? 'rounded-ss-md border border-violet/20 bg-violet-bg/60 text-ink'
+                            : 'rounded-ss-md border border-line bg-surface text-ink')}>
+                          {msg.content}
+                        </div>
+                        <p className={cn('mt-1 flex items-center gap-1 text-[11px] text-muted', mine ? 'justify-end' : 'ms-1')}>
+                          <span className="tabular">{fmtTime(msg.created_at)}</span>
+                          {mine && <WaStatus status={msg.wa_status} />}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
                 {aiLoading && (
-                  <div className="flex justify-start">
-                    <div className="w-7 h-7 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-xs mr-2">🤖</div>
-                    <div className="bg-purple-500/10 border border-purple-500/20 rounded-2xl rounded-tl-sm px-4 py-3">
-                      <div className="flex gap-1">{[0,1,2].map(i=><div key={i} className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{animationDelay:`${i*0.15}s`}}/>)}</div>
+                  <div className="flex gap-2">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-bg text-violet"><SparklesIcon className="h-4 w-4" aria-hidden="true" /></span>
+                    <div className="flex items-center gap-1 rounded-2xl rounded-ss-md border border-violet/20 bg-violet-bg/60 px-4 py-3" aria-label="المساعد يكتب">
+                      {[0, 1, 2].map(i => <span key={i} className="h-2 w-2 animate-bounce rounded-full bg-violet" style={{ animationDelay: `${i * 0.15}s` }} />)}
                     </div>
                   </div>
                 )}
-                <div ref={bottomRef}/>
+                <div ref={bottomRef} />
               </div>
 
-              {/* Input */}
-              {activeTicket.status !== 'resolved' && activeTicket.status !== 'closed' ? (
-                <div className="p-4 border-t border-slate-200">
+              {canReply ? (
+                <div className="border-t border-line-soft p-3 sm:p-4">
                   {!online && (
-                    <div className="flex items-center gap-2 text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2 mb-3">
-                      <span>⏰</span>
-                      <span>Our team is offline. Ask WABEK AI or send a message — we'll reply during business hours (9AM–6PM).</span>
-                    </div>
+                    <p className="mb-3 flex items-start gap-2 rounded-xl bg-warning-bg px-3 py-2 text-xs text-warning">
+                      <ClockIcon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                      الفريق غير متاح الآن. اسأل مساعد WABEK أو أرسل رسالتك، وسنرد خلال ساعات العمل (9 ص – 6 م).
+                    </p>
                   )}
-                  <div className="flex gap-2">
-                    <textarea
+                  <form className="flex items-end gap-2" onSubmit={e => { e.preventDefault(); sendMessage() }}>
+                    <Textarea
                       value={newMsg}
                       onChange={e => setNewMsg(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
-                      placeholder="Type your message... (Enter to send)"
+                      placeholder="اكتب رسالتك… (Enter للإرسال)"
+                      aria-label="نص الرسالة"
                       rows={2}
-                      className="input flex-1 resize-none text-sm"
+                      className="min-h-[2.75rem] flex-1 resize-none"
                     />
                     <div className="flex flex-col gap-2">
-                      <button onClick={sendMessage} disabled={sending || !newMsg.trim()}
-                        className="btn-primary text-sm px-4 py-2 h-fit">
-                        {sending ? '...' : 'Send'}
-                      </button>
                       {!online && (
-                        <button onClick={askAI} disabled={aiLoading || !newMsg.trim()}
-                          className="text-xs px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-400 hover:bg-purple-500/20 transition-colors">
-                          🤖 Ask AI
-                        </button>
+                        <Button type="button" variant="secondary" size="sm" icon={SparklesIcon} loading={aiLoading} disabled={!newMsg.trim()} onClick={askAI}>اسأل المساعد</Button>
                       )}
+                      <Button type="submit" size="sm" icon={PaperAirplaneIcon} loading={sending} disabled={!newMsg.trim()}>إرسال</Button>
                     </div>
-                  </div>
+                  </form>
                 </div>
               ) : (
-                <div className="p-4 border-t border-slate-200 text-center text-sm text-slate-500">
-                  This ticket is {activeTicket.status}. <button onClick={() => createTicket()} className="text-blue-600 hover:underline">Open a new ticket</button> if you need more help.
+                <div className="border-t border-line-soft p-4 text-center text-sm text-muted">
+                  هذه التذكرة {activeStatus?.label || activeTicket.status}.{' '}
+                  <button type="button" className="font-medium text-link hover:text-link-hover" onClick={() => setShowNew(true)}>افتح تذكرة جديدة</button> إن احتجت إلى مساعدة إضافية.
                 </div>
               )}
-            </div>
+            </section>
           ) : (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-6xl mb-4">💬</div>
-                <p className="text-slate-400 text-sm mb-2">Select a ticket to view the conversation</p>
-                <button onClick={() => setShowNew(true)} className="btn-primary text-sm">+ Open New Ticket</button>
-              </div>
+            <div className="hidden items-center justify-center p-6 lg:flex">
+              <EmptyState icon={ChatBubbleLeftRightIcon} title="اختر تذكرة لعرض المحادثة" description="أو افتح تذكرة جديدة وسيرد عليك فريقنا في أقرب وقت."
+                action={<Button icon={PlusIcon} onClick={() => setShowNew(true)}>تذكرة جديدة</Button>} />
             </div>
           )}
         </div>
+      </div>
 
-        {/* New ticket modal */}
-        {showNew && (
-          <div className="fixed inset-0 bg-slate-50/40 flex items-center justify-center z-50 p-4">
-            <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-lg p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="font-bold text-slate-900 text-lg">Open New Ticket</h2>
-                <button onClick={() => setShowNew(false)} className="text-slate-400 hover:text-slate-900 text-xl leading-none">×</button>
-              </div>
-              <div>
-                <label className="label">Subject *</label>
-                <input value={newSubject} onChange={e => setNewSubject(e.target.value)}
-                  placeholder="What do you need help with?" className="input w-full" />
-              </div>
-              <div>
-                <label className="label">Message *</label>
-                <textarea value={newBody} onChange={e => setNewBody(e.target.value)}
-                  placeholder="Describe your issue in detail..." rows={4} className="input w-full resize-none" />
-              </div>
-              <div>
-                <label className="label">WhatsApp Number (for notifications)</label>
-                <input value={waPhone} onChange={e => setWaPhone(e.target.value)}
-                  placeholder="e.g. 966501234567" className="input w-full" />
-                <p className="text-xs text-slate-500 mt-1">We'll send you WhatsApp updates on your ticket. Include country code, no + or spaces.</p>
-              </div>
-              <div className="flex gap-3 pt-1">
-                <button onClick={() => setShowNew(false)} className="btn-secondary flex-1">Cancel</button>
-                <button onClick={createTicket} disabled={creating || !newSubject.trim() || !newBody.trim()} className="btn-primary flex-1">
-                  {creating ? 'Opening...' : '🎫 Open Ticket'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </DashboardLayout>
-    </>
+      <Modal
+        open={showNew}
+        onClose={() => setShowNew(false)}
+        size="lg"
+        icon={LifebuoyIcon}
+        title="فتح تذكرة جديدة"
+        description="صف المشكلة بالتفصيل لنساعدك بسرعة."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowNew(false)}>إلغاء</Button>
+            <Button type="submit" form="ticket-form" icon={TicketIcon} loading={creating} disabled={!newSubject.trim() || !newBody.trim()}>فتح التذكرة</Button>
+          </>
+        }
+      >
+        <form id="ticket-form" className="space-y-4" onSubmit={e => { e.preventDefault(); createTicket() }}>
+          <Field label="الموضوع" required>
+            <Input value={newSubject} onChange={e => setNewSubject(e.target.value)} placeholder="بماذا نساعدك؟" />
+          </Field>
+          <Field label="الرسالة" required>
+            <Textarea value={newBody} onChange={e => setNewBody(e.target.value)} placeholder="اشرح المشكلة بالتفصيل…" rows={5} />
+          </Field>
+          <Field label="رقم واتساب للإشعارات" hint="سنرسل إليك تحديثات التذكرة عبر واتساب. أدخل الرقم مع رمز الدولة دون + أو مسافات.">
+            <Input value={waPhone} onChange={e => setWaPhone(e.target.value)} placeholder="966501234567" dir="ltr" inputMode="tel" />
+          </Field>
+        </form>
+      </Modal>
+    </DashboardLayout>
   )
 }
