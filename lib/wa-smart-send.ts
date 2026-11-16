@@ -65,7 +65,7 @@ async function isPlatformAdmin(userId: string): Promise<boolean> {
   }
 }
 
-function phoneVariants(to: string): string[] {
+export function phoneVariants(to: string): string[] {
   const digits = String(to || '').replace(/[^0-9]/g, '')
   const out = new Set<string>()
   if (to) out.add(String(to))

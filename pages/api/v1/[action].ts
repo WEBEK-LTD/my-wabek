@@ -4,7 +4,6 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { handleCors, apiRateLimit } from '@/lib/middleware'
 import { authenticateApiKey } from '@/lib/api-key-auth'
 import { insertMessage } from '@/lib/message-insert'
-import { v4 as uuidv4 } from 'uuid'
 
 // Auth: `X-API-Key: <key>` or `Authorization: Bearer <key|session JWT>`.
 // `?api_key=` still works for existing installs (deprecated, logged) unless
@@ -67,9 +66,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (instance_id) {
       instanceQuery = instanceQuery.eq('id', instance_id)
     }
-    const { data: instances } = await instanceQuery.order('created_at', { ascending: true }).limit(5)
-    // Prefer connected, fallback to any
-    const instance = instances?.find(i => i.status === 'connected') || instances?.[0] || null
+    const { data: instances } = await instanceQuery.order('created_at', { ascending: true }).limit(instance_id ? 1 : 50)
+    // Prefer the account's default connected number, then any connected, then any
+    const instance = instances?.find(i => i.is_default && i.status === 'connected')
+      || instances?.find(i => i.status === 'connected')
+      || instances?.[0] || null
 
     if (!instance) {
       return res.status(404).json({ error: 'No connected WhatsApp instance' })
@@ -79,6 +80,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // templates directly (the inner smartSend calls are told it is done).
     const guard = await checkSendAllowed(auth.userId, to)
     if (!guard.allowed) return res.status(403).json({ error: guard.error, code: guard.code })
+
+    // Optional Idempotency-Key: a retried request with the same key returns
+    // the first result instead of sending the message twice.
+    const idemHeader = req.headers['idempotency-key']
+    const idemKey = typeof idemHeader === 'string' && /^[A-Za-z0-9._:-]{8,100}$/.test(idemHeader) ? idemHeader : null
+    if (idemKey) {
+      const { data: prior } = await db.from('api_idempotency_keys')
+        .select('response, created_at')
+        .eq('user_id', auth.userId).eq('key', idemKey)
+        .gte('created_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString())
+        .maybeSingle()
+      if (prior?.response) return res.status(200).json({ ...(prior.response as object), idempotent_replay: true })
+      if (prior) return res.status(409).json({ error: 'A request with this Idempotency-Key is still in progress', code: 'idempotency_in_progress' })
+      const { error: claimErr } = await db.from('api_idempotency_keys').insert({ user_id: auth.userId, key: idemKey })
+      if (claimErr) return res.status(409).json({ error: 'A request with this Idempotency-Key is still in progress', code: 'idempotency_in_progress' })
+    }
+    const releaseIdem = async () => {
+      if (idemKey) await db.from('api_idempotency_keys').delete().eq('user_id', auth.userId).eq('key', idemKey).is('response', null)
+    }
+    const respondSent = async (payload: Record<string, unknown>) => {
+      if (idemKey) await db.from('api_idempotency_keys').update({ response: payload }).eq('user_id', auth.userId).eq('key', idemKey)
+      return res.status(200).json(payload)
+    }
 
     try {
       let result: { messageId?: string | null; error?: string } | undefined
@@ -109,7 +133,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           const inWindow = await isInWindow((instance as any)?.user_id || (instance as any)?.userId || '', to, (instance as any)?.id || '')
           if (!inWindow) {
             const lastAttempt = otpResult.attempts[otpResult.attempts.length - 1]
-            return res.status(422).json({
+            await releaseIdem(); return res.status(422).json({
               error: 'Failed to deliver the verification code',
               detail: `Tried the Authentication template(s), but all attempts failed. Last error: ${lastAttempt?.error || 'Unknown error'}. Configure "OTP Template Name" in Settings → Security & OTP to match an Approved Authentication template in Meta Business Manager.`,
               attempts: otpResult.attempts,
@@ -157,7 +181,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               result = { messageId: otpResult.messageId }
             } else {
               const lastAttempt = otpResult.attempts[otpResult.attempts.length - 1]
-              return res.status(422).json({
+              await releaseIdem(); return res.status(422).json({
                 error: 'Failed to deliver message outside the 24h window',
                 detail: `Detected a verification code (${codeMatch[1]}) and tried sending via Authentication template(s), but all attempts failed. Last error: ${lastAttempt?.error || 'Unknown error'}. Configure "OTP Template Name" in Settings → Security & OTP to match an Approved Authentication template in Meta Business Manager.`,
                 attempts: otpResult.attempts,
@@ -243,7 +267,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             if (!sent) {
               const lastAttempt = tmplAttempts[tmplAttempts.length - 1]
-              return res.status(422).json({
+              await releaseIdem(); return res.status(422).json({
                 error: 'Recipient is outside the 24-hour messaging window',
                 detail: `Plain text cannot be delivered outside the 24h window. Tried sending via the "${templateName}" template (customer_name="${customerName}"), but all attempts failed. Last error: ${lastAttempt?.error || 'Unknown error'}. ` +
                   'Make sure this template is Approved on Meta Business Manager and its body has either a {{customer_name}} named parameter or a single {{1}} positional parameter. ' +
@@ -257,16 +281,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           saved = true
         }
       }
-      if (result?.error) return res.status(502).json({ error: 'Failed to send message', detail: result.error })
+      if (result?.error) { await releaseIdem(); return res.status(502).json({ error: 'Failed to send message', detail: result.error }) }
       // Template paths above send directly — store their row once here
       if (!saved) {
         await insertMessage({ user_id: auth.userId, instance_id: instance.id, contact_id: null, direction: 'outbound', type: 'text', content: message, wa_message_id: result?.messageId || null, status: 'sent', meta: { source: 'api' } })
       }
-      return res.status(200).json({ success: true, message_id: result?.messageId })
+      return respondSent({ success: true, message_id: result?.messageId })
     } catch (err: unknown) {
       const e = err as { message?: string; response?: { data?: unknown } }
       console.error('[v1/send] error:', e?.message, e?.response?.data)
-      return res.status(500).json({ error: 'Failed to send message' })
+      await releaseIdem(); return res.status(500).json({ error: 'Failed to send message' })
     }
   }
 
@@ -279,10 +303,52 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // POST /api/v1/contacts - Create contact
   if (req.method === 'POST' && action === 'contacts') {
     const { phone, name, email, tags } = req.body
-    if (!phone) return res.status(400).json({ error: 'phone required' })
-    const { data, error } = await db.from('contacts').upsert({ id: uuidv4(), user_id: auth.userId, phone, name, email, tags: tags || [] }, { onConflict: 'user_id,phone' }).select().single()
+    if (!phone || typeof phone !== 'string') return res.status(400).json({ error: 'phone required' })
+    // Never send `id` in the upsert: on conflict it would replace the existing
+    // contact's id and break its conversations/messages.
+    const row: Record<string, unknown> = { user_id: auth.userId, phone }
+    if (typeof name === 'string') row.name = name.slice(0, 200)
+    if (typeof email === 'string') row.email = email.slice(0, 200)
+    if (Array.isArray(tags)) row.tags = tags.filter(t => typeof t === 'string').slice(0, 50)
+    const { data, error } = await db.from('contacts').upsert(row, { onConflict: 'user_id,phone' }).select().single()
     if (error) return res.status(500).json({ error: 'Failed to save contact' })
     return res.status(200).json({ contact: data })
+  }
+
+  // POST /api/v1/contacts-opt-out - {phone, opted_out: boolean}
+  // Records the recipient's choice so every send path on the platform honours it.
+  if (req.method === 'POST' && (action === 'contacts-opt-out' || action === 'opt-out')) {
+    const { phone, opted_out } = req.body
+    if (!phone || typeof phone !== 'string') return res.status(400).json({ error: 'phone required' })
+    const optedOut = opted_out === undefined ? true : (opted_out === true || opted_out === 'true' || opted_out === 1 || opted_out === '1')
+    const { phoneVariants } = await import('@/lib/wa-smart-send')
+    const variants = phoneVariants(phone)
+    const { data: existing } = await db.from('contacts').select('id').eq('user_id', auth.userId).in('phone', variants)
+    if (existing && existing.length) {
+      const { error } = await db.from('contacts').update({ opted_out: optedOut }).eq('user_id', auth.userId).in('id', existing.map(r => r.id))
+      if (error) return res.status(500).json({ error: 'Failed to update contact' })
+    } else {
+      const { error } = await db.from('contacts').insert({ user_id: auth.userId, phone, opted_out: optedOut })
+      if (error) return res.status(500).json({ error: 'Failed to save contact' })
+    }
+    return res.status(200).json({ success: true, opted_out: optedOut })
+  }
+
+  // GET /api/v1/message-status?id=<message_id> - delivery status of a message sent by this account
+  if (req.method === 'GET' && action === 'message-status') {
+    const id = typeof req.query.id === 'string' ? req.query.id : ''
+    if (!id || id.length > 200) return res.status(400).json({ error: 'id required' })
+    const { data } = await db.from('messages')
+      .select('status, created_at, meta')
+      .eq('user_id', auth.userId)
+      .eq('wa_message_id', id)
+      .eq('direction', 'outbound')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (!data) return res.status(404).json({ error: 'Message not found' })
+    const meta = (data.meta || {}) as Record<string, unknown>
+    return res.status(200).json({ id, status: data.status, error: data.status === 'failed' ? (meta.error_title || meta.error || null) : null })
   }
 
   // GET /api/v1/instances - List this account's WhatsApp numbers (safe fields only)

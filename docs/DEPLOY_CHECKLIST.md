@@ -8,7 +8,7 @@
 ## ١. ترتيب النشر (مختصر)
 
 1. **متغيرات البيئة** على Netlify و Railway (القسم ٢) — قبل أي شيء آخر.
-2. **Migrations** في Supabase بالترتيب `026 → 027 → 028 → 029 → 030` (القسم ٣).
+2. **Migrations** في Supabase بالترتيب `026 → 027 → 028 → 029 → 030 → 031` (القسم ٣).
 3. **Railway (wabek-baileys)** — إعادة نشر/تشغيل خادم Baileys.
 4. **Netlify** — نشر الواجهة و API.
 5. **Smoke test** (القسم ٥) + **تحقق اتصالات واتساب** (القسم ٦).
@@ -91,7 +91,7 @@
 
 ## ٣. Migrations
 
-الترتيب: **`026_enable_rls_lockdown` → `027_auth_hardening` → `028_billing_hardening` → `029_messaging_hardening` → `030_lockdown_reassert`**
+الترتيب: **`026_enable_rls_lockdown` → `027_auth_hardening` → `028_billing_hardening` → `029_messaging_hardening` → `030_lockdown_reassert` → `031_api_idempotency`**
 
 - كلها إضافية وidempotent (يمكن إعادة تشغيلها)، لا تحذف بيانات، ولا تغيّر `whatsapp_instances` أو `wa_sessions`.
 - **026**: يفعّل RLS على كل جداول `public`، يحذف policies الخاصة بـ anon/authenticated/PUBLIC، ويسحب كل الصلاحيات منهم (جداول/sequences/functions + default privileges). `service_role` (Netlify + Baileys) يحتفظ بكل الصلاحيات ويتجاوز RLS. ⚠️ أي كود يستخدم anon key مباشرة على الجداول (مثلاً Realtime من المتصفح) لن يستقبل شيئاً بعده.
@@ -99,6 +99,7 @@
 - **028**: `processed_stripe_events` (نفس التعريف)، CHECK على `subscriptions.status`، unique `subscriptions.user_id` (إن أمكن)، `reseller_add_earning(p_user, p_amount, p_referred)` (توقيع وحيد؛ يحذف overload قديم إن وُجد)، `reseller_record_payout(...)`، فهارس idempotency، bucket `brand-assets`.
 - **029**: unique لـ inbound `(instance_id, wa_message_id)` و `wix_user_links(wix_instance_id)` — **فقط** إن لم توجد تكرارات؛ وإلا يطبع NOTICE مع استعلام المراجعة. راجع الـ NOTICEs بعد التشغيل.
 - **030**: يعيد تطبيق حلقات القفل من 026 على الكائنات التي أنشأتها 027–029 (EXECUTE لـ PUBLIC على الدوال افتراضي عام في Postgres ولا يُسحب على مستوى schema).
+- **031**: جدول `api_idempotency_keys` لمنع تكرار الإرسال عند إعادة المحاولة عبر الترويسة `Idempotency-Key` في `POST /api/v1/send` (مقفول على الخادم فقط).
 
 بعد التشغيل: تحقق من الـ NOTICEs (تكرارات custom_domain / subscriptions / inbound / Wix).
 
