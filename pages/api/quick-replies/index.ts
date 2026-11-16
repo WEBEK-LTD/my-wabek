@@ -14,10 +14,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    const { title, message, shortcut, tags } = req.body
-    if (!title || !message) return res.status(400).json({ error: 'title and message required' })
-    const { data, error } = await db.from('quick_replies').insert({ id: uuidv4(), user_id: user.userId, title, message, shortcut, tags: tags || [] }).select().single()
-    if (error) return res.status(500).json({ error: error.message })
+    const { title, message, shortcut, tags } = req.body || {}
+    if (!title || !message || typeof title !== 'string' || typeof message !== 'string') return res.status(400).json({ error: 'title and message required' })
+    if (title.length > 200 || message.length > 4096) return res.status(400).json({ error: 'Input too long' })
+    if (tags !== undefined && (!Array.isArray(tags) || tags.some((t: unknown) => typeof t !== 'string'))) return res.status(400).json({ error: 'Invalid tags' })
+    const { data, error } = await db.from('quick_replies').insert({
+      id: uuidv4(), user_id: user.userId, title, message,
+      shortcut: typeof shortcut === 'string' ? shortcut.slice(0, 50) : null,
+      tags: (tags || []).slice(0, 20),
+    }).select().single()
+    if (error) {
+      console.error('[quick-replies] db error:', error.message)
+      return res.status(500).json({ error: 'Failed to save quick reply' })
+    }
     return res.status(201).json({ reply: data })
   }
 

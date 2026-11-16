@@ -136,6 +136,24 @@ ALTER TABLE status_messages ADD COLUMN IF NOT EXISTS ip_address TEXT;
 CREATE INDEX IF NOT EXISTS idx_status_messages_ip_created ON status_messages(ip_address, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_status_messages_email_created ON status_messages(email, created_at DESC);
 
+-- ── 1f. Dashboard daily chart aggregate (replaces fetching every row) ──────
+CREATE OR REPLACE FUNCTION public.dashboard_daily_messages(p_user uuid, p_since timestamptz)
+RETURNS TABLE (day date, sent bigint, delivered bigint, received bigint)
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = public
+AS $$
+  SELECT (m.created_at AT TIME ZONE 'UTC')::date AS day,
+         COUNT(*) FILTER (WHERE m.direction = 'outbound')                                   AS sent,
+         COUNT(*) FILTER (WHERE m.direction = 'outbound' AND m.status IN ('delivered','read')) AS delivered,
+         COUNT(*) FILTER (WHERE m.direction <> 'outbound')                                  AS received
+    FROM messages m
+   WHERE m.user_id = p_user AND m.created_at >= p_since
+   GROUP BY 1
+   ORDER BY 1;
+$$;
+
 -- ── 2–4. Lockdown ───────────────────────────────────────────────────────────
 DO $$
 DECLARE
