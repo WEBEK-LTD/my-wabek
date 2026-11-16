@@ -13,17 +13,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .select('*')
       .eq('user_id', user.userId)
       .order('created_at', { ascending: false })
-      .limit(20)
+      .limit(Math.min(Math.max(parseInt(String(req.query.limit ?? '20'), 10) || 20, 1), 100))
     return res.status(200).json({ notifications: data || [] })
   }
 
   if (req.method === 'PUT') {
-    await db.from('notifications').update({ is_read: true }).eq('user_id', user.userId).eq('is_read', false)
+    // Mark one notification ({ id }) or all of them (no id) as read
+    const id = typeof req.body?.id === 'string' ? req.body.id : null
+    let q = db.from('notifications').update({ is_read: true }).eq('user_id', user.userId).eq('is_read', false)
+    if (id) q = q.eq('id', id)
+    await q
     return res.status(200).json({ success: true })
   }
 
   if (req.method === 'DELETE') {
-    const { id } = req.body
+    const id = typeof req.body?.id === 'string' ? req.body.id : null
     if (id) await db.from('notifications').delete().eq('id', id).eq('user_id', user.userId)
     else await db.from('notifications').delete().eq('user_id', user.userId)
     return res.status(200).json({ success: true })
