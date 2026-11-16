@@ -65,7 +65,16 @@ const VARIANTS: { label: string; components: (code: string) => any[] }[] = [
   },
 ]
 
-const LANGUAGES = ['en', 'en_US', 'en_GB']
+// Approved languages to try, in order (Arabic templates were never found
+// when only English codes were tried). A configured language goes first.
+const LANGUAGES = ['ar', 'en', 'en_US', 'en_GB']
+
+function languageOrder(preferred?: string | null): string[] {
+  const out: string[] = []
+  if (typeof preferred === 'string' && /^[a-z]{2,3}(_[A-Z]{2,4})?$/.test(preferred)) out.push(preferred)
+  for (const l of LANGUAGES) if (!out.includes(l)) out.push(l)
+  return out
+}
 
 // Common Authentication template names used as fallbacks if the configured
 // otp_template_name doesn't exist on this account's WABA (error 132001).
@@ -91,8 +100,19 @@ export async function sendOtpTemplate(params: {
   to: string
   templateName: string
   code: string
+  /** The template's approved language (Settings → otp_template_language), if known. */
+  language?: string | null
 }): Promise<OtpTemplateResult> {
   const { phoneNumberId, accessToken, to, templateName, code } = params
+  let preferredLanguage = params.language
+  if (preferredLanguage === undefined) {
+    try {
+      const { getSetting } = await import('./settings')
+      const v = await getSetting('otp_template_language', '')
+      preferredLanguage = typeof v === 'string' && v ? v : null
+    } catch { preferredLanguage = null }
+  }
+  const languages = languageOrder(preferredLanguage)
   const attempts: OtpTemplateAttempt[] = []
 
   async function tryTemplate(name: string, variants: typeof VARIANTS, languages: string[]): Promise<OtpTemplateResult | null> {
@@ -125,6 +145,9 @@ export async function sendOtpTemplate(params: {
           const errMsg = errBody?.message || err?.message || 'Unknown error'
           attempts.push({ templateName: name, language, components: variant.label, ok: false, status, error: errMsg })
           if (code_ !== 132001) templateMissing = false
+          // 132001 = no template with this name in this language: the other
+          // component shapes cannot help — go to the next language.
+          if (code_ === 132001) break
         }
       }
     }
@@ -133,14 +156,14 @@ export async function sendOtpTemplate(params: {
   }
 
   // 1. Try the configured/primary template name with the full matrix
-  const primary = await tryTemplate(templateName, VARIANTS, LANGUAGES)
+  const primary = await tryTemplate(templateName, VARIANTS, languages)
   if (primary) return primary
 
   // 2. Primary template doesn't exist on this account at all (132001 for every
   //    attempt) -- try other common template names with a reduced matrix
-  //    (top 2 component shapes, 2 languages) to keep total calls bounded.
+  //    (top 2 component shapes, 3 languages) to keep total calls bounded.
   const reducedVariants = VARIANTS.slice(0, 2)
-  const reducedLanguages = LANGUAGES.slice(0, 2)
+  const reducedLanguages = languages.slice(0, 3)
 
   for (const fallbackName of FALLBACK_TEMPLATE_NAMES) {
     if (fallbackName === templateName) continue // already tried above
