@@ -32,6 +32,71 @@ interface Session {
 }
 
 // ─────────────────────────────────────────────────────────
+// Branch selection (pure; shared with the flow tester /api/chatbot/test)
+// ─────────────────────────────────────────────────────────
+
+type EdgeLike = { source: string; target: string; label?: string }
+export type ChatbotButton = { id?: string; text: string }
+
+/** First outgoing edge of a node (unlabelled flow). */
+export function firstEdge<E extends EdgeLike>(edges: E[], nodeId: string): E | undefined {
+  return edges.find(e => e.source === nodeId)
+}
+
+/** Result of a condition node against the session variables. */
+export function evaluateCondition(data: Record<string, unknown>, variables: Record<string, unknown>): boolean {
+  const variable = String(variables[data.variable as string] || '')
+  const op = data.operator as string
+  const val = (data.value as string) || ''
+  if (op === 'equals') return variable === val
+  if (op === 'contains') return variable.toLowerCase().includes(val.toLowerCase())
+  if (op === 'starts_with') return variable.toLowerCase().startsWith(val.toLowerCase())
+  if (op === 'not_empty') return !!variable
+  return false
+}
+
+/** Edge labelled 'true' / 'false' for the result, else the first edge. */
+export function conditionEdge<E extends EdgeLike>(edges: E[], nodeId: string, result: boolean): E | undefined {
+  return edges.find(e => e.source === nodeId && e.label === (result ? 'true' : 'false')) || firstEdge(edges, nodeId)
+}
+
+/** The button the user picked: by text (case-insensitive), id, or its 1-based number. */
+export function matchButton<B extends ChatbotButton>(buttons: B[], input: string): B | undefined {
+  return buttons.find((b, i) =>
+    String(b.text || '').toLowerCase() === input.toLowerCase() ||
+    (b.id !== undefined && b.id === input) ||
+    String(i + 1) === input
+  )
+}
+
+/** Edge labelled with the picked button's text or id, else the first edge. */
+export function buttonEdge<E extends EdgeLike>(edges: E[], nodeId: string, matched: ChatbotButton | undefined): E | undefined {
+  return matched
+    ? edges.find(e => e.source === nodeId && (e.label === matched.text || (matched.id !== undefined && e.label === matched.id))) || firstEdge(edges, nodeId)
+    : firstEdge(edges, nodeId)
+}
+
+/** Replace {{variable}} placeholders with session variables. */
+export function renderFlowText(text: string, variables: Record<string, unknown>): string {
+  let out = text
+  for (const [key, val] of Object.entries(variables)) {
+    const safeKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    out = out.replace(new RegExp(`\\{\\{${safeKey}\\}\\}`, 'gi'), String(val))
+  }
+  return out
+}
+
+/** Message text of a node as sent (buttons are listed as numbered options). */
+export function nodeMessageText(node: { type: string; data: Record<string, unknown> }): string {
+  let text = (node.data.text || node.data.message || node.data.question || '') as string
+  if (node.type === 'buttons') {
+    const buttons = (node.data.buttons as Array<{ text: string }>) || []
+    if (buttons.length) text = `${text}\n\n${buttons.map((b, i) => `${i + 1}. ${b.text}`).join('\n')}`
+  }
+  return text
+}
+
+// ─────────────────────────────────────────────────────────
 // Entry point
 // ─────────────────────────────────────────────────────────
 
@@ -221,16 +286,8 @@ async function continueFlow(
   // Handle button selection
   if (currentNode.type === 'buttons') {
     const buttons = (currentNode.data.buttons as Array<{ id: string; text: string }>) || []
-    const matched = buttons.find(b =>
-      b.text.toLowerCase() === userInput.toLowerCase() ||
-      b.id === userInput ||
-      String(buttons.indexOf(b) + 1) === userInput
-    )
-
-    const edge = matched
-      ? edges.find(e => e.source === currentNode.id && (e.label === matched.text || e.label === matched.id))
-        || edges.find(e => e.source === currentNode.id)
-      : edges.find(e => e.source === currentNode.id)
+    const matched = matchButton(buttons, userInput)
+    const edge = buttonEdge(edges, currentNode.id, matched)
 
     if (edge) {
       const next = nodes.find(n => n.id === edge.target)
@@ -350,18 +407,8 @@ async function executeNode(
     }
 
     case 'condition': {
-      const variable = String(session.variables[node.data.variable as string] || '')
-      const op = node.data.operator as string
-      const val = node.data.value as string || ''
-      let result = false
-
-      if (op === 'equals')      result = variable === val
-      else if (op === 'contains')   result = variable.toLowerCase().includes(val.toLowerCase())
-      else if (op === 'starts_with') result = variable.toLowerCase().startsWith(val.toLowerCase())
-      else if (op === 'not_empty')  result = !!variable
-
-      const edge = edges.find(e => e.source === node.id && e.label === (result ? 'true' : 'false'))
-        || edges.find(e => e.source === node.id)
+      const result = evaluateCondition(node.data, session.variables)
+      const edge = conditionEdge(edges, node.id, result)
 
       if (edge) {
         const nextNode = nodes.find(n => n.id === edge.target)
@@ -411,8 +458,10 @@ async function executeNode(
     }
 
     case 'end': {
+      // Optional closing message (the editor's "رسالة ختامية").
+      const sent = await sendMsg(node, session, instance)
       await db.from('chatbot_sessions').update({ is_active: false }).eq('id', session.id)
-      return false // end = let AI take over if needed
+      return sent // nothing sent → let AI take over if needed
     }
 
     default:
@@ -425,23 +474,10 @@ async function executeNode(
 // ─────────────────────────────────────────────────────────
 
 async function sendMsg(node: ChatbotNode, session: Session, instance: Record<string, unknown>): Promise<boolean> {
-  let text = (node.data.text || node.data.message || node.data.question || '') as string
-
-  // Build buttons text
-  if (node.type === 'buttons') {
-    const buttons = (node.data.buttons as Array<{ text: string }>) || []
-    if (buttons.length) {
-      text = `${text}\n\n${buttons.map((b, i) => `${i + 1}. ${b.text}`).join('\n')}`
-    }
-  }
-
-  if (!text.trim()) return false
-
-  // Replace {{variables}}
-  for (const [key, val] of Object.entries(session.variables)) {
-    const safeKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    text = text.replace(new RegExp(`\\{\\{${safeKey}\\}\\}`, 'gi'), String(val))
-  }
+  // Buttons are listed as numbered options; {{variables}} are filled in.
+  const raw = nodeMessageText(node)
+  if (!raw.trim()) return false
+  const text = renderFlowText(raw, session.variables)
 
   try {
     const db = supabaseAdmin()

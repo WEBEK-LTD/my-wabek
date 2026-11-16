@@ -35,6 +35,8 @@ export default function ChatbotPage() {
   const [testMessages, setTestMessages] = useState<ChatMessage[]>([])
   const [testInput, setTestInput] = useState('')
   const [testLoading, setTestLoading] = useState(false)
+  // Simulated session returned by the tester (paused question/buttons node + variables).
+  const [testState, setTestState] = useState<unknown>(null)
 
   const { data: flowsData, isLoading, isError, refetch } = useQuery<{ flows: Flow[] }>('chatbot-flows', () => axios.get('/api/chatbot').then(r => r.data))
   const { data: instData } = useQuery<{ instances: Array<{ id: string; status: string; display_name?: string; phone_number?: string }> }>('instances', () => axios.get('/api/whatsapp/instances').then(r => r.data))
@@ -85,7 +87,7 @@ export default function ChatbotPage() {
     }
   }
 
-  const openTest = (t: TestTarget) => { setTestFlow(t); setTestMessages([]); setTestInput('') }
+  const openTest = (t: TestTarget) => { setTestFlow(t); setTestMessages([]); setTestInput(''); setTestState(null) }
 
   const runTest = async () => {
     if (!testInput.trim() || !testFlow) return
@@ -96,9 +98,10 @@ export default function ChatbotPage() {
     try {
       // From the editor the draft is sent; from the list only flow_id (the API loads the saved flow).
       const body = testFlow.nodes
-        ? { flow_id: testFlow.id, message: userMsg, nodes: testFlow.nodes, edges: testFlow.edges, trigger_keywords: testFlow.trigger_keywords }
-        : { flow_id: testFlow.id, message: userMsg }
+        ? { flow_id: testFlow.id, message: userMsg, nodes: testFlow.nodes, edges: testFlow.edges, trigger_keywords: testFlow.trigger_keywords, state: testState }
+        : { flow_id: testFlow.id, message: userMsg, state: testState }
       const { data } = await axios.post('/api/chatbot/test', body)
+      setTestState(data?.state || null)
       setTestMessages(m => [...m, {
         role: 'bot', text: data.response || '(لا يوجد رد)',
         meta: data.triggered_nodes?.length ? `الخطوات: ${data.triggered_nodes.join(' ← ')}` : undefined,
@@ -214,7 +217,7 @@ export default function ChatbotPage() {
           value={testInput}
           onChange={setTestInput}
           onSend={runTest}
-          onReset={() => setTestMessages([])}
+          onReset={() => { setTestMessages([]); setTestState(null) }}
           placeholder="اكتب ما قد يرسله العميل…"
           emptyHint="أرسل رسالة تحتوي على إحدى الكلمات المفتاحية لتشغيل المسار."
           className="shadow-none"
