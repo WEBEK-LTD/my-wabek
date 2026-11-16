@@ -39,7 +39,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (planId === 'free') query = query.is('plan_id', null)
     else if (planId && planId !== 'all') query = query.eq('plan_id', planId)
     // Accounts with is_active NULL are treated as active (as in getAuthUser).
-    if (status === 'active') query = query.or('is_active.is.null,is_active.eq.true')
+    // `is_active IS NOT FALSE` — not a second `or=` param next to the search one.
+    if (status === 'active') query = query.not('is_active', 'is', false)
     else if (status === 'suspended') query = query.eq('is_active', false)
     if (role === 'admin') query = query.eq('role', 'admin')
     else if (role === 'user') query = query.neq('role', 'admin')

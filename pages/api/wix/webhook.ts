@@ -205,9 +205,11 @@ async function processOrderEvent(req: NextApiRequest, jwt: Record<string, any>):
     // Custom texts: the dashboard saves them per WABEK user
     // (wix_templates_<userId>); older rows / the Wix panel per Wix instance
     // (wix_templates_<instanceId>). The user's own texts win per event.
+    // Per-event on/off switches (dashboard): `wix_notify_enabled_<userId>`.
     const { data: tplRows } = await db.from('system_settings').select('key, value')
-      .in('key', [`wix_templates_${userId}`, `wix_templates_${instanceId}`])
+      .in('key', [`wix_templates_${userId}`, `wix_templates_${instanceId}`, `wix_notify_enabled_${userId}`])
     const byKey = new Map((tplRows || []).map(r => [r.key as string, (r.value || {}) as Record<string, string>]))
+    const enabledFlags = (byKey.get(`wix_notify_enabled_${userId}`) || {}) as Record<string, unknown>
     const templates: Record<string, string> = {
       ...(byKey.get(`wix_templates_${instanceId}`) || {}),
       ...Object.fromEntries(Object.entries(byKey.get(`wix_templates_${userId}`) || {}).filter(([, v]) => typeof v === 'string' && v.trim())),
@@ -242,6 +244,12 @@ async function processOrderEvent(req: NextApiRequest, jwt: Record<string, any>):
 
     // Use the potentially updated event
     const finalEvent = String((req.query as any).event || event)
+
+    // Turned off in the dashboard → no message (missing flag = on).
+    if (enabledFlags[finalEvent] === false) {
+      console.log('[wix webhook] event disabled by user — skip', finalEvent)
+      return
+    }
 
     // Deduplication — keyed by the FINAL (remapped) event, e.g.
     // order_placed vs order_shipped for the same orderId are different
