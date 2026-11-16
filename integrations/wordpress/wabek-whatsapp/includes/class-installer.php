@@ -14,7 +14,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Installer {
 
-	const DB_VERSION        = '1.0.0';
+	const DB_VERSION        = '1.1.0';
 	const DB_VERSION_OPTION = 'wabek_whatsapp_db_version';
 	const DAILY_HOOK        = 'wabek_whatsapp_daily';
 
@@ -127,6 +127,7 @@ final class Installer {
 				http_code smallint(5) unsigned NOT NULL DEFAULT 0,
 				error text NOT NULL,
 				message_id varchar(191) NOT NULL DEFAULT '',
+				delivery varchar(20) NOT NULL DEFAULT '',
 				PRIMARY KEY  (id),
 				KEY order_id (order_id),
 				KEY status (status)

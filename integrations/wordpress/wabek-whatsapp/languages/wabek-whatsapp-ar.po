@@ -3,7 +3,7 @@
 # This file is distributed under the WABEK proprietary license.
 msgid ""
 msgstr ""
-"Project-Id-Version: WABEK WhatsApp for WooCommerce 1.0.0\n"
+"Project-Id-Version: WABEK WhatsApp for WooCommerce 1.1.0\n"
 "Report-Msgid-Bugs-To: https://waabek.com\n"
 "Language-Team: webek.org\n"
 "Language: ar\n"
@@ -23,132 +23,140 @@ msgstr "واتساب WABEK لمتاجر WooCommerce"
 msgid "WhatsApp order notifications, abandoned-cart reminders and WhatsApp OTP login for WooCommerce, powered by the WABEK WhatsApp Business platform."
 msgstr "إشعارات الطلبات عبر واتساب، وتذكيرات السلال المتروكة، وتسجيل الدخول برمز التحقق عبر واتساب لمتاجر WooCommerce، بتشغيل منصة WABEK لواتساب للأعمال."
 
-#: includes/admin/class-admin.php:56
+#: includes/admin/class-admin.php:57
 msgid "The previous WABEK plugin (WAABEK for WooCommerce) is still active. Deactivate it so customers do not receive every WhatsApp notification twice."
 msgstr "إضافة WABEK السابقة (WAABEK for WooCommerce) لا تزال مفعّلة. عطّلها كي لا يتلقى العملاء كل إشعار واتساب مرتين."
 
-#: includes/admin/class-admin.php:56
+#: includes/admin/class-admin.php:57
 msgid "Go to Plugins"
 msgstr "الانتقال إلى الإضافات"
 
-#: includes/admin/class-admin.php:66
+#: includes/admin/class-admin.php:67
 msgid "Connection"
 msgstr "الاتصال"
 
-#: includes/admin/class-admin.php:67
+#: includes/admin/class-admin.php:68
 msgid "Order notifications"
 msgstr "إشعارات الطلبات"
 
-#: includes/admin/class-admin.php:68
+#: includes/admin/class-admin.php:69
 msgid "Consent & carts"
 msgstr "الموافقة والسلال"
 
-#: includes/admin/class-admin.php:69
+#: includes/admin/class-admin.php:70
 msgid "OTP login"
 msgstr "الدخول برمز التحقق"
 
-#: includes/admin/class-admin.php:94 includes/admin/views/header.php:30 includes/admin/views/header.php:35
+#: includes/admin/class-admin.php:95 includes/admin/views/header.php:30 includes/admin/views/header.php:35
 msgid "WABEK WhatsApp"
 msgstr "واتساب WABEK"
 
-#: includes/admin/class-admin.php:95
+#: includes/admin/class-admin.php:96
 msgid "WABEK"
 msgstr "WABEK"
 
-#: includes/admin/class-admin.php:102
+#: includes/admin/class-admin.php:103
 msgid "WABEK WhatsApp settings"
 msgstr "إعدادات واتساب WABEK"
 
-#: includes/admin/class-admin.php:102 includes/admin/class-admin.php:113
+#: includes/admin/class-admin.php:103 includes/admin/class-admin.php:114
 msgid "Settings"
 msgstr "الإعدادات"
 
-#: includes/admin/class-admin.php:103
+#: includes/admin/class-admin.php:104
 msgid "WhatsApp send log"
 msgstr "سجل رسائل واتساب"
 
-#: includes/admin/class-admin.php:103 includes/admin/views/header.php:46
+#: includes/admin/class-admin.php:104 includes/admin/views/header.php:46
 msgid "Send log"
 msgstr "سجل الإرسال"
 
-#: includes/admin/class-admin.php:139
+#: includes/admin/class-admin.php:140
 msgid "Testing…"
 msgstr "جارٍ الاختبار…"
 
-#: includes/admin/class-admin.php:140 includes/class-otp.php:81
+#: includes/admin/class-admin.php:141 includes/class-otp.php:81
 msgid "Sending…"
 msgstr "جارٍ الإرسال…"
 
-#: includes/admin/class-admin.php:141
+#: includes/admin/class-admin.php:142
 msgid "Request failed. Please try again."
 msgstr "تعذّر إتمام الطلب. يُرجى المحاولة مرة أخرى."
 
-#: includes/admin/class-admin.php:142
+#: includes/admin/class-admin.php:143
 msgid "Delete all finished log entries?"
 msgstr "هل تريد حذف جميع السجلات المكتملة؟"
 
-#: includes/admin/class-admin.php:143 includes/admin/views/header.php:20
+#: includes/admin/class-admin.php:144 includes/admin/views/header.php:20
 msgid "Connected"
 msgstr "متصل"
 
-#: includes/admin/class-admin.php:144 includes/admin/views/header.php:22
+#: includes/admin/class-admin.php:145 includes/admin/views/header.php:22
 msgid "Not connected"
 msgstr "غير متصل"
 
-#: includes/admin/class-admin.php:145 includes/admin/views/tab-connection.php:64
-msgid "— Platform default —"
-msgstr "— الرقم الافتراضي في المنصة —"
+#: includes/admin/class-admin.php:146 includes/admin/views/tab-connection.php:64
+msgid "— Account default number —"
+msgstr "— الرقم الافتراضي للحساب —"
 
-#: includes/admin/class-admin.php:158 includes/admin/class-admin.php:180
+#: includes/admin/class-admin.php:147 includes/admin/views/tab-connection.php:67
+msgid "default"
+msgstr "افتراضي"
+
+#: includes/admin/class-admin.php:148
+msgid "Checking…"
+msgstr "جارٍ التحقق…"
+
+#: includes/admin/class-admin.php:161 includes/admin/class-admin.php:183
 msgid "You do not have permission to access this page."
 msgstr "لا تملك صلاحية الوصول إلى هذه الصفحة."
 
-#: includes/admin/class-admin.php:210
+#: includes/admin/class-admin.php:213
 msgid "Queued"
 msgstr "في قائمة الانتظار"
 
-#: includes/admin/class-admin.php:211
+#: includes/admin/class-admin.php:214
 msgid "Sending"
 msgstr "قيد الإرسال"
 
-#: includes/admin/class-admin.php:212
+#: includes/admin/class-admin.php:215
 msgid "Retrying"
 msgstr "إعادة المحاولة"
 
-#: includes/admin/class-admin.php:213
+#: includes/admin/class-admin.php:216
 msgid "Sent"
 msgstr "أُرسلت"
 
-#: includes/admin/class-admin.php:214 includes/class-settings.php:202
+#: includes/admin/class-admin.php:217 includes/class-settings.php:204
 msgid "Failed"
 msgstr "فشل"
 
-#: includes/admin/class-admin.php:215
+#: includes/admin/class-admin.php:218
 msgid "Skipped"
 msgstr "تم التخطي"
 
-#: includes/admin/class-admin.php:229
+#: includes/admin/class-admin.php:232
 msgid "Invalid request."
 msgstr "طلب غير صالح."
 
-#: includes/admin/class-admin.php:232
+#: includes/admin/class-admin.php:235
 msgid "You do not have permission to change these settings."
 msgstr "لا تملك صلاحية تعديل هذه الإعدادات."
 
-#: includes/admin/class-admin.php:408 includes/admin/class-admin.php:452 includes/admin/class-admin.php:491 includes/admin/class-admin.php:515
+#: includes/admin/class-admin.php:421 includes/admin/class-admin.php:465 includes/admin/class-admin.php:505 includes/admin/class-admin.php:554 includes/admin/class-admin.php:578
 msgid "You do not have permission to do this."
 msgstr "لا تملك صلاحية تنفيذ هذا الإجراء."
 
-#: includes/admin/class-admin.php:411
+#: includes/admin/class-admin.php:424
 msgid "Save your API key first."
 msgstr "احفظ مفتاح الواجهة البرمجية أولًا."
 
-#: includes/admin/class-admin.php:422
+#: includes/admin/class-admin.php:435
 msgid "The API key was rejected. Check that you copied the full key from your WABEK dashboard."
 msgstr "رُفض مفتاح الواجهة البرمجية. تحقّق من نسخ المفتاح كاملًا من لوحة تحكم WABEK."
 
 #. translators: %d: number of WhatsApp numbers
-#: includes/admin/class-admin.php:432
+#: includes/admin/class-admin.php:445
 #, php-format
 msgid "Connected. %d WhatsApp number found."
 msgid_plural "Connected. %d WhatsApp numbers found."
@@ -159,55 +167,83 @@ msgstr[3] "متصل. عُثر على %d أرقام واتساب."
 msgstr[4] "متصل. عُثر على %d رقمًا لواتساب."
 msgstr[5] "متصل. عُثر على %d رقم واتساب."
 
-#: includes/admin/class-admin.php:437
-msgid "Connected. Your API key is valid, but this WABEK server cannot list numbers by API key yet; enter the instance ID manually or leave it empty to use your first connected number."
-msgstr "متصل. مفتاح الواجهة البرمجية صالح، لكن خادم WABEK هذا لا يتيح بعدُ عرض الأرقام عبر مفتاح الواجهة البرمجية؛ أدخل معرّف الرقم يدويًا أو اتركه فارغًا لاستخدام أول رقم متصل لديك."
+#: includes/admin/class-admin.php:450
+msgid "Connected. Your API key is valid, but this WABEK server cannot list numbers yet; enter the instance ID under “Advanced” or leave it empty to use your account’s default number."
+msgstr "متصل. مفتاح الواجهة البرمجية صالح، لكن خادم WABEK هذا لا يتيح عرض الأرقام بعدُ؛ أدخل معرّف الرقم ضمن «خيارات متقدمة» أو اتركه فارغًا لاستخدام الرقم الافتراضي لحسابك."
 
-#: includes/admin/class-admin.php:457 includes/class-otp.php:167
+#: includes/admin/class-admin.php:470 includes/class-otp.php:167
 msgid "Enter a valid WhatsApp number, including the country code."
 msgstr "أدخل رقم واتساب صحيحًا يتضمن رمز الدولة."
 
 #. translators: %s: store name
-#: includes/admin/class-admin.php:464
+#: includes/admin/class-admin.php:477
 #, php-format
 msgid "✅ Test message from %s. WhatsApp notifications are working."
 msgstr "✅ رسالة تجريبية من %s. إشعارات واتساب تعمل بنجاح."
 
-#: includes/admin/class-admin.php:470
+#: includes/admin/class-admin.php:483
 msgid "Could not write to the send log."
 msgstr "تعذّرت الكتابة في سجل الإرسال."
 
-#: includes/admin/class-admin.php:478
+#: includes/admin/class-admin.php:491
 msgid "Test message sent."
 msgstr "أُرسلت الرسالة التجريبية."
 
 #. translators: %s: error message
-#: includes/admin/class-admin.php:481
+#: includes/admin/class-admin.php:494
 #, php-format
 msgid "Sending failed: %s"
 msgstr "فشل الإرسال: %s"
 
+#: includes/admin/class-admin.php:510
+msgid "This message has no delivery status."
+msgstr "لا تتوفر حالة تسليم لهذه الرسالة."
+
+#: includes/admin/class-admin.php:514
+msgid "Delivery status is not available."
+msgstr "حالة التسليم غير متاحة."
+
 #: includes/admin/class-admin.php:538
+msgid "Sent to WhatsApp"
+msgstr "أُرسلت إلى واتساب"
+
+#: includes/admin/class-admin.php:539
+msgid "Delivered"
+msgstr "سُلِّمت"
+
+#: includes/admin/class-admin.php:540
+msgid "Read"
+msgstr "قُرئت"
+
+#: includes/admin/class-admin.php:541
+msgid "Not delivered"
+msgstr "لم تُسلَّم"
+
+#: includes/admin/class-admin.php:542
+msgid "Pending"
+msgstr "قيد الانتظار"
+
+#: includes/admin/class-admin.php:601
 msgid "Settings saved."
 msgstr "حُفظت الإعدادات."
 
-#: includes/admin/class-admin.php:539
+#: includes/admin/class-admin.php:602
 msgid "The API URL must start with https://. The previous URL was kept."
 msgstr "يجب أن يبدأ عنوان الواجهة البرمجية بـ https://. أُبقي على العنوان السابق."
 
-#: includes/admin/class-admin.php:540
+#: includes/admin/class-admin.php:603
 msgid "The admin WhatsApp number is not valid. Use the international format, e.g. +9665XXXXXXXX."
 msgstr "رقم واتساب المدير غير صالح. استخدم الصيغة الدولية، مثل: ‎+9665XXXXXXXX."
 
-#: includes/admin/class-admin.php:541
+#: includes/admin/class-admin.php:604
 msgid "The message was queued again."
 msgstr "أُعيدت الرسالة إلى قائمة الإرسال."
 
-#: includes/admin/class-admin.php:542
+#: includes/admin/class-admin.php:605
 msgid "This entry cannot be resent."
 msgstr "لا يمكن إعادة إرسال هذا السجل."
 
-#: includes/admin/class-admin.php:543
+#: includes/admin/class-admin.php:606
 msgid "The send log was cleared."
 msgstr "مُسح سجل الإرسال."
 
@@ -286,12 +322,16 @@ msgid "Actions"
 msgstr "الإجراءات"
 
 #. translators: %d: number of attempts
-#: includes/admin/views/page-log.php:91
+#: includes/admin/views/page-log.php:94
 #, php-format
 msgid "%d attempts"
 msgstr "عدد المحاولات: %d"
 
-#: includes/admin/views/page-log.php:106
+#: includes/admin/views/page-log.php:109
+msgid "Check delivery"
+msgstr "التحقق من التسليم"
+
+#: includes/admin/views/page-log.php:112
 msgid "Resend"
 msgstr "إعادة الإرسال"
 
@@ -319,7 +359,7 @@ msgstr "عند تعطيل هذا الخيار، يُراسَل العملاء م
 msgid "Checkbox text"
 msgstr "نص مربع الموافقة"
 
-#: includes/admin/views/tab-checkout.php:29 includes/class-settings.php:186
+#: includes/admin/views/tab-checkout.php:29 includes/class-settings.php:188
 msgid "I agree to receive order notifications via WhatsApp"
 msgstr "أوافق على تلقي إشعارات الطلب عبر واتساب"
 
@@ -347,11 +387,11 @@ msgstr "المهلة (بالدقائق)"
 msgid "Reminder message"
 msgstr "نص رسالة التذكير"
 
-#: includes/admin/views/tab-checkout.php:49 includes/admin/views/tab-notifications.php:47
+#: includes/admin/views/tab-checkout.php:49 includes/admin/views/tab-notifications.php:62
 msgid "Approved template (outside 24 hours)"
 msgstr "القالب المعتمد (خارج نافذة الـ24 ساعة)"
 
-#: includes/admin/views/tab-checkout.php:53 includes/admin/views/tab-notifications.php:51
+#: includes/admin/views/tab-checkout.php:53 includes/admin/views/tab-notifications.php:66
 msgid "Template variables"
 msgstr "متغيرات القالب"
 
@@ -359,7 +399,7 @@ msgstr "متغيرات القالب"
 msgid "Shoppers who did not consent (when consent is required) or who opted out are never reminded. On the block checkout, carts are only captured when consent is not required."
 msgstr "لا يُرسل أي تذكير إلى المتسوّقين الذين لم يوافقوا (عند اشتراط الموافقة) أو الذين ألغوا اشتراكهم. وفي صفحة إتمام الطلب بالكتل، لا تُرصد السلال إلا إذا كانت الموافقة غير مشترطة."
 
-#: includes/admin/views/tab-checkout.php:60 includes/admin/views/tab-connection.php:108 includes/admin/views/tab-notifications.php:59 includes/admin/views/tab-otp.php:43
+#: includes/admin/views/tab-checkout.php:60 includes/admin/views/tab-connection.php:111 includes/admin/views/tab-notifications.php:74 includes/admin/views/tab-otp.php:43
 msgid "Save changes"
 msgstr "حفظ التغييرات"
 
@@ -406,56 +446,60 @@ msgid "Default WhatsApp number"
 msgstr "رقم واتساب الافتراضي"
 
 #: includes/admin/views/tab-connection.php:71
-msgid "Run “Test connection” to load your numbers. With no choice, WABEK uses your first connected number."
-msgstr "اضغط «اختبار الاتصال» لتحميل أرقامك. وإن لم تختر رقمًا، تستخدم WABEK أول رقم متصل لديك."
+msgid "Run “Test connection” to load your numbers. With no choice, WABEK uses the default number of your account."
+msgstr "اضغط «اختبار الاتصال» لتحميل أرقامك. وإن لم تختر رقمًا، تستخدم WABEK الرقم الافتراضي لحسابك."
 
 #: includes/admin/views/tab-connection.php:74
+msgid "Advanced"
+msgstr "خيارات متقدمة"
+
+#: includes/admin/views/tab-connection.php:76
 msgid "Or enter an instance ID"
 msgstr "أو أدخل معرّف الرقم"
 
-#: includes/admin/views/tab-connection.php:78
+#: includes/admin/views/tab-connection.php:81
 msgid "Default country for phone numbers"
 msgstr "الدولة الافتراضية لأرقام الهواتف"
 
 #. translators: %s: store base country code
-#: includes/admin/views/tab-connection.php:83
+#: includes/admin/views/tab-connection.php:86
 #, php-format
 msgid "Store base country (%s)"
 msgstr "دولة المتجر الأساسية (%s)"
 
-#: includes/admin/views/tab-connection.php:90
+#: includes/admin/views/tab-connection.php:93
 msgid "Numbers typed without a country code use the billing country, then this country. Invalid numbers are skipped."
 msgstr "تُستخدم دولة الفوترة للأرقام المكتوبة دون رمز الدولة، ثم هذه الدولة. ويُتخطّى الإرسال إلى الأرقام غير الصالحة."
 
-#: includes/admin/views/tab-connection.php:95
+#: includes/admin/views/tab-connection.php:98
 msgid "Store owner alerts"
 msgstr "تنبيهات صاحب المتجر"
 
-#: includes/admin/views/tab-connection.php:96
+#: includes/admin/views/tab-connection.php:99
 msgid "Send me a WhatsApp alert for every new order"
 msgstr "أرسل إليّ تنبيهًا عبر واتساب عند كل طلب جديد"
 
-#: includes/admin/views/tab-connection.php:98
+#: includes/admin/views/tab-connection.php:101
 msgid "Admin WhatsApp number"
 msgstr "رقم واتساب المدير"
 
-#: includes/admin/views/tab-connection.php:102
+#: includes/admin/views/tab-connection.php:105
 msgid "Alert message"
 msgstr "نص التنبيه"
 
-#: includes/admin/views/tab-connection.php:112
+#: includes/admin/views/tab-connection.php:115
 msgid "Send a test message"
 msgstr "إرسال رسالة تجريبية"
 
-#: includes/admin/views/tab-connection.php:114 includes/class-otp.php:129
+#: includes/admin/views/tab-connection.php:117 includes/class-otp.php:129
 msgid "WhatsApp number"
 msgstr "رقم واتساب"
 
-#: includes/admin/views/tab-connection.php:116
+#: includes/admin/views/tab-connection.php:119
 msgid "Send test"
 msgstr "إرسال تجريبي"
 
-#: includes/admin/views/tab-connection.php:119
+#: includes/admin/views/tab-connection.php:122
 msgid "Outside the 24-hour WhatsApp window, plain text needs an approved template. Message the business number from this phone first to open the window."
 msgstr "خارج نافذة واتساب البالغة 24 ساعة، لا تُسلَّم الرسائل النصية إلا عبر قالب معتمد. أرسل رسالة إلى رقم النشاط التجاري من هذا الهاتف أولًا لفتح النافذة."
 
@@ -467,23 +511,47 @@ msgstr "آلية التسليم"
 msgid "Messages are queued in the background and never slow down checkout. If the customer messaged your business number in the last 24 hours, the text below is delivered as written. Otherwise WhatsApp only allows approved templates: enter the name of an approved template and the variables it uses, or WABEK falls back to your account’s default template."
 msgstr "تُضاف الرسائل إلى قائمة انتظار في الخلفية، فلا تُبطئ إتمام الطلب أبدًا. إذا راسل العميل رقم نشاطك التجاري خلال الساعات الأربع والعشرين الماضية، يُسلَّم النص أدناه كما هو؛ وإلا فإن واتساب لا يسمح إلا بالقوالب المعتمدة: أدخل اسم قالب معتمد والمتغيرات التي يستخدمها، وإلا لجأت WABEK إلى القالب الافتراضي في حسابك."
 
-#: includes/admin/views/tab-notifications.php:37
+#: includes/admin/views/tab-notifications.php:28
+msgid "Template language"
+msgstr "لغة القالب"
+
+#: includes/admin/views/tab-notifications.php:30
+msgid "Language code of your approved templates, e.g. ar, en or en_US."
+msgstr "رمز لغة قوالبك المعتمدة، مثل: ar أو en أو en_US."
+
+#: includes/admin/views/tab-notifications.php:33
+msgid "Template variable style"
+msgstr "نمط متغيرات القالب"
+
+#: includes/admin/views/tab-notifications.php:35
+msgid "Named, e.g. {{customer_name}}"
+msgstr "مسمّاة، مثل: {{customer_name}}"
+
+#: includes/admin/views/tab-notifications.php:36
+msgid "Numbered, e.g. {{1}}, {{2}}"
+msgstr "مرقّمة، مثل: {{1}} و{{2}}"
+
+#: includes/admin/views/tab-notifications.php:38
+msgid "For numbered templates, list the variables in the order of {{1}}, {{2}}, …"
+msgstr "في القوالب المرقّمة، رتّب المتغيرات وفق ترتيب {{1}} و{{2}}…"
+
+#: includes/admin/views/tab-notifications.php:52
 msgid "On"
 msgstr "مفعّل"
 
-#: includes/admin/views/tab-notifications.php:37
+#: includes/admin/views/tab-notifications.php:52
 msgid "Off"
 msgstr "معطّل"
 
-#: includes/admin/views/tab-notifications.php:39
+#: includes/admin/views/tab-notifications.php:54
 msgid "Send this message to the customer"
 msgstr "إرسال هذه الرسالة إلى العميل"
 
-#: includes/admin/views/tab-notifications.php:41
+#: includes/admin/views/tab-notifications.php:56
 msgid "Message"
 msgstr "نص الرسالة"
 
-#: includes/admin/views/tab-notifications.php:55
+#: includes/admin/views/tab-notifications.php:70
 msgid "Template variables are the named parameters of the approved template, separated by commas, using the variable names above (e.g. customer_name, order_id, order_total)."
 msgstr "متغيرات القالب هي المعاملات المسمّاة في القالب المعتمد، مفصولة بفواصل، وبأسماء المتغيرات المذكورة أعلاه (مثل: customer_name, order_id, order_total)."
 
@@ -531,51 +599,51 @@ msgstr "يمكن طلب رمز واحد في الدقيقة لكل رقم، ول
 msgid "Customer"
 msgstr "عميلنا العزيز"
 
-#: includes/class-api-client.php:159
+#: includes/class-api-client.php:179
 msgid "The API key is not configured."
 msgstr "لم يُضبط مفتاح الواجهة البرمجية."
 
-#: includes/class-api-client.php:163
+#: includes/class-api-client.php:183
 msgid "The API URL must use HTTPS."
 msgstr "يجب أن يستخدم عنوان الواجهة البرمجية بروتوكول HTTPS."
 
 #. translators: %s: network error message
-#: includes/class-api-client.php:186
+#: includes/class-api-client.php:207
 #, php-format
 msgid "Could not reach the WABEK API: %s"
 msgstr "تعذّر الوصول إلى واجهة WABEK البرمجية: %s"
 
-#: includes/class-api-client.php:197
+#: includes/class-api-client.php:218
 msgid "The API URL redirects to another address. Enter the final URL in the settings."
 msgstr "يُعيد عنوان الواجهة البرمجية التوجيه إلى عنوان آخر. أدخل العنوان النهائي في الإعدادات."
 
 #. translators: %d: HTTP status code
-#: includes/class-api-client.php:206
+#: includes/class-api-client.php:227
 #, php-format
 msgid "HTTP error %d"
 msgstr "خطأ HTTP رقم %d"
 
-#: includes/class-consent.php:203
+#: includes/class-consent.php:276
 msgid "Yes"
 msgstr "نعم"
 
-#: includes/class-consent.php:205
+#: includes/class-consent.php:278
 msgid "No"
 msgstr "لا"
 
-#: includes/class-consent.php:207
+#: includes/class-consent.php:280
 msgid "Not recorded"
 msgstr "غير مسجّلة"
 
-#: includes/class-consent.php:209
+#: includes/class-consent.php:282
 msgid "WhatsApp notifications consent:"
 msgstr "الموافقة على إشعارات واتساب:"
 
-#: includes/class-consent.php:219
+#: includes/class-consent.php:292
 msgid "WhatsApp notifications"
 msgstr "إشعارات واتساب"
 
-#: includes/class-consent.php:222
+#: includes/class-consent.php:295
 msgid "Do not send me WhatsApp notifications"
 msgstr "لا ترسلوا إليّ إشعارات عبر واتساب"
 
@@ -615,7 +683,7 @@ msgstr "اسم المتجر"
 msgid "Payment link"
 msgstr "رابط الدفع"
 
-#: includes/class-message-builder.php:33 includes/class-settings.php:203
+#: includes/class-message-builder.php:33 includes/class-settings.php:205
 msgid "Note to customer"
 msgstr "ملاحظة للعميل"
 
@@ -741,44 +809,44 @@ msgstr "يُرجى التحقق من رقم واتساب الخاص بك بال�
 msgid "WABEK WhatsApp requires WooCommerce to be installed and active."
 msgstr "تتطلب إضافة واتساب WABEK تثبيت WooCommerce وتفعيلها."
 
-#: includes/class-settings.php:196
+#: includes/class-settings.php:198
 msgid "New order"
 msgstr "طلب جديد"
 
-#: includes/class-settings.php:197
+#: includes/class-settings.php:199
 msgid "Processing"
 msgstr "قيد المعالجة"
 
-#: includes/class-settings.php:198
+#: includes/class-settings.php:200
 msgid "Completed"
 msgstr "مكتمل"
 
-#: includes/class-settings.php:199
+#: includes/class-settings.php:201
 msgid "Cancelled"
 msgstr "ملغى"
 
-#: includes/class-settings.php:200
+#: includes/class-settings.php:202
 msgid "Refunded"
 msgstr "مسترد"
 
-#: includes/class-settings.php:201
+#: includes/class-settings.php:203
 msgid "On hold"
 msgstr "معلّق"
 
-#: includes/class-settings.php:214
+#: includes/class-settings.php:216
 msgid "Admin alert: new order"
 msgstr "تنبيه المدير: طلب جديد"
 
-#: includes/class-settings.php:215
+#: includes/class-settings.php:217
 msgid "Abandoned cart"
 msgstr "سلة متروكة"
 
-#: includes/class-settings.php:216
+#: includes/class-settings.php:218
 msgid "Test message"
 msgstr "رسالة تجريبية"
 
 #. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
-#: includes/class-settings.php:298
+#: includes/class-settings.php:300
 msgid ""
 "Hello {customer_name} 👋\n"
 "Thank you for your order *#{order_id}* from {site_name}.\n"
@@ -799,7 +867,7 @@ msgstr ""
 "سنُعلمك فور شحن طلبك."
 
 #. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
-#: includes/class-settings.php:300
+#: includes/class-settings.php:302
 msgid ""
 "Hello {customer_name},\n"
 "Your order *#{order_id}* is now being processed. We will notify you when it ships.\n"
@@ -810,7 +878,7 @@ msgstr ""
 "{site_name}"
 
 #. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
-#: includes/class-settings.php:302
+#: includes/class-settings.php:304
 msgid ""
 "Hello {customer_name} 🎉\n"
 "Your order *#{order_id}* has been completed.\n"
@@ -823,7 +891,7 @@ msgstr ""
 "شكرًا لتسوّقك من {site_name}."
 
 #. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
-#: includes/class-settings.php:304
+#: includes/class-settings.php:306
 msgid ""
 "Hello {customer_name},\n"
 "Your order *#{order_id}* has been cancelled. If this is unexpected, please reply to this message.\n"
@@ -834,7 +902,7 @@ msgstr ""
 "{site_name}"
 
 #. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
-#: includes/class-settings.php:306
+#: includes/class-settings.php:308
 msgid ""
 "Hello {customer_name},\n"
 "Your order *#{order_id}* has been refunded ({order_total}).\n"
@@ -845,7 +913,7 @@ msgstr ""
 "{site_name}"
 
 #. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
-#: includes/class-settings.php:308
+#: includes/class-settings.php:310
 msgid ""
 "Hello {customer_name},\n"
 "Your order *#{order_id}* is on hold until we confirm your payment.\n"
@@ -856,7 +924,7 @@ msgstr ""
 "{site_name}"
 
 #. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
-#: includes/class-settings.php:310
+#: includes/class-settings.php:312
 msgid ""
 "Hello {customer_name},\n"
 "The payment for your order *#{order_id}* did not go through. You can try again here:\n"
@@ -869,7 +937,7 @@ msgstr ""
 "{site_name}"
 
 #. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
-#: includes/class-settings.php:312
+#: includes/class-settings.php:314
 msgid ""
 "Hello {customer_name},\n"
 "A new note was added to your order *#{order_id}*:\n"
@@ -886,7 +954,7 @@ msgstr ""
 "{site_name}"
 
 #. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
-#: includes/class-settings.php:323
+#: includes/class-settings.php:325
 msgid ""
 "🛒 New order *#{order_id}* on {site_name}\n"
 "Customer: {customer_name} ({customer_phone})\n"
@@ -901,7 +969,7 @@ msgstr ""
 "{order_items}"
 
 #. translators: Default WhatsApp message. Keep the {placeholders} unchanged.
-#: includes/class-settings.php:333
+#: includes/class-settings.php:335
 msgid ""
 "Hello {customer_name} 👋\n"
 "You left some items in your cart at {site_name}:\n"

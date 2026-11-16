@@ -57,6 +57,8 @@ final class Settings {
 			'cart_message'         => self::default_cart_message(),
 			'cart_template'        => '',
 			'cart_template_params' => 'customer_name',
+			'template_language'    => 'ar',
+			'template_style'       => 'named',
 			'otp_login'            => 'no',
 			'otp_register'         => 'no',
 			'otp_phone_limit'      => 3,

@@ -29,19 +29,22 @@ final class Api_Client {
 	 * Sends a WhatsApp message: POST /api/v1/send.
 	 *
 	 * Outside WhatsApp's 24-hour window the platform needs an approved
-	 * template; `template` + `template_params` (named body parameters) are
-	 * passed when configured, otherwise the platform applies its own fallback.
+	 * template; `template` + `template_params` (object = named parameters,
+	 * list = positional) + `template_language` are passed when configured,
+	 * otherwise the platform applies its own fallback. Without instance_id
+	 * the account's default number is used.
 	 *
 	 * @param string $to_digits Recipient, E.164 digits without "+".
 	 * @param string $message   Message text.
-	 * @param array  $args      Optional: instance_id, template, template_params (array name => value).
+	 * @param array  $args      Optional: instance_id, template, template_params (array),
+	 *                          template_language, customer_name, idempotency_key.
 	 * @return array
 	 */
 	public function send_message( $to_digits, $message, array $args = array() ) {
 		$body     = array(
 			'to'      => $to_digits,
 			'message' => $message,
-			// Marks this as a notification (not an OTP code) for the platform.
+			// Marks this as a notification: the platform never treats it as an OTP code.
 			'type'    => 'notification',
 		);
 		$instance = isset( $args['instance_id'] ) ? (string) $args['instance_id'] : (string) Settings::get( 'instance_id' );
@@ -53,78 +56,94 @@ final class Api_Client {
 			if ( ! empty( $args['template_params'] ) && is_array( $args['template_params'] ) ) {
 				$body['template_params'] = $args['template_params'];
 			}
+			if ( ! empty( $args['template_language'] ) && preg_match( '/^[a-z]{2,3}(_[A-Z]{2})?$/', (string) $args['template_language'] ) ) {
+				$body['template_language'] = (string) $args['template_language'];
+			}
 		}
-		if ( ! empty( $args['template_params']['customer_name'] ) ) {
-			$body['customer_name'] = (string) $args['template_params']['customer_name'];
+		if ( ! empty( $args['customer_name'] ) ) {
+			$body['customer_name'] = (string) $args['customer_name'];
 		}
-		return $this->request( 'POST', '/api/v1/send', $body );
+		$headers = array();
+		if ( ! empty( $args['idempotency_key'] ) && preg_match( '/^[A-Za-z0-9._:-]{8,100}$/', (string) $args['idempotency_key'] ) ) {
+			$headers['Idempotency-Key'] = (string) $args['idempotency_key'];
+		}
+		$result = $this->request( 'POST', '/api/v1/send', $body, $headers );
+		// The same key is still being processed by the platform: try again later.
+		if ( 409 === $result['code'] && isset( $result['data']['code'] ) && 'idempotency_in_progress' === $result['data']['code'] ) {
+			$result['retryable'] = true;
+		}
+		return $result;
 	}
 
 	/**
-	 * Lists the account's WhatsApp instances.
+	 * Delivery status of a sent message: GET /api/v1/message-status?id=…
 	 *
-	 * Tries GET /api/v1/instances, then GET /api/whatsapp/instances (both with
-	 * the API key header). A 404 "Unknown action" from /api/v1 still proves the
-	 * key is valid, because /api/v1 authenticates before routing.
+	 * @param string $message_id Platform message id.
+	 * @return array Result; data.status, data.error.
+	 */
+	public function message_status( $message_id ) {
+		return $this->request( 'GET', '/api/v1/message-status?id=' . rawurlencode( $message_id ) );
+	}
+
+	/**
+	 * Syncs a contact's opt-out state: POST /api/v1/contacts-opt-out.
+	 *
+	 * @param string $to_digits Phone digits.
+	 * @param bool   $opted_out true = stop messaging, false = opted back in.
+	 * @return array
+	 */
+	public function set_opt_out( $to_digits, $opted_out ) {
+		return $this->request(
+			'POST',
+			'/api/v1/contacts-opt-out',
+			array(
+				'phone'     => $to_digits,
+				'opted_out' => (bool) $opted_out,
+			)
+		);
+	}
+
+	/**
+	 * Lists the account's WhatsApp numbers: GET /api/v1/instances.
+	 *
+	 * On an older WABEK server the action does not exist; its 404
+	 * "Unknown action" still proves the key is valid, because /api/v1
+	 * authenticates before routing.
 	 *
 	 * @return array Result plus `key_valid` (bool) and `instances` (array|null; null = listing unsupported).
 	 */
 	public function list_instances() {
 		$result = $this->request( 'GET', '/api/v1/instances' );
 		if ( $result['ok'] && isset( $result['data']['instances'] ) && is_array( $result['data']['instances'] ) ) {
-			return $result + array(
-				'key_valid' => true,
-				'instances' => self::clean_instances( $result['data']['instances'] ),
-			);
+			$result['key_valid'] = true;
+			$result['instances'] = self::clean_instances( $result['data']['instances'] );
+			return $result;
 		}
-		if ( 401 === $result['code'] || 403 === $result['code'] ) {
-			return $result + array(
-				'key_valid' => false,
-				'instances' => null,
-			);
-		}
-		if ( 404 !== $result['code'] ) {
-			// Network error / 5xx: the key could not be checked.
-			return $result + array(
-				'key_valid' => false,
-				'instances' => null,
-			);
-		}
-
-		$fallback = $this->request( 'GET', '/api/whatsapp/instances' );
-		if ( $fallback['ok'] && isset( $fallback['data']['instances'] ) && is_array( $fallback['data']['instances'] ) ) {
-			return $fallback + array(
-				'key_valid' => true,
-				'instances' => self::clean_instances( $fallback['data']['instances'] ),
-			);
-		}
-		return array(
-			'ok'        => true,
-			'code'      => 200,
-			'data'      => array(),
-			'error'     => '',
-			'retryable' => false,
-			'key_valid' => true,
-			'instances' => null,
-		);
+		$result['key_valid'] = 404 === $result['code'];
+		$result['instances'] = null;
+		return $result;
 	}
 
 	/**
-	 * Requests a WhatsApp OTP: POST /api/v1/otp.
+	 * Requests a WhatsApp OTP: POST /api/v1/otp (sent from the store's
+	 * default number, branded with the site name).
 	 *
 	 * @param string $to_digits Recipient digits.
 	 * @param string $purpose   login|verification.
 	 * @return array Result; data.otpId on success.
 	 */
 	public function otp_send( $to_digits, $purpose ) {
-		return $this->request(
-			'POST',
-			'/api/v1/otp',
-			array(
-				'phone'   => $to_digits,
-				'purpose' => $purpose,
-			)
+		$brand    = Message_Builder::site_name();
+		$body     = array(
+			'phone'      => $to_digits,
+			'purpose'    => $purpose,
+			'brand_name' => function_exists( 'mb_substr' ) ? mb_substr( $brand, 0, 60 ) : substr( $brand, 0, 60 ),
 		);
+		$instance = (string) Settings::get( 'instance_id' );
+		if ( '' !== $instance ) {
+			$body['instance_id'] = $instance;
+		}
+		return $this->request( 'POST', '/api/v1/otp', $body );
 	}
 
 	/**
@@ -148,12 +167,13 @@ final class Api_Client {
 	/**
 	 * Performs a request.
 	 *
-	 * @param string     $method HTTP method.
-	 * @param string     $path   Path beginning with "/".
-	 * @param array|null $body   JSON body.
+	 * @param string     $method  HTTP method.
+	 * @param string     $path    Path beginning with "/".
+	 * @param array|null $body    JSON body.
+	 * @param array      $headers Extra headers.
 	 * @return array
 	 */
-	private function request( $method, $path, $body = null ) {
+	private function request( $method, $path, $body = null, array $headers = array() ) {
 		$key = Settings::api_key();
 		if ( '' === $key ) {
 			return self::result( false, 0, array(), __( 'The API key is not configured.', 'wabek-whatsapp' ), false );
@@ -163,7 +183,7 @@ final class Api_Client {
 			return self::result( false, 0, array(), __( 'The API URL must use HTTPS.', 'wabek-whatsapp' ), false );
 		}
 
-		$args = array(
+		$args             = array(
 			'method'      => $method,
 			'timeout'     => (int) apply_filters( 'wabek_whatsapp_api_timeout', self::TIMEOUT ),
 			'redirection' => 0,
@@ -174,6 +194,7 @@ final class Api_Client {
 				'Accept'    => 'application/json',
 			),
 		);
+		$args['headers'] += $headers;
 		if ( null !== $body ) {
 			$args['headers']['Content-Type'] = 'application/json';
 			$args['body']                    = wp_json_encode( $body );
@@ -259,11 +280,12 @@ final class Api_Client {
 			}
 			$type  = isset( $row['instance_type'] ) ? $row['instance_type'] : ( isset( $row['type'] ) ? $row['type'] : '' );
 			$out[] = array(
-				'id'     => sanitize_text_field( (string) $row['id'] ),
-				'name'   => sanitize_text_field( (string) ( ! empty( $row['display_name'] ) ? $row['display_name'] : ( isset( $row['name'] ) ? $row['name'] : '' ) ) ),
-				'phone'  => sanitize_text_field( (string) ( isset( $row['phone_number'] ) ? $row['phone_number'] : '' ) ),
-				'status' => sanitize_key( (string) ( isset( $row['status'] ) ? $row['status'] : '' ) ),
-				'type'   => sanitize_key( (string) $type ),
+				'id'      => sanitize_text_field( (string) $row['id'] ),
+				'name'    => sanitize_text_field( (string) ( ! empty( $row['display_name'] ) ? $row['display_name'] : ( isset( $row['name'] ) ? $row['name'] : '' ) ) ),
+				'phone'   => sanitize_text_field( (string) ( isset( $row['phone_number'] ) ? $row['phone_number'] : '' ) ),
+				'status'  => sanitize_key( (string) ( isset( $row['status'] ) ? $row['status'] : '' ) ),
+				'type'    => sanitize_key( (string) $type ),
+				'default' => ! empty( $row['is_default'] ),
 			);
 		}
 		return $out;

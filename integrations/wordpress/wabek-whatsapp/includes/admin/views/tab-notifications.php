@@ -23,6 +23,21 @@ $wabek_wa_variables = Message_Builder::order_variables();
 	<section class="wabek-card wabek-card--info">
 		<h2 class="wabek-card__title"><?php esc_html_e( 'How delivery works', 'wabek-whatsapp' ); ?></h2>
 		<p><?php esc_html_e( 'Messages are queued in the background and never slow down checkout. If the customer messaged your business number in the last 24 hours, the text below is delivered as written. Otherwise WhatsApp only allows approved templates: enter the name of an approved template and the variables it uses, or WABEK falls back to your account’s default template.', 'wabek-whatsapp' ); ?></p>
+		<div class="wabek-grid">
+			<div class="wabek-field">
+				<label for="wabek-template-language"><?php esc_html_e( 'Template language', 'wabek-whatsapp' ); ?></label>
+				<input type="text" id="wabek-template-language" name="template_language" class="small-text" dir="ltr" value="<?php echo esc_attr( (string) Settings::get( 'template_language' ) ); ?>" placeholder="ar" />
+				<p class="wabek-help"><?php esc_html_e( 'Language code of your approved templates, e.g. ar, en or en_US.', 'wabek-whatsapp' ); ?></p>
+			</div>
+			<div class="wabek-field">
+				<label for="wabek-template-style"><?php esc_html_e( 'Template variable style', 'wabek-whatsapp' ); ?></label>
+				<select id="wabek-template-style" name="template_style">
+					<option value="named" <?php selected( Settings::get( 'template_style' ), 'named' ); ?>><?php esc_html_e( 'Named, e.g. {{customer_name}}', 'wabek-whatsapp' ); ?></option>
+					<option value="positional" <?php selected( Settings::get( 'template_style' ), 'positional' ); ?>><?php esc_html_e( 'Numbered, e.g. {{1}}, {{2}}', 'wabek-whatsapp' ); ?></option>
+				</select>
+				<p class="wabek-help"><?php esc_html_e( 'For numbered templates, list the variables in the order of {{1}}, {{2}}, …', 'wabek-whatsapp' ); ?></p>
+			</div>
+		</div>
 	</section>
 
 	<?php foreach ( $wabek_wa_labels as $wabek_wa_event => $wabek_wa_label ) : ?>

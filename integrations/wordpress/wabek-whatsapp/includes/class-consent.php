@@ -20,6 +20,7 @@ final class Consent {
 	const ORDER_META  = '_wabek_wa_consent';
 	const PHONE_META  = '_wabek_wa_phone';
 	const USER_OPTOUT = 'wabek_wa_optout';
+	const SYNC_HOOK   = 'wabek_whatsapp_sync_optout';
 
 	/**
 	 * Registers hooks.
@@ -34,6 +35,7 @@ final class Consent {
 		add_action( 'woocommerce_checkout_create_order', array( $this, 'save_classic' ), 10, 1 );
 		add_action( 'woocommerce_store_api_checkout_update_order_from_request', array( $this, 'save_block' ), 20, 1 );
 		add_action( 'woocommerce_admin_order_data_after_billing_address', array( $this, 'render_admin_order' ) );
+		add_action( self::SYNC_HOOK, array( __CLASS__, 'process_sync' ), 10, 3 );
 
 		if ( Settings::is_on( 'account_optout' ) ) {
 			add_action( 'woocommerce_edit_account_form', array( $this, 'render_account_field' ) );
@@ -121,20 +123,91 @@ final class Consent {
 	 * @return void
 	 */
 	private function store( $order, $consent ) {
-		if ( '' !== $consent ) {
-			$order->update_meta_data( self::ORDER_META, $consent );
-			$user_id = $order->get_customer_id();
-			if ( $user_id ) {
-				update_user_meta( $user_id, self::FIELD, $consent );
-				if ( 'yes' === $consent ) {
-					delete_user_meta( $user_id, self::USER_OPTOUT );
-				}
-			}
-		}
 		$e164 = Phone::to_e164( $order->get_billing_phone(), $order->get_billing_country() );
 		if ( '' !== $e164 ) {
 			$order->update_meta_data( self::PHONE_META, $e164 );
 		}
+		if ( '' === $consent ) {
+			return;
+		}
+		$order->update_meta_data( self::ORDER_META, $consent );
+		$user_id = $order->get_customer_id();
+		if ( ! $user_id ) {
+			return;
+		}
+		$before_consent = (string) get_user_meta( $user_id, self::FIELD, true );
+		$before_optout  = 'yes' === get_user_meta( $user_id, self::USER_OPTOUT, true );
+		update_user_meta( $user_id, self::FIELD, $consent );
+		if ( 'yes' === $consent ) {
+			delete_user_meta( $user_id, self::USER_OPTOUT );
+			// A customer who had opted out (or declined) consents again.
+			if ( $before_optout || 'no' === $before_consent ) {
+				self::queue_sync( $e164, false );
+			}
+		} elseif ( 'yes' === $before_consent && ! $before_optout ) {
+			// Consent withdrawn by a returning customer.
+			self::queue_sync( $e164, true );
+		}
+	}
+
+	/**
+	 * Queues an opt-out sync with WABEK (POST /api/v1/contacts-opt-out), so
+	 * the platform also stops (or resumes) messaging this number.
+	 *
+	 * @param string $e164      Phone number.
+	 * @param bool   $opted_out Opted out.
+	 * @return void
+	 */
+	public static function queue_sync( $e164, $opted_out ) {
+		if ( '' === (string) $e164 || ! Settings::has_api_key() ) {
+			return;
+		}
+		$args = array( (string) $e164, $opted_out ? 1 : 0, 1 );
+		if ( function_exists( 'as_enqueue_async_action' ) ) {
+			as_enqueue_async_action( self::SYNC_HOOK, $args, Queue::GROUP );
+		} else {
+			wp_schedule_single_event( time(), self::SYNC_HOOK, $args );
+		}
+	}
+
+	/**
+	 * Worker: sends the opt-out state; retries network/5xx errors twice.
+	 *
+	 * @param string $e164      Phone number.
+	 * @param int    $opted_out 1|0.
+	 * @param int    $attempt   Attempt number.
+	 * @return void
+	 */
+	public static function process_sync( $e164, $opted_out, $attempt = 1 ) {
+		$result = ( new Api_Client() )->set_opt_out( Phone::digits( $e164 ), (bool) $opted_out );
+		if ( $result['ok'] ) {
+			return;
+		}
+		$attempt = (int) $attempt;
+		if ( $result['retryable'] && $attempt < 3 ) {
+			$args = array( (string) $e164, (int) $opted_out, $attempt + 1 );
+			if ( function_exists( 'as_schedule_single_action' ) ) {
+				as_schedule_single_action( time() + 300 * $attempt, self::SYNC_HOOK, $args, Queue::GROUP );
+			} else {
+				wp_schedule_single_event( time() + 300 * $attempt, self::SYNC_HOOK, $args );
+			}
+			return;
+		}
+		Logger::diagnostic( 'warning', sprintf( 'Opt-out sync for %s failed: HTTP %d %s', Phone::mask( $e164 ), (int) $result['code'], (string) $result['error'] ) );
+	}
+
+	/**
+	 * Best known WhatsApp number of a user.
+	 *
+	 * @param int $user_id User id.
+	 * @return string E.164 or ''.
+	 */
+	private static function user_phone( $user_id ) {
+		$verified = (string) get_user_meta( $user_id, Otp::PHONE_META, true );
+		if ( '' !== $verified ) {
+			return $verified;
+		}
+		return Phone::to_e164( (string) get_user_meta( $user_id, 'billing_phone', true ), (string) get_user_meta( $user_id, 'billing_country', true ) );
 	}
 
 	/**
@@ -229,10 +302,15 @@ final class Consent {
 	 * @return void
 	 */
 	public function save_account_field( $user_id ) {
-		if ( ! empty( $_POST['wabek_wa_optout'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$before = 'yes' === get_user_meta( $user_id, self::USER_OPTOUT, true );
+		$after  = ! empty( $_POST['wabek_wa_optout'] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		if ( $after ) {
 			update_user_meta( $user_id, self::USER_OPTOUT, 'yes' );
 		} else {
 			delete_user_meta( $user_id, self::USER_OPTOUT );
+		}
+		if ( $before !== $after ) {
+			self::queue_sync( self::user_phone( $user_id ), $after );
 		}
 	}
 }
