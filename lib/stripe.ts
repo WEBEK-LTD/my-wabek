@@ -317,11 +317,28 @@ async function syncSubscription(
   const cycle: BillingCycle = price?.recurring?.interval === 'year' ? 'yearly' : 'monthly'
   const status = mapStripeStatus(sub.status)
 
+  if (!plan) console.error(`[stripe] subscription ${sub.id}: price ${price?.id} does not map to a plan`)
+  return applySubscriptionState(db, { userId, planId: plan?.id || null, sub, status, cycle })
+}
+
+/**
+ * Writes a (platform or Connect) Stripe subscription's state to
+ * `subscriptions` and the user's plan_id / plan_expires_at.
+ * `planId` null = keep the plan already on record.
+ */
+export async function applySubscriptionState(db: DB, p: {
+  userId: string
+  planId: string | null
+  sub: Pick<Stripe.Subscription, 'id' | 'current_period_start' | 'current_period_end' | 'cancel_at_period_end'>
+  status: ReturnType<typeof mapStripeStatus>
+  cycle: BillingCycle
+}): Promise<{ planId: string; cycle: BillingCycle } | null> {
+  const { userId, sub, status, cycle } = p
   const { data: user } = await db.from('users').select('plan_id').eq('id', userId).maybeSingle()
-  const { data: existingRows } = await db.from('subscriptions')
+  const { data: rows } = await db.from('subscriptions')
     .select('plan_id, stripe_subscription_id, status')
     .eq('user_id', userId).order('created_at', { ascending: false }).limit(1)
-  const existing = existingRows?.[0]
+  const existing = rows?.[0] || null
 
   // An old/other subscription ending must not overwrite a different live one
   // (another Stripe subscription, or an admin/gift assignment).
@@ -332,8 +349,7 @@ async function syncSubscription(
     return null
   }
 
-  if (!plan) console.error(`[stripe] subscription ${sub.id}: price ${price?.id} does not map to a plan`)
-  const planId = plan?.id || existing?.plan_id || user?.plan_id || null
+  const planId = p.planId || existing?.plan_id || user?.plan_id || null
   if (!planId) return null
 
   await upsertSubscriptionRow(db, {
@@ -409,6 +425,28 @@ async function trackResellerEarning(db: DB, p: {
       .select('is_approved').eq('user_id', resellerId).maybeSingle()
     if (!rp?.is_approved) return
 
+    await recordResellerEarning(db, { ...p, resellerId })
+  } catch (e) {
+    console.error('[stripe] reseller earning error:', (e as Error).message)
+  }
+}
+
+/**
+ * Records one reseller earning for a paid invoice: inserts reseller_earnings
+ * (unique per reseller + payment_ref, so a replay is a no-op) and only then
+ * credits the balance atomically via reseller_add_earning (028).
+ * Earning = amount paid − the platform price of the base plan for the cycle.
+ */
+export async function recordResellerEarning(db: DB, p: {
+  resellerId: string
+  userId: string
+  planId: string
+  cycle: BillingCycle
+  amountCents: number
+  paymentRef: string
+}): Promise<void> {
+  const resellerId = p.resellerId
+  try {
     const { data: plan } = await db.from('plans').select('price_monthly, price_yearly').eq('id', p.planId).maybeSingle()
     const monthly = Number(plan?.price_monthly || 0)
     const platformFee = p.cycle === 'yearly' ? Number(plan?.price_yearly || monthly * 12) : monthly
