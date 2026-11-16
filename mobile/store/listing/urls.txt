@@ -1,0 +1,3 @@
+support=https://waabek.com/support
+privacy=https://waabek.com/privacy
+marketing=https://waabek.com

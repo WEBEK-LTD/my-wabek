@@ -1,0 +1,121 @@
+# Uploads the store pages — name, descriptions (English + Arabic), screenshots,
+# feature graphic and icon — to Google Play and the App Store with fastlane.
+# GitHub → Actions → "Mobile app — store listing" → Run workflow.
+#
+# Texts:  mobile/store/listing/{en,ar}/*.txt
+# Images: mobile/store-assets/**
+# Uses the same secrets as "Mobile app — build & publish":
+#   PLAY_SERVICE_ACCOUNT_JSON (Google Play) · ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (App Store Connect)
+#
+# Google Play accepts API uploads only after the first .aab was uploaded by hand once.
+# Apple: the app must exist in App Store Connect (com.webek.wabek); this fills version 1.0.0's page.
+name: Mobile app — store listing
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Store
+        type: choice
+        options: [both, google-play, app-store]
+        default: both
+
+permissions:
+  contents: read
+
+jobs:
+  google-play:
+    if: inputs.platform != 'app-store'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+      - run: gem install fastlane --no-document
+      - name: Prepare the listing (fastlane "supply" layout)
+        run: |
+          set -euo pipefail
+          L=mobile/store/listing; A=mobile/store-assets; M=build/play/metadata
+          for pair in en:en-US ar:ar; do
+            src=${pair%%:*}; loc=${pair##*:}; d=$M/$loc
+            mkdir -p "$d/images/phoneScreenshots" "$d/images/sevenInchScreenshots" "$d/images/tenInchScreenshots"
+            cp "$L/$src/title.txt" "$d/title.txt"
+            cp "$L/$src/short_description.txt" "$d/short_description.txt"
+            cp "$L/$src/description.txt" "$d/full_description.txt"
+            cp "$A/google-play-phone/$src/"*.png "$d/images/phoneScreenshots/"
+            cp "$A/google-play-tablet/$src/"*.png "$d/images/sevenInchScreenshots/"
+            cp "$A/google-play-tablet/$src/"*.png "$d/images/tenInchScreenshots/"
+            cp "$A/google-play-feature-graphic/feature-graphic-$src.png" "$d/images/featureGraphic.png"
+            cp "$A/google-play-icon/icon-512.png" "$d/images/icon.png"
+          done
+          find $M -type f | sort
+      - name: Upload to Google Play
+        env:
+          PLAY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$PLAY_JSON" ]; then echo "::error::Missing PLAY_SERVICE_ACCOUNT_JSON."; exit 1; fi
+          fastlane supply \
+            --package_name com.webek.wabek \
+            --json_key_data "$PLAY_JSON" \
+            --metadata_path build/play/metadata \
+            --skip_upload_apk true --skip_upload_aab true --skip_upload_changelogs true \
+            --sync_image_upload true
+
+  app-store:
+    if: inputs.platform != 'google-play'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+      - run: gem install fastlane --no-document
+      - name: Prepare the listing (fastlane "deliver" layout)
+        run: |
+          set -euo pipefail
+          L=mobile/store/listing; A=mobile/store-assets; M=build/ios/metadata; S=build/ios/screenshots
+          get() { grep "^$1=" "$L/urls.txt" | cut -d= -f2-; }
+          for pair in en:en-US ar:ar-SA; do
+            src=${pair%%:*}; loc=${pair##*:}; d=$M/$loc
+            mkdir -p "$d" "$S/$loc"
+            cp "$L/$src/title.txt" "$d/name.txt"
+            cp "$L/$src/subtitle.txt" "$d/subtitle.txt"
+            cp "$L/$src/description.txt" "$d/description.txt"
+            cp "$L/$src/keywords.txt" "$d/keywords.txt"
+            cp "$L/$src/promotional_text.txt" "$d/promotional_text.txt"
+            get support > "$d/support_url.txt"
+            get privacy > "$d/privacy_url.txt"
+            get marketing > "$d/marketing_url.txt"
+            cp "$A/apple-iphone-6.9/$src/"*.png "$S/$loc/"
+          done
+          echo "$(date +%Y) WEBEK LTD" > "$M/copyright.txt"
+          echo "BUSINESS" > "$M/primary_category.txt"
+          echo "PRODUCTIVITY" > "$M/secondary_category.txt"
+          find build/ios -type f | sort
+      - name: App Store Connect API key
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_KEY_P8" ]; then echo "::error::Missing ASC_* secrets."; exit 1; fi
+          jq -n --arg id "$ASC_KEY_ID" --arg iss "$ASC_ISSUER_ID" --arg key "$ASC_KEY_P8" \
+            '{key_id:$id, issuer_id:$iss, key:$key, in_house:false}' > "$RUNNER_TEMP/asc.json"
+      - name: Upload to App Store Connect
+        run: |
+          fastlane deliver \
+            --api_key_path "$RUNNER_TEMP/asc.json" \
+            --app_identifier com.webek.wabek \
+            --platform ios \
+            --app_version "$(jq -r .expo.version mobile/app.json)" \
+            --metadata_path build/ios/metadata \
+            --screenshots_path build/ios/screenshots \
+            --skip_binary_upload true \
+            --overwrite_screenshots true \
+            --submit_for_review false \
+            --automatic_release false \
+            --run_precheck_before_submit false \
+            --force true

@@ -1,0 +1,40 @@
+WABEK puts your business conversations in your pocket. Every customer chat, every number and every result — live, in one place.
+
+ONE INBOX FOR YOUR TEAM
+• All conversations from all your numbers in one list
+• Filter by open, assigned to you, pending or resolved
+• Assign chats, close them, and see who is handling what
+• Orders from Wix and WooCommerce and invoices from WHMCS show up next to the chat
+
+REPLY FASTER
+• AI-suggested replies you can edit before sending
+• Send photos, videos and documents
+• Approved message templates when the 24-hour window is closed (official Cloud API numbers)
+• Quick replies for the answers you give every day
+
+LIVE ANALYTICS
+• Messages sent, delivered and read — today, 7 or 30 days
+• Delivery and read rates, link clicks and campaign results
+• AI replies vs. team replies
+• Export a report in one tap
+
+CONNECT A NUMBER IN SECONDS
+• Link a number with an 8-character code, right from the phone that has it — no QR needed
+• Or scan a QR code, or connect the official Cloud API
+• Get notified the moment a number disconnects, and reconnect in one tap
+
+SECURE BY DESIGN
+• Lock the app with Face ID or your fingerprint
+• Two-step verification and signed-in devices
+• Delete your account at any time from the app
+
+SUPPORT THAT ANSWERS
+• Open a ticket and chat with our team inside the app
+
+Notifications for new messages, disconnected numbers and finished campaigns keep you on top of things.
+
+The app is available in English and Arabic.
+
+A WABEK account is required. Plans are managed on waabek.com.
+
+WABEK is an independent product by WEBEK LTD and is not affiliated with WhatsApp or Meta.
