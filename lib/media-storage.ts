@@ -39,9 +39,18 @@ const ALLOWED_MIME: Record<string, string> = {
   'text/plain': 'txt',
 }
 
-/** "audio/ogg; codecs=opus" → "audio/ogg" (lower-case, no parameters). */
+// Non-standard names some browsers/OSes send for the same formats
+const MIME_ALIASES: Record<string, string> = {
+  'image/jpg': 'image/jpeg', 'image/pjpeg': 'image/jpeg',
+  'audio/mp3': 'audio/mpeg', 'audio/x-m4a': 'audio/mp4', 'audio/m4a': 'audio/mp4',
+  'audio/x-aac': 'audio/aac', 'audio/aacp': 'audio/aac', 'audio/opus': 'audio/ogg',
+  'video/3gp': 'video/3gpp',
+}
+
+/** "audio/ogg; codecs=opus" → "audio/ogg" (lower-case, no parameters, aliases resolved). */
 export function baseMime(mime: string | null | undefined): string {
-  return String(mime || '').split(';')[0].trim().toLowerCase()
+  const m = String(mime || '').split(';')[0].trim().toLowerCase()
+  return MIME_ALIASES[m] || m
 }
 
 export function isAllowedMime(mime: string): boolean {

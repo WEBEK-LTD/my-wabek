@@ -47,7 +47,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json({ templates })
   } catch (err: any) {
-    const errMsg = err?.response?.data?.error?.message || err?.message || 'Unknown error'
+    const errMsg = err?.response?.data?.error?.message || 'request failed'
+    console.error('[templates] Meta error:', err?.response?.data || err?.message)
     return res.status(502).json({ error: `Failed to fetch templates from Meta: ${errMsg}`, templates: [] })
   }
 }

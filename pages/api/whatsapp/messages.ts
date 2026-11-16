@@ -9,8 +9,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'GET') {
     const { contact_id, instance_id, page = '1', limit = '50' } = req.query
-    const pageNum = parseInt(page as string)
-    const limitNum = Math.min(parseInt(limit as string), 100)
+    const pageNum = Math.max(1, parseInt(page as string) || 1)
+    const limitNum = Math.min(Math.max(1, parseInt(limit as string) || 50), 100)
     const offset = (pageNum - 1) * limitNum
 
     let query = db.from('messages').select('*, contacts(name, phone)', { count: 'exact' })
@@ -22,7 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (instance_id) query = query.eq('instance_id', instance_id as string)
 
     const { data, error, count } = await query
-    if (error) return res.status(500).json({ error: error.message })
+    if (error) return res.status(500).json({ error: 'Failed to load messages' })
     return res.status(200).json({ messages: data?.reverse(), total: count, page: pageNum })
   }
 
