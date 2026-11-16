@@ -25,8 +25,14 @@ function getDeviceFingerprint(): string {
   return fp
 }
 
+// Only same-site relative paths (no protocol-relative //evil.com).
+function safeRedirect(v: unknown): string {
+  return typeof v === 'string' && v.startsWith('/') && !v.startsWith('//') && !v.startsWith('/\\') ? v : '/dashboard'
+}
+
 export default function LoginPage() {
   const router = useRouter()
+  const redirectTo = safeRedirect(router.query.redirect)
   const { setUser, setToken } = useAuthStore()
   const { brandName, brandColor, brandLogo } = useWhiteLabel()
   const [form, setForm] = useState({ email: '', password: '' })
@@ -58,7 +64,7 @@ export default function LoginPage() {
         setUser(data.user)
         setToken(data.token)
         if (typeof window !== 'undefined') localStorage.setItem('wabek_token', data.token)
-        router.push('/dashboard')
+        router.push(redirectTo)
       }
     } catch (e) {
       const msg = e?.response?.data?.error || e?.response?.data?.details || 'Login failed'
@@ -81,7 +87,7 @@ export default function LoginPage() {
       setUser(data.user)
       setToken(data.token)
       if (typeof window !== 'undefined') localStorage.setItem('wabek_token', data.token)
-      router.push('/dashboard')
+      router.push(redirectTo)
       toast.success('Welcome back! 👋')
     } catch (e) {
       toast.error(e?.response?.data?.error || 'Invalid code')

@@ -53,11 +53,19 @@ export default function BillingPage() {
 
   const checkoutMut = useMutation(
     body => axios.post('/api/billing', { action: 'checkout', ...body }).then(r => r.data),
-    { onSuccess: d => { if (d.url) window.location.href = d.url }, onError: e => toast.error(e?.response?.data?.error || 'Stripe error') }
+    { onSuccess: d => { if (d.url) window.location.href = d.url }, onError: e => {
+      const msg = e?.response?.data?.error || 'Stripe error'
+      if (e?.response?.status === 409) {
+        // Already subscribed → plan changes / cancellation go through Manage billing.
+        if (window.confirm(`${msg}\n\nOpen "Manage billing" now?`)) portalMut.mutate()
+        return
+      }
+      toast.error(msg)
+    } }
   )
   const portalMut = useMutation(
     () => axios.post('/api/billing', { action: 'portal' }).then(r => r.data),
-    { onSuccess: d => { if (d.url) window.location.href = d.url }, onError: () => toast.error('Stripe portal not configured') }
+    { onSuccess: d => { if (d.url) window.location.href = d.url }, onError: e => toast.error(e?.response?.data?.error || 'Stripe portal not configured') }
   )
   const redeemMut = useMutation(
     code => axios.post('/api/billing/redeem-gift', { code }).then(r => r.data),
