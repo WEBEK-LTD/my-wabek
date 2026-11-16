@@ -140,9 +140,16 @@ jobs:
             DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="-" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES PROVISIONING_PROFILE_SPECIFIER="" \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" archive > "$RUNNER_TEMP/archive.log" 2>&1 || {
-              grep -E "error:|requires a provisioning|Signing for" "$RUNNER_TEMP/archive.log" | sort -u | head -n 40
+              grep -n -B2 -A12 -E "error:|requires a provisioning|Signing for" "$RUNNER_TEMP/archive.log" | head -n 200
               tail -n 30 "$RUNNER_TEMP/archive.log"; exit 1; }
           tail -n 5 "$RUNNER_TEMP/archive.log"
+      - name: Keep the build log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: ios-build-log-${{ github.run_number }}
+          path: ${{ runner.temp }}/*.log
+          retention-days: 7
       - name: Export the IPA (Apple cloud signing)
         working-directory: mobile/ios
         env:
