@@ -12,6 +12,7 @@
  */
 import { NextApiRequest, NextApiResponse } from 'next'
 import { requireMemberAccess } from '@/lib/auth'
+import { memberMayUseInstance } from '@/lib/inbox-access'
 import { supabaseAdmin } from '@/lib/supabase'
 import { smartSend, smartSendWAWeb, smartSendMedia, resolveProvider, isInWindow } from '@/lib/wa-smart-send'
 import { sanitizeDisplayFilename } from '@/lib/media-storage'
@@ -94,6 +95,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .maybeSingle()
 
   if (!instance) return res.status(404).json({ error: 'Instance not found' })
+  // Members limited to some numbers (Team → Inboxes) can only reply from those.
+  if (!(await memberMayUseInstance(db, user, instance.id))) return res.status(403).json({ error: 'You do not have access to this number', code: 'instance_forbidden' })
 
   const provider = resolveProvider(instance)
   const isJid = /@(lid|g\.us|s\.whatsapp\.net|broadcast)$/.test(to)

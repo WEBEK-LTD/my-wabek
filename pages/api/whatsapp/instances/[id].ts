@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireMemberAccess } from '@/lib/auth'
+import { memberMayUseInstance } from '@/lib/inbox-access'
 import { logAction, getClientIp } from '@/lib/middleware'
 import { toPublicInstance } from '@/lib/whatsapp'
 import { callWAServer, isValidInstanceId } from '@/lib/wa-web'
@@ -18,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .eq('user_id', user.userId)
     .maybeSingle()
 
-  if (!instance) return res.status(404).json({ error: 'Instance not found' })
+  if (!instance || !(await memberMayUseInstance(db, user, instance.id))) return res.status(404).json({ error: 'Instance not found' })
 
   if (req.method === 'GET') {
     return res.status(200).json({ instance: toPublicInstance(instance) })

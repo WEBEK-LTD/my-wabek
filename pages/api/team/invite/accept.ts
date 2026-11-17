@@ -41,6 +41,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return !!data?.length
   }
 
+  // Numbers chosen in the invite (permissions.instances) → team_member_instances.
+  const applyInviteNumbers = async (memberUserId: string) => {
+    const ids = (invite.permissions as { instances?: unknown } | null)?.instances
+    if (!Array.isArray(ids) || ids.length === 0) return
+    const { data: owned } = await db.from('whatsapp_instances').select('id').eq('user_id', invite.owner_id).in('id', ids.filter(x => typeof x === 'string').slice(0, 50))
+    const rows = (owned || []).map(o => ({ member_user_id: memberUserId, instance_id: o.id }))
+    if (rows.length) await db.from('team_member_instances').insert(rows)
+  }
+
   const { data: existing } = await db.from('users')
     .select('id, email, role, is_active, sub_account_of').eq('email', email).maybeSingle()
 
@@ -65,6 +74,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!(await consume(existing.id))) return res.status(404).json({ error: 'Invalid or expired invitation' })
     await db.from('users').update({ sub_account_of: invite.owner_id }).eq('id', existing.id)
+    await applyInviteNumbers(existing.id)
 
     return res.status(200).json({
       success: true,
@@ -102,6 +112,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ error: 'Could not accept invitation' })
   }
   await db.from('team_members').update({ user_id: user.id }).eq('id', invite.id)
+  await applyInviteNumbers(user.id)
 
   const jwtToken = await issueSession(res, user)
   return res.status(200).json({ success: true, user: { id: user.id, email: user.email, name: user.name, role: user.role, sub_account_of: invite.owner_id }, token: jwtToken })

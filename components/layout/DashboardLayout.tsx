@@ -23,6 +23,8 @@ import UpgradeWall from '@/components/UpgradeWall'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/components/ui/utils'
 import { DASHBOARD_SECTIONS, findActive, isItemLocked } from './nav'
+import { canOpenPath, levelAllows, type PermissionMap } from '@/lib/team-permissions'
+import { NoSymbolIcon } from '@heroicons/react/24/outline'
 import {
   AccountCard, CommandPalette, LanguageMenu, ShellFrame, Sidebar, SubNav,
   ThemeToggle, Topbar, sectionHref, useCommandShortcut,
@@ -163,6 +165,13 @@ export default function DashboardLayout({ children, title: rawTitle, titleKey, b
   const inboxUnread = (inboxData?.inboxes || []).reduce((s: number, i: { unread?: number }) => s + (i.unread || 0), 0)
 
   /* ── Navigation state ─────────────────────────────────── */
+  // Team members only see the sections the owner gave them (lib/team-permissions.ts).
+  const memberPerms: PermissionMap | null = me?.sub_account_of ? ((me as { member_permissions?: PermissionMap | null }).member_permissions || null) : null
+  const sections = React.useMemo(() => !memberPerms ? DASHBOARD_SECTIONS : DASHBOARD_SECTIONS
+    .map(sec => ({ ...sec, items: sec.items.filter(it => it.external || canOpenPath(it.href, memberPerms)) }))
+    .filter(sec => sec.items.length > 0), [memberPerms])
+  const denied = !canOpenPath(router.pathname, memberPerms)
+  const canCreateCampaign = !memberPerms || levelAllows(memberPerms.campaigns, 'edit')
   const { section: activeSection, item: activeItem } = findActive(DASHBOARD_SECTIONS, router.pathname)
   const ctx = { features, isWix }
   const locked = activeItem ? isItemLocked(activeItem, ctx) : false
@@ -203,7 +212,7 @@ export default function DashboardLayout({ children, title: rawTitle, titleKey, b
 
   const accountItems = [
     { label: t('sub_account'), icon: Cog6ToothIcon, href: '/dashboard/settings' },
-    ...(!isWix ? [{ label: t('sub_billing'), icon: CreditCardIcon, href: '/dashboard/billing' }] : []),
+    ...(!isWix && !memberPerms ? [{ label: t('sub_billing'), icon: CreditCardIcon, href: '/dashboard/billing' }] : []),
     ...(me?.role === 'admin' ? [{ label: t('shell_admin_panel'), icon: ShieldCheckIcon, href: '/admin' }] : []),
     { label: t('sub_docs'), icon: BookOpenIcon, href: '/docs' },
     { label: t('shell_sign_out'), icon: ArrowRightOnRectangleIcon, onClick: () => { logout() }, danger: true, divider: true },
@@ -211,7 +220,7 @@ export default function DashboardLayout({ children, title: rawTitle, titleKey, b
 
   const sidebar = (mode: 'static' | 'drawer', close: () => void) => (
     <Sidebar
-      sections={DASHBOARD_SECTIONS}
+      sections={sections}
       activeSectionId={activeSection?.id}
       features={features}
       isWix={isWix}
@@ -278,7 +287,7 @@ export default function DashboardLayout({ children, title: rawTitle, titleKey, b
         t={t}
         bleed={isBleed}
         sidebar={sidebar}
-        subnav={!hideSubnav && !isBleed ? <SubNav section={activeSection} activeItem={activeItem} features={features} isWix={isWix} t={t} /> : null}
+        subnav={!hideSubnav && !isBleed ? <SubNav section={(activeSection && sections.find(x => x.id === activeSection.id)) || activeSection} activeItem={activeItem} features={features} isWix={isWix} t={t} /> : null}
         banner={banner}
         topbar={(openMenu) => (
           <Topbar
@@ -296,7 +305,7 @@ export default function DashboardLayout({ children, title: rawTitle, titleKey, b
               unread={unreadCount}
               onMarkAllRead={markAllRead}
             />
-            {memberRole !== 'viewer' && (
+            {memberRole !== 'viewer' && canCreateCampaign && (
               <Button variant="dark" size="sm" href="/dashboard/campaigns" icon={PlusIcon} className="ms-1 h-10 px-3 sm:px-4" aria-label={t('shell_new_campaign')}>
                 <span className="hidden sm:inline">{t('shell_new_campaign')}</span>
               </Button>
@@ -304,13 +313,19 @@ export default function DashboardLayout({ children, title: rawTitle, titleKey, b
           </Topbar>
         )}
       >
-        {locked && activeItem?.feature ? <UpgradeWall feature={activeItem.feature} /> : children}
+        {denied ? (
+          <div className="mx-auto flex max-w-md flex-col items-center gap-3 py-24 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-3 text-muted"><NoSymbolIcon className="h-6 w-6" aria-hidden="true" /></span>
+            <h2 className="text-lg font-semibold text-ink">{t('shell_no_access_title')}</h2>
+            <p className="text-sm text-muted">{t('shell_no_access_body')}</p>
+          </div>
+        ) : locked && activeItem?.feature ? <UpgradeWall feature={activeItem.feature} /> : children}
       </ShellFrame>
 
       <CommandPalette
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
-        sections={DASHBOARD_SECTIONS}
+        sections={sections}
         features={features}
         isWix={isWix}
         t={t}

@@ -1,11 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import { requireOwnerOrRole, generateApiKey } from '@/lib/auth'
+import { requireOwnerOrPermission, generateApiKey } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { API_KEY_PERMISSIONS, isValidApiKeyPermission } from '@/lib/api-key-auth'
 import { v4 as uuidv4 } from 'uuid'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const user = await requireOwnerOrRole(req, res)
+  const user = await requireOwnerOrPermission(req, res, 'integrations', 'edit')
   if (!user) return
   const db = supabaseAdmin()
 
