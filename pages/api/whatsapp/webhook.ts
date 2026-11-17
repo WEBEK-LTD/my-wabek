@@ -93,7 +93,12 @@ async function handleInboundMessage(msg: WebhookMessage, instances: Map<string, 
   }
 
   let contactId: string | null = null
-  const { data: contact } = await db.from('contacts').select('id, name').eq('user_id', instance.user_id).eq('phone', msg.from).limit(1)
+  const { data: contact } = await db.from('contacts').select('id, name, is_blocked').eq('user_id', instance.user_id).eq('phone', msg.from).limit(1)
+  // Blocked by this tenant (chat → Block contact / Report spam): drop silently.
+  if (contact?.[0]?.is_blocked) {
+    console.log(`[WEBHOOK] message from a blocked contact — dropped`)
+    return
+  }
   if (contact?.[0]) {
     contactId = contact[0].id
     if (!contact[0].name && msg.contactName) {
