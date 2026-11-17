@@ -47,7 +47,7 @@
 |---|---|
 | `META_APP_SECRETS` | قائمة مفصولة بفواصل لأسرار تطبيقات Meta الخاصة ببعض المستأجرين (tenants لهم Meta App خاص). **إن وُجد مستأجر بتطبيق خاص ولم تُضف سرّه هنا ستُرفض webhooks الخاصة به.** |
 | `META_APP_ID`, `META_CONFIG_ID` | Embedded Signup. |
-| `WHATSAPP_API_VERSION` | `v21.0` افتراضياً (Graph API لكل الإرسال والتحقق، بما فيه `admin/validate-wa-token`). |
+| `WHATSAPP_API_VERSION` | `v25.0` افتراضياً (Graph API لكل الإرسال والتحقق، بما فيه `admin/validate-wa-token`). |
 | `WHATSAPP_SUBSCRIBE_API_VERSION` | `v25.0` افتراضياً (subscribed_apps فقط). |
 | `MESSAGE_LIMIT_MODE` | **الافتراضي log-only**: تجاوز حد الرسائل الشهري يُسجَّل فقط (`[send-guard] ... not blocking`). ضع `enforce` لتفعيل الحجب (`403 plan_limit`). (opt-out / blocked يُحجب دائماً.) |
 | `API_ACCESS_MODE` | **الافتراضي log-only**: مفتاح API لباقة بدون `allow_api_access` يُسجَّل فقط (`[api-key] ... not blocking`). ضع `enforce` لإرجاع `403 plan_no_api`. |

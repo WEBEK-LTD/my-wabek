@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { supabaseAdmin } from '@/lib/supabase'
-import { getPhoneNumberInfo, toPublicInstance } from '@/lib/whatsapp'
+import { getPhoneNumberInfo, metaErrorText, toPublicInstance } from '@/lib/whatsapp'
 import { checkInstanceCreateAllowed } from '@/lib/wa-smart-send'
 import { resolveWixCaller } from '@/lib/wix-auth'
 import { v4 as uuidv4 } from 'uuid'
@@ -29,8 +29,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const info = await getPhoneNumberInfo(String(phone_number_id), String(access_token))
     displayName = (info.verified_name as string) || displayName
-  } catch {
-    return res.status(400).json({ error: 'Invalid WhatsApp credentials. Please check your Phone Number ID and Access Token.' })
+  } catch (err) {
+    const reason = metaErrorText(err)
+    console.error('[wix/connect-cloud] Meta credential check failed:', reason)
+    return res.status(400).json({ error: `Meta rejected these credentials: ${reason}`, code: 'meta_rejected', meta_reason: reason })
   }
 
   const db = supabaseAdmin()

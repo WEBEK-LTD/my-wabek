@@ -4,7 +4,8 @@ import { safeEqual } from './security'
 
 // ── Graph API version: ONE place for the whole app ──────────────────────────
 // Every Graph call (messages, media, templates, OAuth, catalog) uses this.
-export const WA_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v21.0'
+// v21.0 (Oct 2024) reached the end of Meta's ~2-year support window; keep in step with the subscribe version.
+export const WA_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v25.0'
 export const GRAPH_BASE_URL = `https://graph.facebook.com/${WA_API_VERSION}`
 // /{waba}/subscribed_apps was observed to reject older versions with #200, so
 // it keeps its own (env-overridable) version instead of WA_API_VERSION.
@@ -182,8 +183,18 @@ export async function getPhoneNumberInfo(
   accessToken: string
 ): Promise<Record<string, unknown>> {
   const client = waAxios(accessToken)
-  const { data } = await client.get(`/${phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,platform_type`)
+  // Only long-standing fields: a field Meta drops in a newer Graph version fails the whole check.
+  const { data } = await client.get(`/${phoneNumberId}?fields=display_phone_number,verified_name`)
   return data
+}
+
+/** Meta's own reason for a failed Graph call, safe to show to the account owner (never includes the token). */
+export function metaErrorText(err: unknown): string {
+  const e = (err as { response?: { status?: number; data?: { error?: { message?: string; code?: number; error_subcode?: number } } }; message?: string }) || {}
+  const m = e.response?.data?.error
+  if (m?.message) return `${m.message}${m.code ? ` (code ${m.code}${m.error_subcode ? `/${m.error_subcode}` : ''})` : ''}`
+  if (e.response?.status) return `Meta returned HTTP ${e.response.status}`
+  return e.message ? `Could not reach Meta: ${e.message}` : 'Unknown error'
 }
 
 export async function getBusinessProfile(

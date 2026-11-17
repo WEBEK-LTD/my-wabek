@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { getAuthUser, requireMemberAccess } from '@/lib/auth'
 import { authenticateApiKey } from '@/lib/api-key-auth'
 import { logAction, getClientIp } from '@/lib/middleware'
-import { getPhoneNumberInfo, toPublicInstance, GRAPH_SUBSCRIBE_BASE_URL } from '@/lib/whatsapp'
+import { getPhoneNumberInfo, metaErrorText, toPublicInstance, GRAPH_SUBSCRIBE_BASE_URL } from '@/lib/whatsapp'
 import { checkInstanceCreateAllowed } from '@/lib/wa-smart-send'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -72,8 +72,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       try {
         const info = await getPhoneNumberInfo(body.phone_number_id, body.access_token)
         displayName = displayName || (info.verified_name as string) || body.phone_number
-      } catch {
-        return res.status(400).json({ error: 'Invalid WhatsApp credentials. Check Phone Number ID and Access Token.' })
+      } catch (err) {
+        const reason = metaErrorText(err)
+        console.error('[instances] Meta credential check failed:', reason)
+        return res.status(400).json({ error: `Meta rejected these credentials: ${reason}`, code: 'meta_rejected', meta_reason: reason })
       }
 
       const { data, error } = await db.from('whatsapp_instances').insert({
