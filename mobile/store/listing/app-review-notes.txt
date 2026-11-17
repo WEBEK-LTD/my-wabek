@@ -1,0 +1,31 @@
+1. SCREEN RECORDING
+Recorded on a physical iPhone with the latest iOS, attached in the App Review Information "Attachment" field. It starts at app launch and shows: sign up, sign in, the main features, contact blocking and spam reporting, and account deletion (Account > Delete account).
+
+2. PURPOSE AND AUDIENCE
+WABEK is the mobile companion to waabek.com, a customer messaging platform for small and medium businesses that serve their customers on WhatsApp. Business owners and their support staff use it to answer customer chats from one shared inbox, see delivery and reply analytics, and keep their WhatsApp numbers connected. It solves a common problem: customer chats are spread across several phones and staff, so replies are slow and nobody can see the results. The app gives one inbox, faster replies (optional AI-suggested replies), and live analytics.
+
+3. HOW TO USE AND TEST IT
+- Sign in with the demo account in the Sign-In Information section. It already has a connected WhatsApp number, sample contacts and conversations.
+- Home: live message stats. Inbox: open a conversation, send a text, photo or file, or tap the sparkle button for an AI-suggested reply.
+- Chat options (... button in a chat): Mark as resolved, Assign to me, Report spam & block, Block contact, Unblock. A blocked contact's messages no longer reach the business and it cannot be messaged until unblocked.
+- Analytics: delivery, read and reply rates, campaigns.
+- Numbers: connect a WhatsApp number with a linking code, a QR code, or the official WhatsApp Cloud API (Phone number ID + access token from Meta).
+- Account: profile, password, Face ID lock, notifications, language (English/Arabic), Contact support (in-app ticket chat), Delete account.
+- New accounts can be created in the app (Create free account). Account deletion is in Account > Delete account.
+
+There are no in-app purchases. A business that already has a paid plan on the website can use it in the app (multiplatform service). Plans raise usage limits such as numbers and monthly messages. The app shows the current plan but has no purchase links or calls to action. The demo account has the features needed for review.
+
+4. EXTERNAL SERVICES
+- Meta WhatsApp Business Platform (Cloud API): sending and receiving WhatsApp messages for numbers connected with the official API.
+- WhatsApp linked devices: a business can link its own WhatsApp number with WhatsApp's standard "Link a device" flow (code or QR), started by the number's owner.
+- Supabase: database, file storage and authentication (email and password).
+- OpenAI and DeepSeek: optional AI-suggested replies and AI auto-replies set up by the business.
+- Apple Push Notification service and Firebase Cloud Messaging: notifications.
+- Stripe: subscription payments on the website only, not in the app.
+- Optional store integrations the business connects with its own accounts: Wix, WooCommerce, WHMCS.
+
+5. REGIONS
+The app works the same in every region where it is available. There are no regional differences in features or content.
+
+6. REGULATED INDUSTRY / THIRD-PARTY MATERIAL
+WABEK is not in a regulated industry. All messages and contacts belong to the business using the app. Each business connects its own WhatsApp number or its own Meta WhatsApp Business account and its own store accounts, and must follow Meta's WhatsApp Business policies (in our Terms of Service). We don't provide or resell WhatsApp content or accounts. Brand names of connected services identify those integrations only.
