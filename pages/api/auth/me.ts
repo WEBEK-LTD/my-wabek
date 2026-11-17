@@ -52,6 +52,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         plan_expires_at: account?.plan_expires_at ?? null,
         sub_account_of: user.actualUserId ? user.userId : null,
         member_role: user.memberRole || null,
+        // Effective per-section levels (none/view/edit) — the dashboard hides what is 'none'.
+        member_permissions: user.actualUserId ? (user.memberPermissions || null) : null,
         // The default API key itself is only available to the owner via
         // GET /api/settings/default-api-key.
         has_api_key: isOwner ? !!apiKey : undefined,

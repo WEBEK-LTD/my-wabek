@@ -3,6 +3,7 @@ import { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireMemberAccess } from '@/lib/auth'
+import { memberMayUseInstance } from '@/lib/inbox-access'
 import { v4 as uuidv4 } from 'uuid'
 
 const schema = z.object({
@@ -32,6 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .maybeSingle()
 
     if (!instance) return res.status(404).json({ error: 'Instance not found' })
+    if (!(await memberMayUseInstance(db, user, instance.id))) return res.status(403).json({ error: 'You do not have access to this number', code: 'instance_forbidden' })
     if (instance.status !== 'connected') return res.status(400).json({ error: 'Instance not connected' })
 
     // Find or create contact

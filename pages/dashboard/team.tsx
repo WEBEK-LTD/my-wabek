@@ -18,6 +18,8 @@ import { CopyField, ErrorState, Notice, apiError } from '@/components/settings/S
 import { PerformancePanel, ReviewsPanel, NoteModal } from '@/components/settings/TeamPanels'
 import { useT } from '@/lib/i18n-local'
 import messages from '@/locales/dashboard/team'
+import PermissionsEditor, { presetValue } from '@/components/settings/PermissionsEditor'
+import { PERM_GROUPS, PERM_PRESETS, PRESET_MAPS } from '@/lib/team-permissions'
 
 // Labels are dictionary keys (locales/dashboard/team.ts).
 const ROLE_META = {
@@ -54,7 +56,8 @@ export default function TeamPage() {
   const [tab, setTab]           = useState<'members' | 'performance' | 'reviews'>('members')
   const [range, setRange]       = useState<'1d' | '7d' | '30d'>('7d')
   const [showInvite, setShowInvite] = useState(false)
-  const [form, setForm] = useState({ name: '', email: '', role: 'agent' })
+  const [form, setForm] = useState({ name: '', email: '', perms: presetValue('support'), instances: [] as string[] })
+  const [permEdit, setPermEdit] = useState<{ member: any; value: any; instances: string[] } | null>(null)
   const [inviteUrl, setInviteUrl] = useState('')
   const [roleChange, setRoleChange] = useState<{ member: any; role: string } | null>(null)
   const [toSuspend, setToSuspend] = useState<any>(null)
@@ -104,7 +107,7 @@ export default function TeamPage() {
       onSuccess: (r) => {
         qc.invalidateQueries('team')
         setInviteUrl(r.data.inviteUrl)
-        setForm({ name: '', email: '', role: 'agent' })
+        setForm({ name: '', email: '', perms: presetValue('support'), instances: [] })
         toast.success(t('inviteCreated'))
       },
       onError: (e) => toast.error(apiError(e, t('inviteError'))),
@@ -114,7 +117,7 @@ export default function TeamPage() {
   const updateMut = useMutation(
     ({ id, ...body }) => axios.put(`/api/team/${id}`, body),
     {
-      onSuccess: () => { qc.invalidateQueries('team'); qc.invalidateQueries('team-performance'); toast.success(t('updated')); setRoleChange(null); setToSuspend(null) },
+      onSuccess: () => { qc.invalidateQueries('team'); qc.invalidateQueries('team-performance'); toast.success(t('updated')); setRoleChange(null); setToSuspend(null); setPermEdit(null) },
       onError: (e: any) => toast.error(apiError(e, t('updateError'))),
     }
   )
@@ -127,7 +130,7 @@ export default function TeamPage() {
     }
   )
 
-  const openInvite = () => { setShowInvite(true); setInviteUrl(''); setForm({ name: '', email: '', role: 'agent' }) }
+  const openInvite = () => { setShowInvite(true); setInviteUrl(''); setForm({ name: '', email: '', perms: presetValue('support'), instances: [] }) }
   const closeInvite = () => { setShowInvite(false); setInviteUrl('') }
 
   const instancesList = data?.instances || []
@@ -209,18 +212,16 @@ export default function TeamPage() {
                             </div>
                           </TD>
                           <TD>
-                            {isOwner && member.status === 'active' ? (
-                              <Select
-                                size="sm"
-                                aria-label={t('roleOf', { name: member.name || member.email })}
-                                value={member.role}
-                                onChange={e => { if (e.target.value !== member.role) setRoleChange({ member, role: e.target.value }) }}
-                                options={ROLE_OPTIONS.map(o => ({ value: o.value, label: t(o.label) }))}
-                                className="w-28"
-                              />
-                            ) : (
-                              <Badge tone={role.tone} icon={role.icon}>{role.label}</Badge>
-                            )}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge tone={member.preset === 'admin' ? 'violet' : member.preset === 'viewer' ? 'neutral' : 'brand'}>{t(`preset_${member.preset || 'custom'}`)}</Badge>
+                              {isOwner && member.status !== 'suspended' && (
+                                <Button size="sm" variant="ghost" icon={ShieldCheckIcon}
+                                  aria-label={t('permissionsTitle', { name: member.name || member.email })}
+                                  onClick={() => setPermEdit({ member, value: { preset: member.preset || 'custom', areas: { ...member.permissions } }, instances: [...(member.allowed_instances || [])] })}>
+                                  {t('permissions')}
+                                </Button>
+                              )}
+                            </div>
                           </TD>
                           <TD><Badge tone={status.tone} dot>{status.label}</Badge></TD>
                           {isOwner && instancesList.length > 0 && (
@@ -279,20 +280,23 @@ export default function TeamPage() {
             {/* Roles */}
             <Card padding="none">
               <CardHeader title={t('rolesCardTitle')} divider />
-              <div className="grid gap-px bg-line-soft sm:grid-cols-2 xl:grid-cols-4">
-                {ROLE_CAPS.map(r => (
-                  <div key={r.role} className="bg-surface p-5">
-                    <div className="flex items-center gap-2.5">
-                      <span className={cn('flex h-9 w-9 items-center justify-center rounded-xl', r.tone)}><r.icon className="h-5 w-5" aria-hidden="true" /></span>
-                      <span className="font-semibold text-ink">{t(r.label)}</span>
+              <div className="grid gap-px bg-line-soft sm:grid-cols-2 xl:grid-cols-3">
+                {PERM_PRESETS.filter(p => p !== 'custom').map(p => {
+                  const edit = PERM_GROUPS.filter(g => PRESET_MAPS[p][g] === 'edit')
+                  const view = PERM_GROUPS.filter(g => PRESET_MAPS[p][g] === 'view')
+                  return (
+                    <div key={p} className="bg-surface p-5">
+                      <p className="font-semibold text-ink">{t(`preset_${p}`)}</p>
+                      <p className="mt-0.5 text-xs text-muted">{t(`presetDesc_${p}`)}</p>
+                      <ul className="mt-3 space-y-1.5 text-sm">
+                        {edit.length > 0 && <li className="flex items-start gap-2 text-body"><CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" /><span><b className="font-medium">{t('canEditL')}:</b> {edit.map(g => t(`group_${g}`)).join(t('listSep'))}</span></li>}
+                        {view.length > 0 && <li className="flex items-start gap-2 text-body"><EyeIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted" aria-hidden="true" /><span><b className="font-medium">{t('canViewL')}:</b> {view.map(g => t(`group_${g}`)).join(t('listSep'))}</span></li>}
+                      </ul>
                     </div>
-                    <ul className="mt-3 space-y-1.5 text-sm">
-                      {r.can.map(c => <li key={c} className="flex items-start gap-2 text-body"><CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />{t(c)}</li>)}
-                      {r.cannot.map(c => <li key={c} className="flex items-start gap-2 text-muted"><XMarkIcon className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden="true" />{t(c)}</li>)}
-                    </ul>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
+              <p className="border-t border-line-soft px-5 py-3 text-xs text-muted">{t('ownerOnlyNote')}</p>
             </Card>
           </div>
         )}
@@ -330,7 +334,7 @@ export default function TeamPage() {
             <CopyField value={inviteUrl} className="py-2.5" />
           </div>
         ) : (
-          <form id="invite-form" className="space-y-5" onSubmit={e => { e.preventDefault(); inviteMut.mutate(form) }}>
+          <form id="invite-form" className="space-y-5" onSubmit={e => { e.preventDefault(); inviteMut.mutate({ name: form.name, email: form.email, permissions: form.perms, instances: form.instances }) }}>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label={t('fullName')} required>
                 <Input value={form.name} onChange={e => setForm(d => ({ ...d, name: e.target.value }))} placeholder={t('namePlaceholder')} />
@@ -339,26 +343,21 @@ export default function TeamPage() {
                 <Input type="email" value={form.email} onChange={e => setForm(d => ({ ...d, email: e.target.value }))} placeholder="sara@example.com" dir="ltr" />
               </Field>
             </div>
-            <fieldset>
-              <legend className="mb-2 text-sm font-medium text-ink">{t('roleLegend')}</legend>
-              <div className="grid gap-2 sm:grid-cols-3" role="radiogroup">
-                {ROLE_CAPS.filter(r => r.role !== 'owner').map(r => {
-                  const selected = form.role === r.role
-                  return (
-                    <button key={r.role} type="button" role="radio" aria-checked={selected} onClick={() => setForm(d => ({ ...d, role: r.role }))}
-                      className={cn('rounded-card border p-3 text-start transition', selected ? 'border-brand-teal bg-chip/40 shadow-ring' : 'border-line hover:border-line-strong')}>
-                      <span className="flex items-center gap-2">
-                        <span className={cn('flex h-8 w-8 items-center justify-center rounded-lg', r.tone)}><r.icon className="h-4 w-4" aria-hidden="true" /></span>
-                        <span className="text-sm font-semibold text-ink">{t(r.label)}</span>
-                      </span>
-                      <span className="mt-2 block text-xs leading-relaxed text-muted">{r.can.map(c => t(c)).join(t('listSep'))}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </fieldset>
+            <PermissionsEditor t={t} value={form.perms} onChange={v => setForm(d => ({ ...d, perms: v }))} numbers={instancesList} selectedNumbers={form.instances} onNumbersChange={ids => setForm(d => ({ ...d, instances: ids }))} />
           </form>
         )}
+      </Modal>
+
+      <Modal
+        open={!!permEdit}
+        onClose={() => setPermEdit(null)}
+        size="lg"
+        icon={ShieldCheckIcon}
+        title={permEdit ? t('permissionsTitle', { name: permEdit.member.name || permEdit.member.email }) : ''}
+        description={t('permissionsDesc')}
+        footer={<><Button variant="secondary" onClick={() => setPermEdit(null)}>{t('cancel')}</Button><Button loading={updateMut.isLoading} onClick={() => permEdit && updateMut.mutate({ id: permEdit.member.id, permissions: permEdit.value, instances: permEdit.instances })}>{t('savePermissions')}</Button></>}
+      >
+        {permEdit && <PermissionsEditor t={t} value={permEdit.value} onChange={v => setPermEdit(x => (x ? { ...x, value: v } : x))} numbers={instancesList} selectedNumbers={permEdit.instances} onNumbersChange={ids => setPermEdit(x => (x ? { ...x, instances: ids } : x))} />}
       </Modal>
 
       <ConfirmDialog cancelLabel={t('cancel')}

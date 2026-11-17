@@ -1,4 +1,5 @@
 import { SignJWT, jwtVerify } from 'jose'
+import { effectivePermissions, levelAllows, type PermGroup, type PermissionMap } from './team-permissions'
 import { NextApiRequest, NextApiResponse } from 'next'
 import bcrypt from 'bcryptjs'
 import { randomBytes, createHash } from 'crypto'
@@ -33,6 +34,7 @@ export interface JWTPayload {
   email: string
   role: 'user' | 'admin'
   memberRole?: MemberRole // team_members.role when the caller is a team member
+  memberPermissions?: PermissionMap // effective per-section levels (team members only)
   tv?: number             // token_version at issue time (missing = 0)
   iat?: number
   exp?: number
@@ -224,7 +226,7 @@ export async function getAuthUser(req: NextApiRequest): Promise<AuthResult> {
     try {
       const { supabaseAdmin } = await import('./supabase')
       const { data: memberships, error } = await supabaseAdmin().from('team_members')
-        .select('role, status')
+        .select('*')
         .eq('owner_id', u.sub_account_of)
         .eq('user_id', u.id)
         .eq('status', 'active')
@@ -236,7 +238,8 @@ export async function getAuthUser(req: NextApiRequest): Promise<AuthResult> {
       const m = memberships?.[0]
       if (!m) return { ok: false, status: 403, error: 'Team access revoked' }
       const memberRole: MemberRole = (['admin', 'agent', 'viewer'] as const).includes(m.role) ? m.role : 'viewer'
-      return { ok: true, payload: { ...base, userId: u.sub_account_of, actualUserId: u.id, memberRole } }
+      const memberPermissions = effectivePermissions(memberRole, (m as { permissions?: unknown }).permissions)
+      return { ok: true, payload: { ...base, userId: u.sub_account_of, actualUserId: u.id, memberRole, memberPermissions } }
     } catch (e) {
       console.error('[auth] membership lookup error:', e)
       return { ok: false, status: 503, error: 'Service unavailable' }
@@ -279,29 +282,62 @@ export async function requireOwnerOrRole(
 }
 
 // ── Team member permissions (server-side) ────────────────────────────────────
-// Account owners and team `admin`s can do everything (unchanged). For the
-// other team roles:
-//   viewer → read-only: GET/HEAD only on tenant data.
-//   agent  → read everything; write only in the inbox (chat, assignments,
-//            notes, sending replies), contacts and quick replies.
+// Account owners and team `admin`s can do everything. Other members get a
+// level per dashboard section (lib/team-permissions.ts): none / view / edit.
+//   none → the section is hidden and its API refuses reads and writes;
+//   view → GET/HEAD only;  edit → reads and writes.
+// Account-wide areas (settings, team, billing) stay readable (the layout
+// needs them) but only the owner or a team admin may change them.
 // Endpoints that only ever touch the caller's own profile / password /
 // devices / notifications keep using requireAuth.
 export type MemberArea =
-  | 'inbox' | 'contacts' | 'quick_replies'           // agent may write
+  | 'inbox' | 'contacts' | 'quick_replies'
   | 'campaigns' | 'automation' | 'chatbot' | 'ai' | 'segments' | 'links'
   | 'instances' | 'settings' | 'integrations' | 'team' | 'billing'
 
-const AGENT_WRITE_AREAS: ReadonlySet<MemberArea> = new Set<MemberArea>(['inbox', 'contacts', 'quick_replies'])
+const AREA_GROUP: Partial<Record<MemberArea, PermGroup>> = {
+  inbox: 'inbox', quick_replies: 'inbox',
+  contacts: 'contacts', segments: 'contacts',
+  campaigns: 'campaigns',
+  automation: 'automation', chatbot: 'automation', ai: 'automation',
+  links: 'links',
+  instances: 'numbers',
+  integrations: 'integrations',
+}
 const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 /** Whether a (team) caller may perform `method` in `area`. Owners/admins always may. */
-export function memberCan(user: Pick<JWTPayload, 'actualUserId' | 'memberRole'>, area: MemberArea, method: string): boolean {
+export function memberCan(user: Pick<JWTPayload, 'actualUserId' | 'memberRole' | 'memberPermissions'>, area: MemberArea, method: string): boolean {
   if (!user.actualUserId) return true
   const role = user.memberRole || 'viewer'
   if (role === 'admin') return true
-  if (READ_METHODS.has(String(method || 'GET').toUpperCase())) return true
-  if (role === 'agent') return AGENT_WRITE_AREAS.has(area)
-  return false
+  const read = READ_METHODS.has(String(method || 'GET').toUpperCase())
+  const group = AREA_GROUP[area]
+  if (!group) return read // settings / team / billing: read-only for non-admin members
+  const perms = user.memberPermissions || effectivePermissions(role, null)
+  return levelAllows(perms[group], read ? 'view' : 'edit')
+}
+
+/**
+ * Owner, team admin, or a member with `level` on `group` (e.g. a developer
+ * with edit on integrations may manage API keys).
+ */
+export async function requireOwnerOrPermission(
+  req: NextApiRequest,
+  res: NextApiResponse,
+  group: PermGroup,
+  level: 'view' | 'edit' = 'edit'
+): Promise<JWTPayload | null> {
+  const user = await requireAuth(req, res)
+  if (!user) return null
+  if (user.actualUserId && user.memberRole !== 'admin') {
+    const perms = user.memberPermissions || effectivePermissions(user.memberRole || 'viewer', null)
+    if (!levelAllows(perms[group], level)) {
+      res.status(403).json({ error: 'Your team role does not allow this action', code: 'member_forbidden', role: user.memberRole || 'viewer' })
+      return null
+    }
+  }
+  return user
 }
 
 /**

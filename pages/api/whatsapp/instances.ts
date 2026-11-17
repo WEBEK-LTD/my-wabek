@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { getAuthUser, requireMemberAccess } from '@/lib/auth'
 import { authenticateApiKey } from '@/lib/api-key-auth'
 import { logAction, getClientIp } from '@/lib/middleware'
+import { getAllowedInstances } from '@/lib/inbox-access'
 import { getPhoneNumberInfo, metaErrorText, toPublicInstance, GRAPH_SUBSCRIBE_BASE_URL } from '@/lib/whatsapp'
 import { checkInstanceCreateAllowed } from '@/lib/wa-smart-send'
 import { v4 as uuidv4 } from 'uuid'
@@ -56,7 +57,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .eq('user_id', user.userId)
       .order('created_at', { ascending: false })
     if (error) return res.status(500).json({ error: 'Failed to load instances' })
-    return res.status(200).json({ instances: (data || []).map(r => toPublicInstance(r)) })
+    // Members limited to some numbers (Team → Inboxes) only see those.
+    const allowed = user.actualUserId ? await getAllowedInstances(db, user.actualUserId, user.userId) : null
+    const rows = (data || []).filter(r => !allowed || allowed.includes(r.id))
+    return res.status(200).json({ instances: rows.map(r => toPublicInstance(r)) })
   }
 
   if (req.method === 'POST') {

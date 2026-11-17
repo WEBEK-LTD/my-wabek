@@ -16,6 +16,16 @@ export async function getAllowedInstances(db: Db, actingUserId: string, ownerId:
   return data.map(r => r.instance_id as string)
 }
 
+/**
+ * Team members limited to some numbers (Team → Inboxes) may not use the others.
+ * Owners and unrestricted members always may.
+ */
+export async function memberMayUseInstance(db: Db, user: { userId: string; actualUserId?: string }, instanceId: string): Promise<boolean> {
+  if (!user.actualUserId) return true
+  const allowed = await getAllowedInstances(db, user.actualUserId, user.userId)
+  return !allowed || allowed.includes(instanceId)
+}
+
 /** True if `instanceId` belongs to `ownerId` and the acting user may use it. */
 export async function canUseInstance(db: Db, ownerId: string, instanceId: string, allowed: string[] | null): Promise<boolean> {
   if (allowed && !allowed.includes(instanceId)) return false

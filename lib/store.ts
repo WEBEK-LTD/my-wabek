@@ -20,6 +20,7 @@ interface User {
   api_key_prefix?: string
   sub_account_of?: string | null
   member_role?: 'admin' | 'agent' | 'viewer' | null
+  member_permissions?: Record<string, 'none' | 'view' | 'edit'> | null
   language?: string
   timezone?: string
 }
