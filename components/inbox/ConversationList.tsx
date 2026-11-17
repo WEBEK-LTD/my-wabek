@@ -125,7 +125,7 @@ export function ConversationList(p: ConversationListProps) {
         </div>
 
         {p.inboxes.length > 1 && (
-          <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5 scrollbar-none" role="group" aria-label={t('inboxes')}>
+          <div className="-mx-4 flex flex-wrap gap-1.5 px-4 pb-0.5" role="group" aria-label={t('inboxes')}>
             {p.canSeeAll && (
               <button
                 type="button"
@@ -166,7 +166,7 @@ export function ConversationList(p: ConversationListProps) {
           tabs={['open', 'pending', 'resolved', 'spam', 'all'].map(s => ({ id: s, label: t(STATUS_KEYS[s]) }))}
         />
 
-        <div className="-mx-4 flex items-center gap-1.5 overflow-x-auto px-4 scrollbar-none" role="group" aria-label={t('assign_filter')}>
+        <div className="-mx-4 flex flex-wrap items-center gap-1.5 px-4" role="group" aria-label={t('assign_filter')}>
           <FunnelIcon className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
           {(['all', 'mine', 'unassigned', 'ai', 'waiting'] as AssignFilter[]).map(f => (
             <button
