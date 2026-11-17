@@ -36,10 +36,41 @@ export default function Chat() {
   const [suggesting, setSuggesting] = useState(false)
   const [suggestion, setSuggestion] = useState<string | null>(null)
   const [tplOpen, setTplOpen] = useState(false)
+  const [blocked, setBlocked] = useState(false)
   const listRef = useRef<FlatList<Message>>(null)
 
   const contactName = conv?.contacts?.name || conv?.contacts?.phone || ''
   const phone = conv?.contacts?.phone || ''
+
+  // Blocked contacts: their messages are dropped by the server and sending is refused.
+  useEffect(() => {
+    if (!conv?.contact_id) return
+    api<{ contact: { is_blocked?: boolean } }>(`/api/contacts/${conv.contact_id}`)
+      .then(r => setBlocked(!!r.contact?.is_blocked))
+      .catch(() => {})
+  }, [conv?.contact_id])
+
+  const setBlock = async (value: boolean, spam = false) => {
+    if (!conv) return
+    try {
+      await api(`/api/contacts/${conv.contact_id}`, { method: 'PUT', body: { is_blocked: value } })
+      setBlocked(value)
+      if (spam) {
+        await api(`/api/inbox/${conv.id}`, { method: 'PUT', body: { status: 'spam' } })
+        setConv(c => (c ? { ...c, status: 'spam' } : c))
+      }
+      toast(t(spam ? 'reported_spam' : value ? 'contact_blocked' : 'contact_unblocked'))
+      if (spam) router.canGoBack() ? router.back() : router.replace('/inbox')
+    } catch (e) {
+      toast(errText(e), 'error')
+    }
+  }
+
+  const confirmBlock = (spam: boolean) =>
+    Alert.alert(t(spam ? 'report_spam_title' : 'block_title'), t('block_body'), [
+      { text: t('cancel'), style: 'cancel' },
+      { text: t(spam ? 'report_spam' : 'block_contact'), style: 'destructive', onPress: () => void setBlock(true, spam) },
+    ])
 
   // Unknown conversation (e.g. opened from a cold start): back to the list.
   useEffect(() => {
@@ -185,11 +216,18 @@ export default function Chat() {
     const items: { label: string; run: () => void; destructive?: boolean }[] = [
       conv.status === 'resolved' ? { label: t('reopen'), run: () => void update({ status: 'open' }) } : { label: t('mark_resolved'), run: () => void update({ status: 'resolved' }) },
       mine ? { label: t('unassign'), run: () => void update({ assigned_to: null }) } : { label: t('assign_to_me'), run: () => void update({ assigned_to: me?.id }) },
+      ...(blocked
+        ? [{ label: t('unblock_contact'), run: () => void setBlock(false) }]
+        : [
+            { label: t('report_spam'), run: () => confirmBlock(true), destructive: true },
+            { label: t('block_contact'), run: () => confirmBlock(false), destructive: true },
+          ]),
     ]
     if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions({ options: [...items.map(i => i.label), t('cancel')], cancelButtonIndex: items.length, title: t('chat_options') }, i => items[i]?.run())
+      const destructive = items.map((x, i) => (x.destructive ? i : -1)).filter(i => i >= 0)
+      ActionSheetIOS.showActionSheetWithOptions({ options: [...items.map(i => i.label), t('cancel')], cancelButtonIndex: items.length, destructiveButtonIndex: destructive, title: t('chat_options') }, i => items[i]?.run())
     } else {
-      Alert.alert(t('chat_options'), undefined, [...items.map(i => ({ text: i.label, onPress: i.run })), { text: t('cancel'), style: 'cancel' as const }])
+      Alert.alert(t('chat_options'), undefined, [...items.map(i => ({ text: i.label, onPress: i.run, style: i.destructive ? ('destructive' as const) : undefined })), { text: t('cancel'), style: 'cancel' as const }])
     }
   }
 
@@ -246,6 +284,16 @@ export default function Chat() {
             }}
           />
         )}
+
+        {blocked ? (
+          <View style={{ marginHorizontal: 12, marginBottom: 6, padding: 10, borderRadius: 14, backgroundColor: C.dangerBg, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Icon name="alert" size={16} color={C.danger} />
+            <T size={12.5} color={C.danger} style={{ flex: 1 }}>{t('blocked_banner')}</T>
+            <Pressable accessibilityRole="button" onPress={() => void setBlock(false)} hitSlop={8}>
+              <T w="semibold" size={12.5} color={C.danger}>{t('unblock')}</T>
+            </Pressable>
+          </View>
+        ) : null}
 
         {numberDown ? (
           <View style={{ marginHorizontal: 12, marginBottom: 6, padding: 10, borderRadius: 14, backgroundColor: C.dangerBg, flexDirection: 'row', alignItems: 'center', gap: 8 }}>

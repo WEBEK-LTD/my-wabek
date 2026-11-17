@@ -146,7 +146,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         // Find or create contact
         let contactId: string | null = null
-        const { data: contacts } = await db.from('contacts').select('id').eq('user_id', instance.user_id).eq('phone', data.from).limit(1)
+        const { data: contacts } = await db.from('contacts').select('id, is_blocked').eq('user_id', instance.user_id).eq('phone', data.from).limit(1)
+        // Blocked by this tenant (chat → Block contact / Report spam): drop silently.
+        if (contacts?.[0]?.is_blocked) {
+          console.log('[wa-web-events] message from a blocked contact — dropped')
+          break
+        }
         if (contacts?.[0]) {
           contactId = contacts[0].id
         } else {
