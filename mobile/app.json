@@ -63,7 +63,8 @@
           "color": "#12B5BE",
           "mode": "production"
         }
-      ]
+      ],
+      "expo-iap"
     ],
     "extra": {
       "apiUrl": "https://waabek.com",

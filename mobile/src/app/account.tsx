@@ -108,12 +108,10 @@ export default function Account() {
               <T w="bold" size={12} color={C.deep} style={{ lineHeight: 16 }}>{plan.data?.plan?.name || t('plan_free')}</T>
             </LinearGradient>
             <T size={13} color={C.muted} style={{ flex: 1 }} numberOfLines={1}>{renew}</T>
-            {/* No purchase links on iOS (App Store guideline 3.1.1) — plans are managed on the website. */}
-            {Platform.OS !== 'ios' ? (
-              <Pressable accessibilityRole="link" onPress={web('/dashboard/billing')} hitSlop={8}>
-                <T w="semibold" size={13} color={C.chipInk}>{t('manage_plan')}</T>
-              </Pressable>
-            ) : null}
+            {/* iOS: plans are bought with In-App Purchase (App Store guideline 3.1.1). */}
+            <Pressable accessibilityRole="link" onPress={Platform.OS === 'ios' ? () => router.push('/plans') : web('/dashboard/billing')} hitSlop={8}>
+              <T w="semibold" size={13} color={C.chipInk}>{Platform.OS === 'ios' ? t(plan.data?.plan ? 'manage_plan' : 'upgrade_plan') : t('manage_plan')}</T>
+            </Pressable>
           </View>
           {max ? (
             <>
