@@ -111,11 +111,14 @@ jobs:
           cache-dependency-path: mobile/package-lock.json
       - run: npm ci
       - run: npm run typecheck && npm run i18n:check
-      # Expo SDK 58 needs Swift 6.2+ (Xcode 26); the App Store also requires the iOS 26 SDK.
+      # Always the newest Xcode / iOS SDK on the runner (the App Store raises the minimum SDK every year).
       - name: Use the newest Xcode
         run: |
-          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -v -i beta | sort -V | tail -n 1)
+          echo "Installed:"; ls -d /Applications/Xcode*.app
+          # Highest stable Xcode on the runner (betas / release candidates are not accepted by the App Store).
+          X=$(ls -d /Applications/Xcode_[0-9]*.app 2>/dev/null | grep -v -i -E 'beta|_rc|release_candidate' | sort -V | tail -n 1)
           [ -n "$X" ] || X=$(ls -d /Applications/Xcode*.app | sort -V | tail -n 1)
+          echo "Using $X"
           sudo xcode-select -s "$X/Contents/Developer"
           xcodebuild -version && swift --version
       - name: Check the App Store Connect secrets
